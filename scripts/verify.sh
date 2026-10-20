@@ -26,3 +26,5 @@ run startup --quit-after 120
 run regression --script "$root/tests/recovered_checks.gd"
 
 run starts --script "$root/tests/start_profile_checks.gd"
+
+run routes --script "$root/tests/route_checks.gd"

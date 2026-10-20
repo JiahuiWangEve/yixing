@@ -1,3 +1,7 @@
+# 弈行 v0.6.0 · 山河棋路
+
+当前源码分支为 `gpt`，发布产物为 `gh-pages`。新增一个16节点、每局8步的山河章节地图；普通战奖励后回地图，支持营地升级/整备、工坊删牌、事件与破寨减防。战斗「调试跳过」使用正常结算入口。详见 [v0.6.0验证与限制](docs/VALIDATION_v0.6.0.md)。
+
 # 弈行
 
 当前开发版本：**v0.5.0**。GPT 持续开发分支为 [`gpt`](https://github.com/JiahuiWangEve/yixing/tree/gpt)，网页导出分支为 [`gh-pages`](https://github.com/JiahuiWangEve/yixing/tree/gh-pages)。

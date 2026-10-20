@@ -126,6 +126,7 @@ func _draw_choice():
 	game.text_at(title_position() + Vector2(0, 28 if game.mobile_layout else 32), intro, 16, game.THEME.LIGHT)
 	var labels = ["加牌", "删牌", "跳过"]
 	var subtitles = ["从 3 张奖励牌中选 1 张", "从整副牌组中永久删 1 张", "保持牌组，继续下一关"]
+	if game.route.active(): subtitles[2] = "保持牌组，返回山河图"
 	if game.debug_remaining > 0: subtitles[2] = "保持牌组，继续预选流程"
 	if game.collection.is_empty(): subtitles[1] = "牌组为空，暂无可删牌"
 	for i in 3:

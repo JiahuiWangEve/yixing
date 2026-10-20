@@ -4,7 +4,7 @@ var game
 func _init(owner): game = owner
 func entries() -> Array:
 	match game.screen:
-		"home": return ["开始游戏", "教程", "调试选关", "声音：" + ("静音" if game.audio_system.muted else "开启")]
+		"home": return ["开始游戏", "教程", "调试选关", "声音：" + ("静音" if game.audio_system.muted else "开启"), "继续山河棋路存档"]
 		"skill_selection": return ["将 · 四向一步", "马 · 马步移动" if game.skill_system.is_unlocked("horse") else "马 · 通关后解锁", "炮车 · 行军与驻扎" if game.skill_system.is_unlocked("artillery") else "炮车 · 通关后解锁", "返回首页"]
 		"debug_profile": return ["将 · 2命与恢复", "马 · 1命与机动", "炮车 · 1命与炮击", "返回首页"]
 		"tutorial_menu":
@@ -39,6 +39,8 @@ func activate(i: int):
 				1: game.open_tutorial_menu()
 				2: game.screen = "debug_profile"
 				3: game.audio_system.toggle_mute()
+				4:
+					if not game.route.resume(): game.notice = "暂无可继续的章节"
 		"skill_selection":
 			match i:
 				0: game.skill_system.choose("king")
@@ -80,7 +82,9 @@ func draw():
 	var titles = {"home": "弈 行", "skill_selection": "选择开局", "debug_profile": "调试 · 选择开局", "tutorial_menu": "教程 · 选择小节", "debug_menu": "调试选关", "tutorial_pause": "教学菜单", "tutorial_complete": "本节完成"}
 	var origin = (Vector2(24, 60) if game.compact_landscape else Vector2(24, 90)) if game.mobile_layout else Vector2(420, 100)
 	game.text_at(origin, titles.get(game.screen, "弈 行"), 32, game.THEME.HEADING)
-	if game.screen == "home": game.text_at(origin + Vector2(0, 32), "三种开局 · 专属牌组 · 破将过关", 16, game.THEME.LIGHT)
+	if game.screen == "home":
+		game.text_at(origin + Vector2(0, 32), "山河棋路 · 三种开局 · 八步破关", 16, game.THEME.LIGHT)
+		if game.notice == "暂无可继续的章节": game.text_at(Vector2(24, game.ui_size.y - 48), game.notice, 16, game.THEME.HEADING)
 	elif game.screen == "skill_selection":
 		game.text_at(origin + Vector2(0, 28), "各有 8 张初始牌；移动抽牌，回合保留手牌", 16, game.THEME.LIGHT)
 		game.text_at(origin + Vector2(0, 48), "消耗：每张每关使用一次，下关恢复", 16, game.THEME.LIGHT)

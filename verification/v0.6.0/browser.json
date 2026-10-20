@@ -1,0 +1,9 @@
+{
+  "browser": "Chromium headless",
+  "viewports": [
+    "1280x940",
+    "390x844"
+  ],
+  "chapter": "8 nodes via debug skip with reward choices, outpost and camp upgrades",
+  "errors": []
+}

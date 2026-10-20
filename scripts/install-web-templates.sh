@@ -6,7 +6,8 @@ target="${XDG_DATA_HOME:-$HOME/.local/share}/godot/export_templates/$version.sta
 if [[ -s "$target/web_debug.zip" && -s "$target/web_release.zip" && -s "$target/web_nothreads_debug.zip" && -s "$target/web_nothreads_release.zip" && "$(cat "$target/version.txt" 2>/dev/null)" == "$version.stable" ]]; then echo 'Web templates already installed'; exit 0; fi
 temp="$(mktemp -d)"; trap 'rm -rf "$temp"' EXIT
 # Official bundle includes all platforms; only Web templates are installed here.
-curl -fsSL --retry 2 --connect-timeout 20 --max-time 1800 -o "$temp/$asset" "https://downloads.godotengine.org/?version=$version&flavor=stable&slug=export_templates.tpz"
+curl -fsSL --retry 2 --connect-timeout 20 --max-time 1800 -o "$temp/$asset" "https://downloads.godotengine.org/?version=$version&flavor=stable&slug=export_templates.tpz" || \
+  curl -fsSL --retry 2 --connect-timeout 20 --max-time 1800 -o "$temp/$asset" "https://github.com/godotengine/godot-builds/releases/download/$version-stable/$asset"
 curl -fsSL --retry 2 --connect-timeout 20 --max-time 90 -o "$temp/SHA512-SUMS.txt" "https://github.com/godotengine/godot-builds/releases/download/$version-stable/SHA512-SUMS.txt"
 python3 - "$temp" "$asset" "$target" <<'PY'
 import sys,pathlib,hashlib,zipfile

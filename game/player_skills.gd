@@ -36,7 +36,7 @@ func is_unlocked(id: String) -> bool:
 func choose(id: String) -> bool:
 	if not is_unlocked(id): return false
 	game.player_skill = id
-	game.new_run()
+	game.new_expedition()
 	return true
 
 func show_selection():

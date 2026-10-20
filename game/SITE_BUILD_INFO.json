@@ -1,7 +1,7 @@
 {
   "engine": "Godot 4.6.3",
   "threads": false,
-  "game_version": "0.4.4",
+  "game_version": "0.6.0",
   "wasm_uncompressed_bytes": 37700666,
   "wasm_gzip_bytes": 9382282,
   "wasm_sha256": "26b61ce95247012ab3dca3ff51e96d1cdbff44ee91a8c20a83e150afca83f1b6",
@@ -17,7 +17,7 @@
   "stage_count": 6,
   "debug_stage_select": true,
   "ai_update": "cannon-and-pawn",
-  "card_type_count": 16,
+  "card_type_count": 25,
   "reward_card_type_count": 13,
   "new_reward_cards": [
     "架炮",
@@ -37,8 +37,9 @@
     "Cmd+Z"
   ],
   "starting_skill_selection": [
-    "帅",
-    "马"
+    "将",
+    "马",
+    "炮车"
   ],
   "horse_unlock": "clear-stage-six-including-debug",
   "unlock_persistence": "current-browser-local",
@@ -67,5 +68,10 @@
     1280,
     940
   ],
-  "desktop_shell_aspect_ratio": "1280/940"
+  "desktop_shell_aspect_ratio": "1280/940",
+  "chapter_node_count": 16,
+  "chapter_steps": 8,
+  "debug_skip": true,
+  "run_persistence": "user://route_run.cfg",
+  "historical_export_metadata": true
 }

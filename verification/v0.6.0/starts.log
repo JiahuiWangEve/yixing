@@ -1,0 +1,135 @@
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS king initial health
+PASS king exact eight-card starting deck
+PASS king retains empty opening hand and three energy
+PASS king available pool contains only common and own cards
+PASS king rewards are two distinct dedicated and one common across repeated rolls
+PASS king chosen reward persists into next-stage deck
+PASS king restart clears previous rewards
+PASS king skipping reward preserves collection
+PASS king removing reward deletes one permanent copy
+PASS horse initial health
+PASS horse exact eight-card starting deck
+PASS horse retains empty opening hand and three energy
+PASS horse available pool contains only common and own cards
+PASS horse rewards are two distinct dedicated and one common across repeated rolls
+PASS horse chosen reward persists into next-stage deck
+PASS horse restart clears previous rewards
+PASS horse skipping reward preserves collection
+PASS horse removing reward deletes one permanent copy
+PASS artillery initial health
+PASS artillery exact eight-card starting deck
+PASS artillery retains empty opening hand and three energy
+PASS artillery available pool contains only common and own cards
+PASS artillery rewards are two distinct dedicated and one common across repeated rolls
+PASS artillery chosen reward persists into next-stage deck
+PASS artillery restart clears previous rewards
+PASS artillery skipping reward preserves collection
+PASS artillery removing reward deletes one permanent copy
+PASS artillery rewards depend on identity rather than stance
+PASS artillery starts in marching stance
+PASS march permits orthogonal one or two cells
+PASS march rejects diagonal excessive stationary and off-board moves
+PASS march cannot jump over or land on a stake
+PASS two-cell marching move consumes free quota and draws exactly one
+PASS attack stance permits only one orthogonal free step
+PASS attack movement card selects movement instead of packing
+PASS attack step draws one and stays deployed
+PASS undo attack step restores position draw and quota
+PASS march cannon costs two and deals one
+PASS attack cannon UI and affordability use one energy
+PASS attack cannon costs one and deals two
+PASS undo cannon restores damage resources and card
+PASS unaffordable march shot changes nothing
+PASS cannon shot rejects zero screens
+PASS cannon shot rejects two screens and direct stake target
+PASS cannon shot rejects diagonal targets
+PASS surviving recoil preserves attack stance without movement draw
+PASS horse keeps knight-step free movement
+PASS horse free movement respects blocked leg
+PASS horse still has only one paid movement quota
+PASS advance available after both movement quotas
+PASS advance movement follows kill or retreat rule
+PASS advance consumes energy without drawing or changing quotas
+PASS advance undo restores position target and hand
+PASS advance available after both movement quotas
+PASS advance movement follows kill or retreat rule
+PASS advance consumes energy without drawing or changing quotas
+PASS advance deals exactly one damage
+PASS advance undo restores position target and hand
+PASS knight_assault available after both movement quotas
+PASS knight_assault movement follows kill or retreat rule
+PASS knight_assault consumes energy without drawing or changing quotas
+PASS knight_assault undo restores position target and hand
+PASS knight_assault available after both movement quotas
+PASS knight_assault movement follows kill or retreat rule
+PASS knight_assault consumes energy without drawing or changing quotas
+PASS knight_assault deals exactly one damage
+PASS knight_assault undo restores position target and hand
+PASS retreat_strike available after both movement quotas
+PASS retreat_strike movement follows kill or retreat rule
+PASS retreat_strike consumes energy without drawing or changing quotas
+PASS retreat_strike undo restores position target and hand
+PASS retreat_strike available after both movement quotas
+PASS retreat_strike movement follows kill or retreat rule
+PASS retreat_strike consumes energy without drawing or changing quotas
+PASS retreat_strike deals exactly one damage
+PASS retreat_strike undo restores position target and hand
+PASS blocked horse leg rejects attack without spending
+PASS blocked retreat rejects before damage or cost
+PASS retreat cannot leave board
+PASS attack cannot target stake
+PASS deploy after march movement does not refresh free step
+PASS pack after movement does not refresh marching quota
+PASS attack step cannot land on occupied square
+PASS deploy costs one switches stance and draws three immediately
+PASS deploy exhausts instead of entering discard
+PASS undo deploy restores stance hand deck quota energy and RNG
+PASS unaffordable deploy does not consume or draw
+PASS deploy is rejected in attack stance
+PASS pack costs zero and preserves both movement quotas
+PASS second deployment in same turn does not draw again
+PASS new turn resets deployment trigger without passive stance draw
+PASS deployment draws again on a later turn
+PASS fixed emergency pack ability and button removed
+PASS free card selects attack movement without switching stance
+PASS deployed artillery can keep drawing without stance-switch cards
+PASS pack card remains and does not refresh spent free movement
+PASS undo pack card restores attack stance and hand
+PASS deployment draws all three before resolving hand overflow
+PASS overflow remains in discard phase above six
+PASS overflow ends only after enough cards were discarded
+PASS new stage resets artillery stance and deployment trigger
+PASS consumption property covers four cards only
+PASS duplicate consumables can each be used once
+PASS full-health life card is not consumed
+PASS discarding a consumable does not exhaust it
+PASS discarded consumable can be recycled and redrawn
+PASS used consumable cannot re-enter current-stage draw cycle
+PASS next stage restores exhausted life card while retaining health
+PASS tuna costs three exhausts and schedules three future bonuses
+PASS first future turn receives four energy
+PASS second future turn receives four energy
+PASS third future turn receives four energy
+PASS fourth future turn returns to three energy
+PASS two tuna copies extend duration to six turns
+PASS stacking tuna does not increase per-turn bonus above one
+PASS undo turn restores pending tuna duration and energy
+PASS undo tuna restores consumed copy and pending duration
+PASS tuna duration and current bonus clear between stages
+PASS unaffordable tuna does not consume or grant duration
+PASS using tuna during an active bonus extends future duration without refund
+PASS active-turn extension keeps one extra energy per future turn
+PASS deploy draws across discard shuffle with unique card instance IDs
+PASS undo restores card IDs and pre-shuffle piles exactly
+PASS replaying deployment after undo yields identical drawn cards and IDs
+PASS winning attack reaches reward state for deterministic undo
+PASS undo winning attack restores combat state
+PASS replaying winning attack after undo cannot reroll reward choices
+PASS fresh progress offers only king
+PASS locked artillery cannot be selected
+PASS existing horse unlock also grants artillery
+PASS saved legacy horse key preserves artillery access after reload
+PASS tutorial keeps explicit one-life teaching fixture
+PROFILE RESULT 132 passed, 0 failed

@@ -1,5 +1,8 @@
 extends Control
-const BUILD_VERSION = "v0.5.3"
+const BUILD_VERSION = "v0.6.0"
+const ROUTE = preload("res://route_map.gd")
+var route = ROUTE.new(self)
+var autosave_elapsed = 0.0
 const PROFILES = preload("res://start_profiles.gd")
 const THEME = preload("res://theme.gd")
 const FAN = preload("res://fan_hand.gd")
@@ -158,6 +161,8 @@ const INK = THEME.INK
 const GOLD = THEME.GOLD
 const RED = THEME.DANGER
 const CARDS = {
+	"sword_plus": ["短剑·淬锋", 1, "对正交相邻敌子造成2点伤害（营地升级）", "攻"],
+	"spear_plus": ["长枪·淬锋", 2, "直线两格内造成2点伤害，不穿透（营地升级）", "攻"],
 	"sword": ["短剑", 1, "对正交相邻敌子造成1点伤害", "攻"], 
 	"diagonal": ["斜斩", 1, "对斜角相邻敌子造成1点伤害", "攻"], 
 	"spear": ["长枪", 2, "直线两格内造成1点伤害，不穿透", "攻"], 
@@ -269,7 +274,14 @@ func _ready():
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("res://preview.png")
 		get_tree().quit()
+func new_expedition():
+	new_run()
+	route.generate(seed_value)
+	screen = "map"
+	route.save()
+
 func new_run(preserve_tutorial: bool = false):
+	route.state = {}
 	history.clear();cancel_gesture();hand_ids = [];next_card_uid = 1;free_selected = false
 	if preserve_tutorial: player_skill = "king"
 	if not preserve_tutorial: tutorial.stop()
@@ -291,6 +303,7 @@ func home_rect() -> Rect2:
 	if mobile_layout: return Rect2(12, 12, 84, 46)
 	return Rect2(25, 20, 110, 40)
 func show_home():
+	if route.active() and screen in ["game", "map", "route_choice"]: route.save()
 	rewardui.reset()
 	history.clear();cancel_gesture()
 	if tutorial.active: tutorial_resume_lesson = tutorial.lesson_index
@@ -342,7 +355,9 @@ func delete_reward(index: int):
 func finish_reward(data: Dictionary):
 
 	history.clear();cancel_gesture();rewardui.reset()
-	if debug_remaining > 0:
+	if route.active():
+		route.complete()
+	elif debug_remaining > 0:
 		debug_remaining -= 1
 		if debug_remaining > 0: roll_rewards()
 		else: stage = debug_target;start_stage()
@@ -417,6 +432,9 @@ func _process(delta):
 			if fx.get("piece", {}).is_empty(): player_visual = v
 			else: fx.piece.visual = v
 	effects = effects.filter( func(fx): return fx.age < fx.delay + fx.duration)
+	autosave_elapsed += delta
+	if autosave_elapsed >= 1.0 and route.active() and screen == "game" and input_lock <= 0:
+		autosave_elapsed = 0;route.save()
 	sync_hand_ids();handui.tick(delta)
 	if tutorial.active and screen == "game":
 		tutorial.tick(delta)
@@ -467,6 +485,7 @@ func can_commit_card(index: int, p: Vector2i) -> bool:
 		return false
 	return card_legal(id, p)
 func card_legal(id: String, p: Vector2i) -> bool:
+	id = id.trim_suffix("_plus")
 	if not R.inside(p): return false
 	if id in TACTICS.IDS: return TACTICS.legal(self, id, p)
 	var d = p - player
@@ -518,14 +537,17 @@ func _gui_input(event):
 		else: gesture.release(event.position)
 func handle_click(pos: Vector2):
 	if SOUND_RECT.has_point(pos): audio_system.toggle_mute();return
+	if screen in ["map", "route_choice"]: route.click(pos);return
 	if screen != "game": cancel_gesture();frontend.click(pos);return
 	if home_rect().has_point(pos): show_home();return
 	if UNDO_RECT.has_point(pos): undo_action();return
 	if RESTART_RECT.has_point(pos):
 		cancel_gesture()
 		if tutorial.active: screen = "tutorial_pause"
+		elif route.active(): new_expedition()
 		else: new_run()
 		return
+	if debug_skip_rect().has_point(pos) and not tutorial.active: debug_skip();return
 	if input_lock > 0 or navigation_lock > 0: return
 	if phase == "reward":
 		var previous_mode: String = rewardui.mode
@@ -598,10 +620,10 @@ func play_card(i: int, p: Vector2i):
 	var idx = R.occupied(p, enemies)
 	if id in TACTICS.IDS: TACTICS.apply(self, id, p, idx)
 	match id:
-		"sword", "spear", "cannon", "diagonal", "cannon_shot":
-			var animation = "cannon" if id == "cannon_shot" else ("sword" if id == "diagonal" else id)
+		"sword", "spear", "sword_plus", "spear_plus", "cannon", "diagonal", "cannon_shot":
+			var animation = "cannon" if id == "cannon_shot" else ("sword" if id == "diagonal" else id.trim_suffix("_plus"))
 			effect(animation, cell_pos(player), cell_pos(p), 0.3)
-			damage_enemy(idx, 0.3 if animation == "cannon" else 0.12, 2 if id == "cannon_shot" and artillery_mode == "attack" else 1)
+			damage_enemy(idx, 0.3 if animation == "cannon" else 0.12, 2 if id.ends_with("_plus") or (id == "cannon_shot" and artillery_mode == "attack") else 1)
 		"deploy":
 			artillery_mode = "attack";refresh_free_card()
 			if not deploy_draw_used:
@@ -633,15 +655,30 @@ func play_card(i: int, p: Vector2i):
 	var general = false
 	for e in enemies:
 		if e.kind == "g": general = true
-	if not general:
-		reinforcement_pending = 0
-		effect("victory", Vector2.ZERO, Vector2.ZERO, 0.01, input_lock)
-		if stage == CAMPAIGN.LAST_STAGE:
-			phase = "win";log_line("六关突破！")
-			if not tutorial.active: skill_system.unlock_horse()
-		else:
-			phase = "reward";roll_rewards()
+	if not general: settle_victory()
 	tutorial_after("play", {"index": i, "target": p, "card": id})
+func settle_victory():
+	if screen != "game" or phase not in ["play", "discard"]: return
+	cancel_gesture();clear_effects();rewardui.reset()
+	if route.active(): history.clear()
+	selected = -1;free_selected = false;reinforcement_pending = 0;input_lock = 0;navigation_lock = 0
+	if stage == CAMPAIGN.LAST_STAGE:
+		phase = "win";log_line("章节突破！" if route.active() else "六关突破！")
+		if not tutorial.active: skill_system.unlock_horse()
+		if route.active(): route.state.done = true;route.save()
+	else:
+		phase = "reward";roll_rewards()
+		if route.active():
+			rewards = route.state.nodes[route.state.pending].loot.duplicate()
+			route.save()
+func debug_skip_rect() -> Rect2:
+	if compact_landscape: return Rect2(410, 440, 116, 44)
+	if mobile_layout: return Rect2(352, 64, 116, 40)
+	return Rect2(1040, 80, 116, 44)
+func debug_skip():
+	if tutorial.active or screen != "game" or phase not in ["play", "discard"]: return
+	settle_victory()
+
 func plan_intents():
 	for e in enemies:
 		e.intent = Vector2i(-1, -1)
@@ -746,15 +783,22 @@ func context_hint() -> String:
 		return "%s · 移动倒计时 %d%s" % [piece_name(e.kind), e.cd, " · 定身中" if e.stun > 0 else ""]
 	return ""
 func _draw():
+	if screen in ["map", "route_choice"]:
+		route.draw();return
 	if screen != "game":
 		frontend.draw()
 		panel(SOUND_RECT, THEME.BUTTON);text_at(SOUND_RECT.position + Vector2(12, 32 if mobile_layout else 27), "静音" if audio_system.muted else "声音 开", 16)
 		return
 	draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.BACKGROUND)
+	if not tutorial.active and phase in ["play", "discard"]:
+		panel(debug_skip_rect(), THEME.BUTTON);text_at(debug_skip_rect().position + Vector2(8, 24), "调试跳过", 18)
 	if not mobile_layout or compact_landscape: text_at(mobile_title_pos(), "弈 行", 28, THEME.HEADING)
 	panel(RESTART_RECT, THEME.BUTTON);text_at(RESTART_RECT.position + Vector2(16, 32 if mobile_layout else 27), "教学菜单" if tutorial.active else "重新开局", 18)
 	var heading_pos = (Vector2(390, 46) if compact_landscape else Vector2(24, 88)) if mobile_layout else Vector2(500, 47)
 	var heading = tutorial.title() if tutorial.active else (("调试 · " if debug_target > 0 else "") + "第 %d / 6 关   回合 %d" % [stage, turn] + " · " + PROFILES.DATA[player_skill].name)
+	if route.active() and route.state.pending >= 0:
+		var node = route.state.nodes[route.state.pending]
+		heading = "山河 %d / 8 站 · %s · 回合 %d" % [node.row + 1, {"battle": "普通战", "elite": "精锐", "boss": "敌将"}.get(node.kind, ""), turn]
 	var heading_size = 16 if tutorial.active else 20
 	var heading_width = ui_size.x - 48 if mobile_layout and not compact_landscape else RESTART_RECT.position.x - heading_pos.x - 12
 	while heading_size > 12 and FONT.get_string_size(heading, HORIZONTAL_ALIGNMENT_LEFT, -1, heading_size).x > heading_width: heading_size -= 1
@@ -844,8 +888,8 @@ func _draw():
 	gesture.draw()
 	if phase == "reward" and input_lock <= 0: rewardui.draw()
 	if phase in ["dead", "win"] and input_lock <= 0:
-		draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.OVERLAY);text_at(Vector2(24, ui_size.y * 0.4) if mobile_layout else Vector2(410, 380), "六关突破 · 原型通关" if phase == "win" else "此局已尽 · 再弈一局", 28 if mobile_layout else 36, THEME.HEADING)
-		text_at(Vector2(24, ui_size.y * 0.4 + 50) if mobile_layout else Vector2(430, 435), "可悔棋，或重新开局", 20, THEME.LIGHT)
+		draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.OVERLAY);text_at(Vector2(24, ui_size.y * 0.4) if mobile_layout else Vector2(410, 380), ("山河已定 · 第一章通关" if route.active() else "六关突破 · 原型通关") if phase == "win" else "此局已尽 · 再弈一局", 28 if mobile_layout else 36, THEME.HEADING)
+		text_at(Vector2(24, ui_size.y * 0.4 + 50) if mobile_layout else Vector2(430, 435), "重新开局，再行山河" if phase == "win" else "可悔棋，或重新开局", 20, THEME.LIGHT)
 		if phase == "dead": text_at(Vector2(24, ui_size.y * 0.4 + 90) if mobile_layout else Vector2(480, 480), notice, 20, RED)
 		panel(RESTART_RECT, THEME.PAPER_SELECTED);text_at(RESTART_RECT.position + Vector2(16, 32 if mobile_layout else 27), "重新开局", 18, THEME.INK)
 
