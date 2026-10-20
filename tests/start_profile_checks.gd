@@ -57,6 +57,7 @@ func run_checks():
 	check_profiles_and_rewards()
 	check_movement_and_cannon()
 	check_horse_attacks()
+	check_stance_quota()
 	check_deployment()
 	check_consumption()
 	check_tuna()
@@ -123,7 +124,18 @@ func check_movement_and_cannon():
 	check(game.player == Vector2i(2, 5) and game.hand.size() == 1 and game.basic_used and game.energy == 3, "two-cell marching move consumes free quota and draws exactly one")
 	game.basic_used = false
 	game.artillery_mode = "attack"
-	check(not game.basic_legal(Vector2i(2, 4)) and not game.basic_legal(Vector2i(2, 3)), "attack stance has no free board movement")
+	check(game.basic_legal(Vector2i(2, 4)) and not game.basic_legal(Vector2i(2, 3)) and not game.basic_legal(Vector2i(3, 4)), "attack stance permits only one orthogonal free step")
+	game.input_lock = 0
+	game.select_free_card()
+	check(game.free_selected and game.artillery_mode == "attack", "attack movement card selects movement instead of packing")
+	game.basic_move(Vector2i(2, 4))
+	check(game.player == Vector2i(2, 4) and game.basic_used and game.hand.size() == 2 and game.artillery_mode == "attack" and not game.can_emergency_pack(), "attack step draws one stays deployed and shares quota with pack")
+	game.undo_action()
+	check(game.player == Vector2i(2, 5) and not game.basic_used and game.artillery_mode == "attack" and game.hand.size() == 1, "undo attack step restores position draw and quota")
+	game.input_lock = 0
+	check(not game.gesture.press(game.pack_button_rect().get_center(), "mouse"), "pack button bypasses card gesture interception")
+	game.handle_click(game.pack_button_rect().get_center())
+	check(game.artillery_mode == "march" and game.basic_used and game.hand.size() == 1, "dedicated pack button remains usable without drawing")
 	reset("artillery")
 	game.player = Vector2i(4, 4)
 	game.add_enemy("p", Vector2i(4, 1), 99)
@@ -392,3 +404,22 @@ func check_horse_attacks():
 	game.add_enemy("p", Vector2i(4, 8), 99)
 	check(not game.card_legal("retreat_strike", Vector2i(4, 8)), "retreat cannot leave board")
 	check(not game.card_legal("advance", Vector2i(4, 6)), "attack cannot target stake")
+
+func check_stance_quota():
+	reset("artillery")
+	game.player = Vector2i(4, 5)
+	game.basic_move(Vector2i(4, 3))
+	set_hand(["deploy", "pack"])
+	game.play_card(0, game.player)
+	check(game.artillery_mode == "attack" and not game.basic_legal(Vector2i(4, 2)), "deploy after march movement does not refresh free step")
+	game.play_card(0, game.player)
+	check(game.artillery_mode == "march" and not game.basic_legal(Vector2i(4, 1)), "pack after movement does not refresh marching quota")
+	reset("artillery")
+	game.artillery_mode = "attack"
+	game.player = Vector2i(4, 5)
+	game.add_enemy("stake", Vector2i(4, 4), 0)
+	check(not game.basic_legal(Vector2i(4, 4)), "attack step cannot land on occupied square")
+	for size in [Vector2(1280, 940), Vector2(480, 720), Vector2(900, 450)]:
+		game.configure_layout(size)
+		var rect: Rect2 = game.pack_button_rect()
+		check(not rect.intersects(game.END_TURN_RECT) and not rect.intersects(game.BOARD_RECT) and not rect.intersects(game.full_hand_area()), "pack button avoids board hand and end-turn at " + str(size))

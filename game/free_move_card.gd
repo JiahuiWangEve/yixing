@@ -4,7 +4,7 @@ var game
 func _init(owner): game = owner
 func visible() -> bool: return game.handui._has_free()
 func title() -> String:
-	if game.player_skill == "artillery": return "收炮" if game.artillery_mode == "attack" else "行军"
+	if game.player_skill == "artillery": return "炮步" if game.artillery_mode == "attack" else "行军"
 	return "马步" if game.player_skill == "horse" else "帅步"
 func description() -> String: return str(game.handui._data(0)[2]) if visible() else ""
 func bounds() -> Rect2: return game.handui.free_bounds()

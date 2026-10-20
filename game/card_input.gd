@@ -13,6 +13,7 @@ func cancel():
 	active = false;dragging = false;free_move = false;uid = -1;source = ""
 func press(position: Vector2, kind: String = "mouse") -> bool:
 	if game.screen != "game" or game.phase not in ["play", "discard"]: return false
+	if game.can_emergency_pack() and game.pack_button_rect().has_point(position): return false
 	if game.freecard.hit_test(position):
 
 
@@ -39,9 +40,7 @@ func release(position: Vector2, canceled: bool = false):
 	if canceled or game.screen != "game" or game.input_lock > 0 or game.navigation_lock > 0: return
 	if chosen_free:
 		if chosen_uid != game.free_card_uid or not game.free_card_available(): return
-		if game.can_emergency_pack():
-			if not was_dragging or game.BOARD_RECT.has_point(position): game.emergency_pack()
-		elif not was_dragging:
+		if not was_dragging:
 			game.select_free_card()
 		elif game.phase == "play" and game.BOARD_RECT.has_point(position):
 			var target = game.board_cell(position)
@@ -62,7 +61,7 @@ func target_cell() -> Vector2i:
 func valid_target() -> bool:
 	if not dragging or game.phase != "play" or not game.BOARD_RECT.has_point(pointer): return false
 	if free_move:
-		return uid == game.free_card_uid and game.free_card_available() and (game.can_emergency_pack() or game.basic_legal(target_cell()))
+		return uid == game.free_card_uid and game.free_card_available() and game.basic_legal(target_cell())
 	var index = game.hand_ids.find(uid)
 	if index < 0: return false
 	var card: String = game.hand[index]
@@ -101,7 +100,7 @@ func _draw_free():
 	var legal = valid_target()
 	var color: Color = game.GOLD if legal else Color(0.6, 0.7, 0.7, 0.7)
 	game.draw_polyline(polygon, color, 2)
-	if legal and not game.can_emergency_pack():
+	if legal:
 		var target = target_cell()
 		var danger: bool = game.R.threatened(target, game.enemies)
 		game.draw_arc(game.cell_pos(target), game.CELL * 0.42 + sin(game.tick * 8) * 2, 0, TAU, 32, game.RED if danger else game.GOLD, 3)

@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.5.1"
+const BUILD_VERSION = "v0.5.2"
 const PROFILES = preload("res://start_profiles.gd")
 const THEME = preload("res://theme.gd")
 const FAN = preload("res://fan_hand.gd")
@@ -99,8 +99,6 @@ func refresh_free_card():
 	free_selected = false
 	free_card_uid = next_card_uid;next_card_uid += 1
 func select_free_card():
-	if can_emergency_pack():
-		emergency_pack();return
 	if not free_card_available() or input_lock > 0 or navigation_lock > 0: return
 	selected = -1;free_selected = not free_selected
 	if free_selected: audio_system.play_cue("select", tick)
@@ -322,6 +320,10 @@ func roll_rewards():
 	rewards = dedicated.slice(0, 2) + common.slice(0, 1)
 	shuffle(rewards)
 func is_consumable(id: String) -> bool: return id in CONSUMABLES
+func pack_button_rect() -> Rect2:
+	if not mobile_layout: return Rect2(920, END_TURN_RECT.position.y, 100, 45)
+	if compact_landscape: return Rect2(580, END_TURN_RECT.position.y, 100, 64)
+	return Rect2(230, END_TURN_RECT.position.y, 68, 48)
 func can_emergency_pack() -> bool:
 	return screen == "game" and phase == "play" and player_skill == "artillery" and artillery_mode == "attack" and not basic_used
 func emergency_pack():
@@ -448,9 +450,8 @@ func basic_legal(p: Vector2i) -> bool:
 	if not R.inside(p) or basic_used or R.occupied(p, enemies) >= 0: return false
 	var d = p - player
 	if player_skill == "artillery":
-		if artillery_mode != "march": return false
 		var distance = absi(d.x) + absi(d.y)
-		return distance > 0 and distance <= 2 and R.blockers(player, p, enemies) == 0
+		return distance > 0 and distance <= (1 if artillery_mode == "attack" else 2) and R.blockers(player, p, enemies) == 0
 	if player_skill != "horse": return absi(d.x) + absi(d.y) == 1
 	if not ((absi(d.x) == 2 and absi(d.y) == 1) or (absi(d.x) == 1 and absi(d.y) == 2)): return false
 	var leg = player + Vector2i(signi(d.x) if absi(d.x) == 2 else 0, signi(d.y) if absi(d.y) == 2 else 0)
@@ -547,6 +548,7 @@ func handle_click(pos: Vector2):
 	if phase in ["dead", "win"]: return
 	if USE_RECT.has_point(pos) and selected >= 0 and (phase == "discard" or hand[selected] in UNTARGETED): confirm_card();return
 	if phase == "discard": return
+	if can_emergency_pack() and pack_button_rect().has_point(pos): emergency_pack();return
 	if END_TURN_RECT.has_point(pos): request_end_turn();return
 	var target = board_cell(pos)
 	if selected >= 0:
@@ -748,7 +750,7 @@ func context_hint() -> String:
 	if R.threatened(player, enemies): return "将军！结束回合前解除威胁。"
 	if free_selected: return "选择免费移动落点，或再次点牌取消。"
 	if player_skill == "artillery" and selected < 0:
-		return "攻击姿态：隔一子炮击；点收炮可退出（消耗免费行动）。" if artillery_mode == "attack" else "行军姿态：正交走1～2格；展开抽3张（每回合首次）。"
+		return "攻击姿态：正交走1格；炮击1费2伤；收炮消耗免费行动。" if artillery_mode == "attack" else "行军姿态：正交走1～2格；展开抽3张（每回合首次）。"
 	if selected >= 0: return "点击高亮目标；再点选中牌取消。" if mobile_layout else "选择高亮目标；右键 / Esc 取消。"
 	if notice in ["能量不足。", "本回合已使用移动牌。", "牌库与弃牌堆已空。"]: return notice
 	var idx = R.occupied(hover, enemies)
@@ -844,6 +846,9 @@ func _draw():
 	text_at((Vector2(200, 500) if compact_landscape else Vector2(150, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(550, 609), "能量 %d" % energy, 20, THEME.LIGHT)
 	var confirm = selected >= 0 and (phase == "discard" or (phase == "play" and hand[selected] in UNTARGETED))
 	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else ("结束回合" if mobile_layout else "结束回合 [Enter]")), 18, THEME.INK)
+	if player_skill == "artillery" and artillery_mode == "attack" and phase == "play":
+		panel(pack_button_rect(), THEME.BUTTON, GOLD if can_emergency_pack() else THEME.BORDER)
+		text_at(pack_button_rect().position + Vector2(12, 32), "收炮", 18, THEME.INK if can_emergency_pack() else THEME.GRID)
 	if tuna_active or tuna_turns > 0:
 		var status = "吐纳 · 本回合+1" if tuna_active else "吐纳"
 		status += " · 后续%d回合" % tuna_turns
