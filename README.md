@@ -1,4 +1,12 @@
-# 弈行 Godot 恢复工程
+# 弈行
+
+当前开发版本：**v0.5.0**。GPT 持续开发分支为 [`gpt`](https://github.com/JiahuiWangEve/yixing/tree/gpt)，网页导出分支为 [`gh-pages`](https://github.com/JiahuiWangEve/yixing/tree/gh-pages)。
+
+本版加入三种开局与专属牌组／奖励池：将2命、马1命、炮车1命。炮车可切换行军与攻击姿态，展开时每回合首次抽3张牌；新增统一“消耗”标签和将专属奖励“吐纳”。完整规则与初始牌组见 [docs/START_PROFILES.md](docs/START_PROFILES.md)。
+
+以下保留恢复工程的说明与验证入口。
+
+# 恢复工程 Godot 恢复工程
 
 当前游戏基线为从发布包恢复的 **v0.4.4**。本次只准备开发环境、整理工程并核对现有行为，没有修改游戏逻辑或实现扩展草案。
 

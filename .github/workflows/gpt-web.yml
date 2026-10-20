@@ -1,0 +1,67 @@
+name: Build GPT branch Web
+
+on:
+  push:
+    branches: [gpt]
+    paths:
+      - 'game/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - '.github/workflows/gpt-web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gpt-web-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Godot and verify
+        run: bash scripts/setup.sh
+      - name: Install matching single-thread Web templates
+        run: bash scripts/install-web-templates.sh
+      - name: Export Web
+        run: |
+          mkdir -p build/web
+          bin/godot --headless --path game --export-release Web ../build/web/index.html > build/export.log 2>&1
+          cat build/export.log
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|(^|[[:space:]])ERROR:' build/export.log; then exit 1; fi
+          touch build/web/.nojekyll
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          pathlib.Path('build/web/build-info.json').write_text(json.dumps({
+              'version': re.search(r'const BUILD_VERSION = "([^"]+)"', pathlib.Path('game/main.gd').read_text()).group(1), 'source_branch': 'gpt',
+              'source_commit': os.environ['GITHUB_SHA'], 'godot': '4.6.3',
+              'thread_support': False
+          }, ensure_ascii=False, indent=2) + '\n')
+          PY
+      - name: Upload verification and exported site
+        uses: actions/upload-artifact@v4
+        with:
+          name: yixing-web-${{ github.sha }}
+          path: |
+            build/web/
+            build/export.log
+            verification/latest/
+          include-hidden-files: true
+      - name: Commit Web export to gh-pages
+        run: |
+          git fetch origin gh-pages
+          git worktree add --detach publish FETCH_HEAD
+          cp -a build/web/. publish/
+          cd publish
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all
+          if ! git diff --cached --quiet; then
+            git commit -m "Publish v0.5.0 Web from gpt ${GITHUB_SHA}"
+            git push origin HEAD:gh-pages
+          fi

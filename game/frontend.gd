@@ -5,7 +5,8 @@ func _init(owner): game = owner
 func entries() -> Array:
 	match game.screen:
 		"home": return ["开始游戏", "教程", "调试选关", "声音：" + ("静音" if game.audio_system.muted else "开启")]
-		"skill_selection": return ["帅 · 四向一步", "马 · 马步移动" if game.skill_system.is_unlocked("horse") else "马 · 击败第 6 关解锁", "返回首页"]
+		"skill_selection": return ["将 · 四向一步", "马 · 马步移动" if game.skill_system.is_unlocked("horse") else "马 · 通关后解锁", "炮车 · 行军与驻扎" if game.skill_system.is_unlocked("artillery") else "炮车 · 通关后解锁", "返回首页"]
+		"debug_profile": return ["将 · 2命与恢复", "马 · 1命与机动", "炮车 · 1命与炮击", "返回首页"]
 		"tutorial_menu":
 			var result = ["继续上次小节：%d" % (game.tutorial_resume_lesson + 1)]
 			for i in 5: result.append("%d · %s" % [i + 1, LESSON_NAMES[i]])
@@ -36,13 +37,19 @@ func activate(i: int):
 			match i:
 				0: game.skill_system.show_selection()
 				1: game.open_tutorial_menu()
-				2: game.screen = "debug_menu"
+				2: game.screen = "debug_profile"
 				3: game.audio_system.toggle_mute()
 		"skill_selection":
 			match i:
 				0: game.skill_system.choose("king")
 				1: game.skill_system.choose("horse")
-				2: game.show_home()
+				2: game.skill_system.choose("artillery")
+				3: game.show_home()
+		"debug_profile":
+			if i < 3:
+				game.player_skill = ["king", "horse", "artillery"][i]
+				game.screen = "debug_menu"
+			else: game.show_home()
 		"tutorial_menu":
 			if i == 0: game.start_tutorial(game.tutorial_resume_lesson)
 			elif i <= 5: game.start_tutorial(i - 1)
@@ -70,14 +77,18 @@ func activate(i: int):
 				3: game.show_home()
 func draw():
 	game.draw_rect(Rect2(Vector2.ZERO, game.ui_size), game.THEME.BACKGROUND)
-	var titles = {"home": "弈 行", "skill_selection": "选择初始技能", "tutorial_menu": "教程 · 选择小节", "debug_menu": "调试选关", "tutorial_pause": "教学菜单", "tutorial_complete": "本节完成"}
+	var titles = {"home": "弈 行", "skill_selection": "选择开局", "debug_profile": "调试 · 选择开局", "tutorial_menu": "教程 · 选择小节", "debug_menu": "调试选关", "tutorial_pause": "教学菜单", "tutorial_complete": "本节完成"}
 	var origin = (Vector2(24, 60) if game.compact_landscape else Vector2(24, 90)) if game.mobile_layout else Vector2(420, 100)
 	game.text_at(origin, titles.get(game.screen, "弈 行"), 32, game.THEME.HEADING)
-	if game.screen == "home": game.text_at(origin + Vector2(0, 32), "单命开局 · 移动抽牌 · 破将过关", 16, game.THEME.LIGHT)
+	if game.screen == "home": game.text_at(origin + Vector2(0, 32), "三种开局 · 专属牌组 · 破将过关", 16, game.THEME.LIGHT)
 	elif game.screen == "skill_selection":
-		game.text_at(origin + Vector2(0, 28), "开局：0 张普通手牌 + 1 张临时免费移动牌", 16, game.THEME.LIGHT)
-		game.text_at(origin + Vector2(0, 48), "帅走四向一步；马走马步，遵守蹩马腿", 16, game.THEME.LIGHT)
-	elif game.screen == "debug_menu": game.text_at(origin + Vector2(0, 30), "先选奖励，再以完整初始状态入关", 16, game.THEME.LIGHT)
+		game.text_at(origin + Vector2(0, 28), "各有 8 张初始牌；移动抽牌，回合保留手牌", 16, game.THEME.LIGHT)
+		game.text_at(origin + Vector2(0, 48), "消耗：每张每关使用一次，下关恢复", 16, game.THEME.LIGHT)
+	elif game.screen == "debug_profile":
+		game.text_at(origin + Vector2(0, 28), "调试可直接选择全部开局", 16, game.THEME.LIGHT)
+	elif game.screen == "debug_menu":
+		var profile_name = {"king": "将", "horse": "马", "artillery": "炮车"}.get(game.player_skill, "将")
+		game.text_at(origin + Vector2(0, 30), profile_name + " · 先选专属奖励，再入关", 16, game.THEME.LIGHT)
 	elif game.screen == "tutorial_menu": game.text_at(origin + Vector2(0, 28), "预设练习；仅教学限制非目标操作", 16, game.THEME.LIGHT)
 	elif game.screen == "tutorial_complete":
 		var summary = game.tutorial.hint()
@@ -85,13 +96,23 @@ func draw():
 		if summary.length() > 26: game.text_at(origin + Vector2(0, 50), summary.substr(26), 16, game.THEME.LIGHT)
 	for i in entries().size():
 		var rect = button_rect(i)
-		var locked = game.screen == "skill_selection" and i == 1 and not game.skill_system.is_unlocked("horse")
+		var locked = game.screen == "skill_selection" and i in [1, 2] and not game.skill_system.is_unlocked("horse" if i == 1 else "artillery")
 		game.panel(rect, game.THEME.BOARD if locked else game.THEME.BUTTON, game.GOLD if i == 0 else game.THEME.BORDER)
-		game.text_at(rect.position + Vector2(20, 35), entries()[i], 20, game.THEME.GRID if locked else game.THEME.INK)
+		var profile_entry = game.screen in ["skill_selection", "debug_profile"] and i < 3
+		game.text_at(rect.position + Vector2(20, 26 if profile_entry else 35), entries()[i], 20, game.THEME.GRID if locked else game.THEME.INK)
+		if profile_entry:
+			var summaries = ["2 命 · 恢复与近战 · 奖励含续命、吐纳", "1 命 · 马步与移动牌 · 奖励偏重机动", "1 命 · 行军走 1–2 格 · 展开抽 3 张"]
+			game.text_at(rect.position + Vector2(20, 47), summaries[i], 14, game.THEME.GRID if locked else game.THEME.SAFE)
 	if game.screen == "skill_selection":
-		var bottom = button_rect(2).end.y
+		var bottom = button_rect(3).end.y
 		var footer = "解锁记录仅保存在当前浏览器；清除数据后会重置"
-		if game.skill_system.horse_unlocked and game.skill_system.save_error != OK: footer = "马已在本次游玩中解锁；本地保存暂不可用"
+		if game.skill_system.horse_unlocked and game.skill_system.save_error != OK: footer = "马与炮车已解锁；本地保存暂不可用"
 		game.text_at(Vector2(24 if game.mobile_layout else 420, bottom + 28), footer, 14, game.THEME.LIGHT)
+
+	if game.screen in ["skill_selection", "debug_profile"]:
+		var help_y = button_rect(3).end.y + (52 if game.screen == "skill_selection" else 28)
+		var help_x = 24 if game.mobile_layout else 420
+		game.text_at(Vector2(help_x, help_y), "炮车：展开抽3张；固定收炮占免费移动次数", 14, game.THEME.LIGHT)
+		game.text_at(Vector2(help_x, help_y + 22), "炮击须隔恰好一子；木桩也可被敌炮利用", 14, game.THEME.LIGHT)
 
 	game.text_at(Vector2(game.ui_size.x - 112, game.ui_size.y - 16), "游戏 " + game.BUILD_VERSION, 12, game.THEME.LIGHT.darkened(0.28))

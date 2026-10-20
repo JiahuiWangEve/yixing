@@ -31,7 +31,7 @@ func unlock_horse() -> bool:
 	return save_error == OK
 
 func is_unlocked(id: String) -> bool:
-	return id == "king" or (id == "horse" and horse_unlocked)
+	return id == "king" or (id in ["horse", "artillery"] and horse_unlocked)
 
 func choose(id: String) -> bool:
 	if not is_unlocked(id): return false

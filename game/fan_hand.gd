@@ -50,9 +50,14 @@ func _selection() -> int:
 	return _visual_index(game.selected) if game.selected >= 0 and game.selected < game.hand.size() else -1
 func _data(i: int) -> Array:
 	if _is_free(i):
+		if game.player_skill == "artillery":
+			if game.artillery_mode == "attack": return ["收炮", 0, "固定能力：切回行军；消耗免费移动次数，不移动、不抽牌", "术"]
+			return ["行军", 0, "免费正交走1–2格，不穿透；每回合1次，移动抽1张", "移"]
 		return ["马步" if game.player_skill == "horse" else "帅步", 0, 
 			"免费马步，遵守蹩腿；每回合1次，移动抽1张，与点格共用" if game.player_skill == "horse" else "免费正交走1格；每回合1次，移动抽1张，与点格共用", "移"]
 	return game.CARDS[game.hand[_ordinary_index(i)]]
+func _consumable(i: int) -> bool:
+	return not _is_free(i) and game.is_consumable(game.hand[_ordinary_index(i)])
 func display_entries() -> Array:
 	game.sync_hand_ids()
 	var result: Array = []
@@ -422,6 +427,7 @@ func _visual_text_layout(i: int, dimensions: Vector2, focused: bool) -> Dictiona
 	var start_y = 52.0 if large else 43.0
 	var name_bottom = (50.0 if large else 44.0) + float(str(data[0]).length() - 1) * (26.0 if large else 20.0) + 4.0
 	var text: String = str(data[4]) if focused and data.size() > 4 else str(data[2])
+	if focused and _consumable(i) and not text.contains("下关恢复"): text += "\n消耗：使用后本关移除，下关恢复。"
 	var font_size = 18 if large else 14
 	var lines: Array = []
 	var full_from = 0
@@ -480,6 +486,12 @@ func _draw_visual_card(i: int, transform: Transform2D, alpha: float = 1.0):
 	if width >= 76:
 		var layout = _visual_text_layout(i, Vector2(width, height), focused)
 		game.text_at(Vector2(layout.body_left, 28.0 if large else 23.0), {"攻": "攻击", "移": "移动", "术": "术法"}.get(str(data[3]), str(data[3])), 18 if large else 14, _tint(game.THEME.SAFE, alpha))
+		if _consumable(i) and width >= 110:
+			var tag_size = 14 if large else 12
+			var tag_width = float(tag_size * 2 + 8)
+			var tag_y = 10.0 if large else 8.0
+			game.panel(Rect2(width - tag_width - 5, tag_y, tag_width, tag_size + 6), _tint(game.THEME.DANGER, alpha))
+			game.text_at(Vector2(width - tag_width - 1, tag_y + tag_size + 1), "消耗", tag_size, _tint(game.THEME.LIGHT, alpha))
 		var show_lines = mini(layout.lines.size(), int(layout.available_lines))
 		for line_index in show_lines:
 			var line: String = str(layout.lines[line_index])

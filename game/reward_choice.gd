@@ -25,7 +25,11 @@ func choice_rect(i: int) -> Rect2:
 	if not game.mobile_layout: return Rect2(220 + i * 285, 310, 260, 190)
 	if game.compact_landscape: return Rect2(24 + i * 312, 170, 288, 174)
 	return Rect2(24, 150 + i * 120, 432, 104)
-func add_rect(i: int) -> Rect2: return game.reward_rect(i)
+func add_rect(i: int) -> Rect2:
+	if game.mobile_layout and not game.compact_landscape:
+		var step = 130 if game.ui_size.y < 700 else 150
+		return Rect2(24, 142 + i * step, 432, 122 if game.ui_size.y < 700 else 138)
+	return game.reward_rect(i)
 func back_rect() -> Rect2:
 	if mode == "add": return game.skip_reward_rect()
 	if not game.mobile_layout: return Rect2(320, 700, 210, 54)
@@ -139,6 +143,7 @@ func _draw_choice():
 	game.text_at(footer_pos, footer, 15, game.THEME.LIGHT)
 
 func _draw_add():
+	game.text_at(title_position() + Vector2(0, 28 if game.mobile_layout else 32), "消耗牌：每张每关使用一次，下关恢复", 15, game.THEME.LIGHT)
 	for i in game.rewards.size():
 		var id: String = game.rewards[i]
 		var rect = add_rect(i)
@@ -146,6 +151,10 @@ func _draw_add():
 		game.panel(rect, game.THEME.PAPER, game.GOLD)
 		game.text_at(pos + Vector2(20, 36 if game.mobile_layout else 45), game.CARDS[id][0], 26 if game.mobile_layout else 30, game.GOLD)
 		game.text_at(pos + Vector2(20, 65 if game.mobile_layout else 80), "费用 %d" % game.CARDS[id][1], 19)
+		if game.is_consumable(id):
+			var tag = Rect2(pos + Vector2(rect.size.x - 68, 12), Vector2(54, 27))
+			game.panel(tag, game.THEME.DANGER)
+			game.text_at(tag.position + Vector2(9, 20), "消耗", 18, game.THEME.LIGHT)
 		game.wrapped_text(game.CARDS[id][2], Rect2(pos + Vector2(20, 72 if game.mobile_layout else 96), Vector2(rect.size.x - 40, rect.size.y - (78 if game.mobile_layout else 102))), 16, game.INK)
 	_button(back_rect(), "返回奖励选择")
 
@@ -161,6 +170,7 @@ func _draw_remove():
 		var active = index == selected
 		game.panel(rect, game.THEME.PAPER_SELECTED if active else game.THEME.PAPER, game.THEME.DANGER if active else game.THEME.BORDER)
 		var name: String = game.CARDS[id][0]
+		if game.is_consumable(id): name += " · 消耗"
 		game.text_at(rect.position + Vector2(16, 27), name + ("  ✓" if active else ""), 21, game.INK)
 		game.text_at(rect.position + Vector2(rect.size.x - 166, 27), "费用 %d · 共 %d 张" % [game.CARDS[id][1], _count(id)], 15, game.THEME.GRID)
 		game.wrapped_text(game.CARDS[id][2], Rect2(rect.position + Vector2(16, 34), Vector2(rect.size.x - 32, 26)), 14, game.THEME.GRID)

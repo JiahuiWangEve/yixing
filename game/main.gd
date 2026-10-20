@@ -1,12 +1,15 @@
 extends Control
-const BUILD_VERSION = "v0.4.4"
+const BUILD_VERSION = "v0.5.0"
+const PROFILES = preload("res://start_profiles.gd")
 const THEME = preload("res://theme.gd")
 const FAN = preload("res://fan_hand.gd")
 const GESTURE = preload("res://card_input.gd")
 const SKILLS = preload("res://player_skills.gd")
 const FREE_MOVE = preload("res://free_move_card.gd")
 const HISTORY = preload("res://undo_history.gd")
-const UNTARGETED = ["sweep", "life", "breath"]
+const UNTARGETED = ["sweep", "life", "breath", "deploy", "pack", "tuna"]
+# One use per physical copy per stage; discarded unused copies still recycle.
+const CONSUMABLES = ["life", "breath", "deploy", "tuna"]
 const TACTICS = preload("res://tactics.gd")
 const CAMPAIGN = preload("res://campaign.gd")
 const ENEMY_AI = preload("res://enemy_ai.gd")
@@ -29,6 +32,11 @@ var tutorial = TUTORIAL.new()
 var frontend = FRONTEND.new(self)
 var rewardui = REWARD_UI.new(self)
 var player_skill = "king"
+var artillery_mode = "march"
+var deploy_draw_used = false
+# Pending future starts, separate from the bonus on the current turn.
+var tuna_turns = 0
+var tuna_active = false
 var free_card_uid = 0
 var free_selected = false
 var skill_system = SKILLS.new(self)
@@ -91,6 +99,8 @@ func refresh_free_card():
 	free_selected = false
 	free_card_uid = next_card_uid;next_card_uid += 1
 func select_free_card():
+	if can_emergency_pack():
+		emergency_pack();return
 	if not free_card_available() or input_lock > 0 or navigation_lock > 0: return
 	selected = -1;free_selected = not free_selected
 	if free_selected: audio_system.play_cue("select", tick)
@@ -164,7 +174,11 @@ const CARDS = {
 	"pierce": ["贯刺", 2, "对正交相邻敌子造成2点伤害", "攻"], 
 	"pursuit": ["追斩", 1, "相邻敌子1点伤害；仅击杀时抽1张", "攻"], 
 	"shock": ["震退", 1, "相邻敌子1点伤害；存活且后格空则推1格", "攻"], 
-	"breath": ["调息", 0, "当前能量+1；本关消耗", "术"], 
+	"breath": ["调息", 0, "当前能量+1；本关消耗", "术"],
+	"cannon_shot": ["炮击", 2, "攻击姿态：直线隔恰好一子，造成1点伤害", "攻"],
+	"deploy": ["展开", 1, "行军→攻击；本回合首次展开抽3张；消耗", "术", "仅炮车行军姿态可用。进入攻击姿态；每回合首次进入时抽3张，超出6张需弃牌。使用后本关移除，下关恢复。"],
+	"pack": ["转进", 0, "攻击→行军；不抽牌，保留免费移动额度", "术"],
+	"tuna": ["吐纳", 3, "下回合起连续3回合能量+1；消耗", "术", "使用当回合不返还能量。接下来3个玩家回合各以4能量开始；再次使用延长3回合，不叠加增量。过关清除。消耗：使用后本关移除，下关恢复。"],
 	"swap": ["换位", 1, "与相邻非将敌子互换；用移动牌次数，抽1张", "移"]}
 var rng = RandomNumberGenerator.new()
 var seed_value = 20261019
@@ -214,7 +228,7 @@ func clear_effects():
 	for e in enemies: e.visual = cell_pos(e.pos)
 func effect(kind: String, from: Vector2, to: Vector2, duration: float = 0.3, delay: float = 0.0, extra: Dictionary = {}):
 	var fx = {"kind": kind, "from": from, "to": to, "duration": duration, "delay": delay, "age": 0.0}
-	var cues = {"move": "land", "recoil": "land", "draw": "draw", "card_use": "use", "hit": "hit", "death": "death", "player_hit": "hurt", "stun": "stun", "push": "push", "life": "heal", "spawn": "spawn", "victory": "victory", "stake_place": "land", "breath": "heal"}
+	var cues = {"move": "land", "recoil": "land", "draw": "draw", "card_use": "use", "hit": "hit", "death": "death", "player_hit": "hurt", "stun": "stun", "push": "push", "life": "heal", "spawn": "spawn", "victory": "victory", "stake_place": "land", "breath": "heal", "stance": "land", "tuna": "heal"}
 	if cues.has(kind):
 		fx.sound = cues[kind];fx.sound_played = false
 		fx.sound_at = delay + (duration if kind in ["move", "recoil"] else (0.3 if kind == "spawn" else (0.15 if kind == "draw" else 0.0)))
@@ -262,8 +276,13 @@ func new_run(preserve_tutorial: bool = false):
 	screen = "game";debug_target = 0;debug_remaining = 0;debug_reward_total = 0
 	active_touch = -1;touch_dragged = true
 	rng.seed = seed_value
-	stage = 1;lives = 1
-	collection = ["sword", "sword", "sword", "sword", "spear", "spear", "horse", "horse"]
+	if not PROFILES.DATA.has(player_skill): player_skill = "king"
+	stage = 1;lives = int(PROFILES.DATA[player_skill].lives)
+	collection = PROFILES.DATA[player_skill].deck.duplicate()
+	# Scripted lessons keep their original fixtures, independent of run balance.
+	if preserve_tutorial:
+		lives = 1
+		collection = ["sword", "sword", "sword", "sword", "spear", "spear", "horse", "horse"]
 	logs = []
 	start_stage()
 func home_rect() -> Rect2:
@@ -283,15 +302,32 @@ func start_tutorial(index: int):
 	tutorial_resume_lesson = clampi(index, 0, 4)
 	tutorial.start(self, tutorial_resume_lesson);screen = "game"
 func start_debug_stage(index: int):
-	player_skill = "king"
 	new_run();debug_target = clampi(index, 1, CAMPAIGN.LAST_STAGE);debug_reward_total = debug_target - 1;debug_remaining = debug_reward_total
 	if debug_remaining > 0: roll_rewards();phase = "reward"
 	else: stage = debug_target;start_stage()
+func reward_pool() -> Array:
+	return PROFILES.COMMON.duplicate() + PROFILES.DATA[player_skill].rewards.duplicate()
 func roll_rewards():
 	rewardui.reset()
-	rewards = ["cannon", "sweep", "push", "straight", "stun", "life"]
-	if not tutorial.active: rewards += TACTICS.IDS + ["diagonal"]
-	shuffle(rewards);rewards = rewards.slice(0, 3)
+	if tutorial.active:
+		rewards = ["cannon", "sweep", "push", "straight", "stun", "life"]
+		shuffle(rewards);rewards = rewards.slice(0, 3)
+		return
+	var dedicated: Array = PROFILES.DATA[player_skill].rewards.duplicate()
+	var common: Array = PROFILES.COMMON.duplicate()
+	shuffle(dedicated);shuffle(common)
+	rewards = dedicated.slice(0, 2) + common.slice(0, 1)
+	shuffle(rewards)
+func is_consumable(id: String) -> bool: return id in CONSUMABLES
+func can_emergency_pack() -> bool:
+	return screen == "game" and phase == "play" and player_skill == "artillery" and artillery_mode == "attack" and not basic_used
+func emergency_pack():
+	if not can_emergency_pack() or input_lock > 0 or navigation_lock > 0: return
+	history.record("emergency_pack");cancel_gesture()
+	artillery_mode = "march";basic_used = true;free_selected = false;selected = -1
+	notice = "紧急收炮：已消耗免费行动；可用移动牌转移。"
+	log_line("紧急收炮，转为行军姿态。")
+	effect("stance", cell_pos(player), cell_pos(player), 0.25)
 func tutorial_allows(action: String, data: Dictionary = {}) -> bool:
 	return not tutorial.active or tutorial.allows(action, data)
 func tutorial_after(action: String, data: Dictionary = {}):
@@ -325,9 +361,9 @@ func discard_hand(index: int):
 	if screen != "game" or phase != "discard" or index < 0 or index >= hand.size(): return
 	if not tutorial_allows("discard", {"index": index}): return
 	history.record("discard");sync_hand_ids()
-	discard.append(hand.pop_at(index));hand_ids.remove_at(index);handui.sync();phase = "play";selected = -1
+	discard.append(hand.pop_at(index));hand_ids.remove_at(index);handui.sync();phase = "discard" if hand.size() > 6 else "play";selected = -1
 	input_lock = maxf(input_lock, 0.18)
-	hand_page = mini(hand_page, maxi(0, (hand.size() - 1) / 2));hand_drawer = false;notice = "已弃置，继续行动。"
+	hand_page = mini(hand_page, maxi(0, (hand.size() - 1) / 2));hand_drawer = false;notice = "仍超出手牌上限，请继续弃置。" if phase == "discard" else "已弃置，继续行动。"
 	tutorial_after("discard", {"index": index})
 func select_card(index: int):
 	if screen != "game" or phase not in ["play", "discard"] or index < 0 or index >= hand.size(): return
@@ -353,6 +389,7 @@ func start_stage():
 	history.clear();cancel_gesture();hand_ids = []
 	navigation_lock = 0.0
 	reinforcement_turns = 0;reinforcement_pending = 0;hand_page = 0;hand_drawer = false
+	artillery_mode = "march";deploy_draw_used = false;tuna_turns = 0;tuna_active = false
 	clear_effects()
 	player = Vector2i(4, 9);player_visual = cell_pos(player);enemies = [];turn = 1;energy = 3;basic_used = false;card_move_used = false;selected = -1
 	refresh_free_card()
@@ -400,9 +437,17 @@ func board_cell(pos: Vector2) -> Vector2i:
 	return Vector2i(-1, -1)
 func movement_danger(id: String, p: Vector2i) -> bool:
 	return TACTICS.swap_danger(self, p) if id == "swap" else R.threatened(p, enemies)
+func placement_danger(p: Vector2i) -> bool:
+	var board = enemies.duplicate(true)
+	board.append({"kind": "stake", "pos": p, "stun": 0})
+	return R.threatened(player, board)
 func basic_legal(p: Vector2i) -> bool:
 	if not R.inside(p) or basic_used or R.occupied(p, enemies) >= 0: return false
 	var d = p - player
+	if player_skill == "artillery":
+		if artillery_mode != "march": return false
+		var distance = absi(d.x) + absi(d.y)
+		return distance > 0 and distance <= 2 and R.blockers(player, p, enemies) == 0
 	if player_skill != "horse": return absi(d.x) + absi(d.y) == 1
 	if not ((absi(d.x) == 2 and absi(d.y) == 1) or (absi(d.x) == 1 and absi(d.y) == 2)): return false
 	var leg = player + Vector2i(signi(d.x) if absi(d.x) == 2 else 0, signi(d.y) if absi(d.y) == 2 else 0)
@@ -426,6 +471,10 @@ func card_legal(id: String, p: Vector2i) -> bool:
 	var idx = R.occupied(p, enemies)
 	if idx >= 0 and enemies[idx].kind == "stake": return false
 	match id:
+		"deploy": return player_skill == "artillery" and artillery_mode == "march"
+		"pack": return player_skill == "artillery" and artillery_mode == "attack"
+		"tuna": return player_skill == "king"
+		"cannon_shot": return player_skill == "artillery" and artillery_mode == "attack" and idx >= 0 and R.blockers(player, p, enemies) == 1
 		"sword": return idx >= 0 and dist == 1
 		"diagonal": return idx >= 0 and absi(d.x) == 1 and absi(d.y) == 1
 		"spear": return idx >= 0 and dist <= 2 and R.blockers(player, p, enemies) == 0
@@ -530,7 +579,7 @@ func play_card(i: int, p: Vector2i):
 	if not tutorial_allows("play", {"index": i, "target": p, "card": id}): return
 	if energy < CARDS[id][1]: notice = "能量不足。";return
 	if CARDS[id][3] == "移" and card_move_used: notice = "本回合已使用移动牌。";return
-	if id not in ["sweep", "life", "breath"] and not card_legal(id, p): notice = "这个目标无法使用此牌。";return
+	if id not in ["sweep", "life", "breath"] and not card_legal(id, p): notice = "当前姿态或目标无法使用此牌。";return
 	if id == "life" and lives >= 5: notice = "生命已满，保留此牌。";return
 	if id == "sweep":
 		var found = false
@@ -541,14 +590,28 @@ func play_card(i: int, p: Vector2i):
 	effect("card_use", hand_visual_rect(i).position, hand_visual_rect(i).position - Vector2(0, 60), 0.34, 0, {"card": id, "size": hand_rect(i).size})
 	hand_views.remove_at(i);hand_ids.remove_at(i)
 	energy -= CARDS[id][1];hand.remove_at(i);selected = -1;handui.sync()
-	if id not in ["life", "breath"]: discard.append(id)
+	if not is_consumable(id): discard.append(id)
 	log_line("使用「%s」" % CARDS[id][0])
 	var idx = R.occupied(p, enemies)
 	if id in TACTICS.IDS: TACTICS.apply(self, id, p, idx)
 	match id:
-		"sword", "spear", "cannon", "diagonal":
-			effect("sword" if id == "diagonal" else id, cell_pos(player), cell_pos(p), 0.3)
-			damage_enemy(idx, 0.3 if id == "cannon" else 0.12)
+		"sword", "spear", "cannon", "diagonal", "cannon_shot":
+			var animation = "cannon" if id == "cannon_shot" else ("sword" if id == "diagonal" else id)
+			effect(animation, cell_pos(player), cell_pos(p), 0.3)
+			damage_enemy(idx, 0.3 if animation == "cannon" else 0.12)
+		"deploy":
+			artillery_mode = "attack";refresh_free_card()
+			if not deploy_draw_used:
+				deploy_draw_used = true
+				for draw in 3: draw_card()
+			log_line("展开为攻击姿态。")
+		"pack":
+			artillery_mode = "march";refresh_free_card()
+			log_line("转进行军，免费移动额度不变。")
+		"tuna":
+			tuna_turns += 3
+			effect("tuna", cell_pos(player), cell_pos(player), 0.35)
+			log_line("吐纳：未来%d回合能量+1。" % tuna_turns)
 		"horse", "straight":
 			move_piece({}, cell_pos(player), cell_pos(p), 0, id == "horse")
 			player = p;card_move_used = true;draw_card()
@@ -621,7 +684,11 @@ func end_turn():
 	resolve_reinforcements(timeline)
 	TACTICS.expire_stakes(self, maxf(timeline, input_lock))
 	plan_intents()
-	turn += 1;history.trim();energy = 3;basic_used = false;card_move_used = false;initial_threat = 2.0
+	turn += 1;history.trim()
+	tuna_active = tuna_turns > 0
+	if tuna_active: tuna_turns -= 1
+	energy = 4 if tuna_active else 3
+	basic_used = false;card_move_used = false;deploy_draw_used = false;initial_threat = 2.0
 	refresh_free_card()
 	notice = "受击后已撤退；重新规划路线。" if hit else "新回合：移动抽牌，组合出招。"
 	tutorial_after("end_turn")
@@ -665,6 +732,8 @@ func context_hint() -> String:
 	if phase != "play": return ""
 	if R.threatened(player, enemies): return "将军！结束回合前解除威胁。"
 	if free_selected: return "选择免费移动落点，或再次点牌取消。"
+	if player_skill == "artillery" and selected < 0:
+		return "攻击姿态：隔一子炮击；点收炮可退出（消耗免费行动）。" if artillery_mode == "attack" else "行军姿态：正交走1～2格；展开抽3张（每回合首次）。"
 	if selected >= 0: return "点击高亮目标；再点选中牌取消。" if mobile_layout else "选择高亮目标；右键 / Esc 取消。"
 	if notice in ["能量不足。", "本回合已使用移动牌。", "牌库与弃牌堆已空。"]: return notice
 	var idx = R.occupied(hover, enemies)
@@ -681,7 +750,12 @@ func _draw():
 	draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.BACKGROUND)
 	if not mobile_layout or compact_landscape: text_at(mobile_title_pos(), "弈 行", 28, THEME.HEADING)
 	panel(RESTART_RECT, THEME.BUTTON);text_at(RESTART_RECT.position + Vector2(16, 32 if mobile_layout else 27), "教学菜单" if tutorial.active else "重新开局", 18)
-	text_at((Vector2(390, 46) if compact_landscape else Vector2(24, 88)) if mobile_layout else Vector2(500, 47), tutorial.title() if tutorial.active else (("调试 · " if debug_target > 0 else "") + "第 %d / 6 关   回合 %d" % [stage, turn] + (" · 马步" if player_skill == "horse" else "")), 16 if tutorial.active else 20, THEME.HEADING)
+	var heading_pos = (Vector2(390, 46) if compact_landscape else Vector2(24, 88)) if mobile_layout else Vector2(500, 47)
+	var heading = tutorial.title() if tutorial.active else (("调试 · " if debug_target > 0 else "") + "第 %d / 6 关   回合 %d" % [stage, turn] + " · " + PROFILES.DATA[player_skill].name)
+	var heading_size = 16 if tutorial.active else 20
+	var heading_width = ui_size.x - 48 if mobile_layout and not compact_landscape else RESTART_RECT.position.x - heading_pos.x - 12
+	while heading_size > 12 and FONT.get_string_size(heading, HORIZONTAL_ALIGNMENT_LEFT, -1, heading_size).x > heading_width: heading_size -= 1
+	text_at(heading_pos, heading, heading_size, THEME.HEADING)
 	panel(BOARD_RECT, THEME.BOARD, THEME.BORDER)
 	for x in 9: draw_line(cell_pos(Vector2i(x, 0)), cell_pos(Vector2i(x, 9)), THEME.GRID, 1)
 	for y in 10: draw_line(cell_pos(Vector2i(0, y)), cell_pos(Vector2i(8, y)), THEME.GRID, 1)
@@ -699,8 +773,8 @@ func _draw():
 			if visible_threat and input_lock <= 0: draw_circle(v, 13, Color(THEME.DANGER, 0.24))
 			if input_lock <= 0 and free_selected and basic_legal(p) and ( not tutorial.active or tutorial.is_free_practice() or p in tutorial.target_cells()):
 				draw_circle(v, 19, Color(THEME.DANGER, 0.27) if R.threatened(p, enemies) else Color(THEME.SAFE, 0.25))
-			if input_lock <= 0 and selected >= 0 and card_legal(hand[selected], p) and ( not tutorial.active or tutorial.is_free_practice() or p in tutorial.target_cells()):
-				var danger = CARDS[hand[selected]][3] == "移" and movement_danger(hand[selected], p)
+			if input_lock <= 0 and selected >= 0 and hand[selected] not in UNTARGETED and card_legal(hand[selected], p) and ( not tutorial.active or tutorial.is_free_practice() or p in tutorial.target_cells()):
+				var danger = placement_danger(p) if hand[selected] == "stake" else (CARDS[hand[selected]][3] == "移" and movement_danger(hand[selected], p))
 				draw_circle(v, 19, Color(THEME.DANGER, 0.27) if danger else Color(THEME.SAFE, 0.25));draw_arc(v, 20, 0, TAU, 24, RED if danger else GOLD, 2)
 	if tutorial.active and input_lock <= 0:
 		for cell in tutorial.target_cells():
@@ -749,12 +823,16 @@ func _draw():
 		if fx.kind == "player_hit": player_flash = maxf(player_flash, 1 - clampf(fx.age / fx.duration, 0, 1))
 	pv.x += sin(tick * 90) * 4 * player_flash
 	if mobile_layout: draw_set_transform(pv, 0, Vector2.ONE * minf(1.0, CELL / 54.0));pv = Vector2.ZERO
-	draw_circle(pv, 24, THEME.DANGER.lerp(Color.WHITE, player_flash));draw_arc(pv, 20, 0, TAU, 32, GOLD, 2);text_at(pv + Vector2(-14, 9), "帅", 28, THEME.LIGHT)
+	draw_circle(pv, 24, THEME.DANGER.lerp(Color.WHITE, player_flash));draw_arc(pv, 20, 0, TAU, 32, GOLD, 2);text_at(pv + Vector2(-14, 9), ("炮" if artillery_mode == "attack" else "行") if player_skill == "artillery" else ("马" if player_skill == "horse" else "帅"), 28, THEME.LIGHT)
 	draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
 	text_at((Vector2(24, 500) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(397, 609), "命 %s" % "●".repeat(lives), 20, THEME.LIGHT)
 	text_at((Vector2(200, 500) if compact_landscape else Vector2(150, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(550, 609), "能量 %d" % energy, 20, THEME.LIGHT)
 	var confirm = selected >= 0 and (phase == "discard" or (phase == "play" and hand[selected] in UNTARGETED))
 	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else ("结束回合" if mobile_layout else "结束回合 [Enter]")), 18, THEME.INK)
+	if tuna_active or tuna_turns > 0:
+		var status = "吐纳 · 本回合+1" if tuna_active else "吐纳"
+		status += " · 后续%d回合" % tuna_turns
+		text_at(Vector2(410, 410) if compact_landscape else (Vector2(24, minf(BOARD_RECT.end.y + 62, full_hand_area().position.y - 8)) if mobile_layout else Vector2(24, 602)), status, 14, THEME.HEADING)
 	var hint = context_hint()
 	if not hint.is_empty() and input_lock <= 0: text_at((Vector2(410, 130) if compact_landscape else Vector2(24, 105)) if mobile_layout else Vector2(24, 630), hint, 14 if mobile_layout else 16, RED if phase == "discard" or R.threatened(player, enemies) else THEME.HEADING)
 	draw_effects()
@@ -797,6 +875,9 @@ func draw_effects():
 		match fx.kind:
 			"stake_place": draw_arc(b, 18 + t * 15, 0, TAU, 24, Color(0.85, 0.68, 0.4, fade), 3)
 			"stake_expire": draw_stake(b, fade)
+			"stance", "tuna":
+				draw_arc(b, 25 + t * 12, 0, TAU, 24, Color(THEME.SAFE, fade), 3)
+				text_at(b + Vector2(-24, -32 - t * 15), "收炮" if fx.kind == "stance" else "蓄气", 18, Color(THEME.SAFE, fade))
 			"breath":
 				draw_arc(b, 25 + t * 12, 0, TAU, 24, Color(THEME.SAFE, fade), 3)
 				text_at(b + Vector2(-24, -32 - t * 20), "+1气", 20, Color(THEME.SAFE, fade))
