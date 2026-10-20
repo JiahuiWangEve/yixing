@@ -1,0 +1,74 @@
+[
+  {
+    "cue": "land",
+    "filename": "01_land.wav",
+    "sha256": "31f5c9b3c8e12b43b3d3c574fe86d6a2fad08d88e0ab66ba5093c1156686245c",
+    "duration_s": 0.31
+  },
+  {
+    "cue": "draw",
+    "filename": "02_draw.wav",
+    "sha256": "40693b04fb7ab1752033272e5f9b641c9a2d6d1284f6c67350017a3365407958",
+    "duration_s": 0.34
+  },
+  {
+    "cue": "select",
+    "filename": "03_select.wav",
+    "sha256": "c7ac3b0c9bf9faeb0ab3234f4bf605fb2ae41db30e988b2868a19db586cc6cef",
+    "duration_s": 0.23
+  },
+  {
+    "cue": "use",
+    "filename": "04_use.wav",
+    "sha256": "e116a9d2be8fd71c5c302599f43c4aeba0d57b39fc8b48018a516f5850840c15",
+    "duration_s": 0.39
+  },
+  {
+    "cue": "hit",
+    "filename": "05_hit.wav",
+    "sha256": "62c8bb3e8eac9429a40abd339e8edca5d3b133e16a3e4ed511ce13244c6735ce",
+    "duration_s": 0.28
+  },
+  {
+    "cue": "death",
+    "filename": "06_death.wav",
+    "sha256": "9e0cf0c55d11df5bd6a9a42c9409e5414deae74173637e8b51f99d2ff8f71160",
+    "duration_s": 0.49
+  },
+  {
+    "cue": "hurt",
+    "filename": "07_hurt.wav",
+    "sha256": "c29ae90972325795beb9228af57b8eee5b7a9661dffd46808f03d497945eade9",
+    "duration_s": 0.44
+  },
+  {
+    "cue": "stun",
+    "filename": "08_stun.wav",
+    "sha256": "cd5e1c3c0948b3cd376258424581c6130f62131d62f3d90e31f9ddb61532caef",
+    "duration_s": 0.4
+  },
+  {
+    "cue": "push",
+    "filename": "09_push.wav",
+    "sha256": "248ea5d1ce508a694d22f7cedff70dc765496ece476eecde2e23e117813c5b16",
+    "duration_s": 0.43
+  },
+  {
+    "cue": "heal",
+    "filename": "10_heal.wav",
+    "sha256": "b5040468e8096c17a9784f565812506ffb2b6557581aed6c18e6449b3ffb0990",
+    "duration_s": 0.48
+  },
+  {
+    "cue": "spawn",
+    "filename": "11_spawn.wav",
+    "sha256": "5c7b797d8ab99ef04f87b113ec9da7dfcafca461de0cf3f14013295af2960a9d",
+    "duration_s": 0.48
+  },
+  {
+    "cue": "victory",
+    "filename": "12_victory.wav",
+    "sha256": "c95fd287a47ab9ec5e91d611dec1fcdca4332de211144e4d9910e1fcef391cff",
+    "duration_s": 0.59
+  }
+]

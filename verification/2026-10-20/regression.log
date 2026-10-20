@@ -1,0 +1,30 @@
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS main scene opens home screen
+PASS v0.4.4 initial resources
+PASS 16 cards and six stages
+PASS general has three HP
+PASS free move draws and costs no energy
+PASS second basic move rejected
+PASS paid movement has independent quota and draws
+PASS second paid movement rejected
+PASS turn refresh retains hand without automatic draw
+PASS stun prevents attack and pauses cooldown for one phase
+PASS attack ignores movement cooldown and attacker stays
+PASS recoil reaches safe empty cell without draw
+PASS one life hit ends run
+PASS single hit does not kill healthy general
+PASS general defeat opens three rewards
+PASS reward adds permanent card and starts next stage
+PASS breath grants energy and exhausts
+PASS life heals and exhausts
+PASS empty deck recycles discard
+PASS seventh normal card requires discard
+PASS discard resumes turn
+PASS stake created with three enemy phases
+PASS stake survives first two phases
+PASS stake expires in third enemy phase
+PASS swap moves both pieces and draws
+PASS stage three spawns horse after three phases
+PASS sixth stage victory unlocks horse
+RESULT 27 passed, 0 failed

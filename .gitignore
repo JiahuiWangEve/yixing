@@ -1,0 +1,7 @@
+.godot/
+bin/godot
+.runtime/
+build/
+verification/latest/
+*.tmp
+.DS_Store

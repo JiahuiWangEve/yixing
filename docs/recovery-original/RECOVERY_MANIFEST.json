@@ -1,0 +1,369 @@
+{
+  "game": "弈行",
+  "game_version": "v0.4.4",
+  "godot_version": "4.6.3",
+  "recovery_tool": "GDRE Tools v2.7.4",
+  "site_saved_version": 14,
+  "source_commit": "9753f06ffef5fc83939e39ffc112051f51a3fcf6",
+  "source_pck_sha256": "0e17c73f2300f5d9430ddfe512a25d62422e6e5f0dd47341ba0bc06fc7359f1b",
+  "project_kind": "recovered_from_web_export",
+  "validation": {
+    "pck_files_verified": 67,
+    "scripts_recovered": 17,
+    "resources_converted": 31,
+    "conversion_failures": 0,
+    "clean_import_exit_code": 0,
+    "headless_startup_frames": 120,
+    "headless_startup_exit_code": 0,
+    "full_interactive_regression": false,
+    "web_reexport_verified": false,
+    "export_presets_recovered": false
+  },
+  "files": [
+    {
+      "path": "README_ZH.txt",
+      "bytes": 2927,
+      "sha256": "7d82be22236e7590131921e68533a45ffc16b1d26fe8572eb7ccc03eb069c846"
+    },
+    {
+      "path": "SITE_BUILD_INFO.json",
+      "bytes": 2197,
+      "sha256": "e34bebfed6cbb05b325a23dc5264d88bbfba4e167f9d31870d0b0ea19d72726e"
+    },
+    {
+      "path": "assets/FONT_LICENSE.txt",
+      "bytes": 14712,
+      "sha256": "849f4ea9c214fa4ac3593b770c699f387534b11ce671264c1b10d85bdcb5997b"
+    },
+    {
+      "path": "assets/audio/wood_paper/01_land.wav",
+      "bytes": 27386,
+      "sha256": "31f5c9b3c8e12b43b3d3c574fe86d6a2fad08d88e0ab66ba5093c1156686245c"
+    },
+    {
+      "path": "assets/audio/wood_paper/01_land.wav.import",
+      "bytes": 502,
+      "sha256": "bd4a9efe4a6e4c081ef0f1114f762d37229f42c1b28afaed71565e2c9d887315"
+    },
+    {
+      "path": "assets/audio/wood_paper/02_draw.wav",
+      "bytes": 30032,
+      "sha256": "40693b04fb7ab1752033272e5f9b641c9a2d6d1284f6c67350017a3365407958"
+    },
+    {
+      "path": "assets/audio/wood_paper/02_draw.wav.import",
+      "bytes": 502,
+      "sha256": "039c53f2b357c717ef2bdec65ac4ce274c8824a9f06851399c03f61fe526b830"
+    },
+    {
+      "path": "assets/audio/wood_paper/03_select.wav",
+      "bytes": 20330,
+      "sha256": "c7ac3b0c9bf9faeb0ab3234f4bf605fb2ae41db30e988b2868a19db586cc6cef"
+    },
+    {
+      "path": "assets/audio/wood_paper/03_select.wav.import",
+      "bytes": 508,
+      "sha256": "84d33a6e75876bdab16a693f27e07b40c272a62b4987d8f4fed8cfe55f4b3566"
+    },
+    {
+      "path": "assets/audio/wood_paper/04_use.wav",
+      "bytes": 34442,
+      "sha256": "e116a9d2be8fd71c5c302599f43c4aeba0d57b39fc8b48018a516f5850840c15"
+    },
+    {
+      "path": "assets/audio/wood_paper/04_use.wav.import",
+      "bytes": 499,
+      "sha256": "defdbc68cb691fff6050621e02b24a3327bc591cf85c4339833400681cb78e76"
+    },
+    {
+      "path": "assets/audio/wood_paper/05_hit.wav",
+      "bytes": 24740,
+      "sha256": "62c8bb3e8eac9429a40abd339e8edca5d3b133e16a3e4ed511ce13244c6735ce"
+    },
+    {
+      "path": "assets/audio/wood_paper/05_hit.wav.import",
+      "bytes": 499,
+      "sha256": "5872d7703daeac7bea7af1bc44cf50ee564669bcab3bb083fa4acae0ac6a443e"
+    },
+    {
+      "path": "assets/audio/wood_paper/06_death.wav",
+      "bytes": 43262,
+      "sha256": "9e0cf0c55d11df5bd6a9a42c9409e5414deae74173637e8b51f99d2ff8f71160"
+    },
+    {
+      "path": "assets/audio/wood_paper/06_death.wav.import",
+      "bytes": 505,
+      "sha256": "137cc7b3219c5f008c094822ed19eefccf274cf2fc82ca9827fe2487f1203b8b"
+    },
+    {
+      "path": "assets/audio/wood_paper/07_hurt.wav",
+      "bytes": 38852,
+      "sha256": "c29ae90972325795beb9228af57b8eee5b7a9661dffd46808f03d497945eade9"
+    },
+    {
+      "path": "assets/audio/wood_paper/07_hurt.wav.import",
+      "bytes": 501,
+      "sha256": "faed87ad0e0272e0385eb855ccc1bb7ac68dd538c64c7a0d43bbc29dd288d07e"
+    },
+    {
+      "path": "assets/audio/wood_paper/08_stun.wav",
+      "bytes": 35324,
+      "sha256": "cd5e1c3c0948b3cd376258424581c6130f62131d62f3d90e31f9ddb61532caef"
+    },
+    {
+      "path": "assets/audio/wood_paper/08_stun.wav.import",
+      "bytes": 502,
+      "sha256": "d8949c04f3626019203dedceb22eaca720531cd8433c5f5fb70fb8d19ad83a65"
+    },
+    {
+      "path": "assets/audio/wood_paper/09_push.wav",
+      "bytes": 37970,
+      "sha256": "248ea5d1ce508a694d22f7cedff70dc765496ece476eecde2e23e117813c5b16"
+    },
+    {
+      "path": "assets/audio/wood_paper/09_push.wav.import",
+      "bytes": 502,
+      "sha256": "5e150e760c5eaf22a4f9d6193f6efaf5feb13ac086e813d49146f76d2aa09e2a"
+    },
+    {
+      "path": "assets/audio/wood_paper/10_heal.wav",
+      "bytes": 42380,
+      "sha256": "b5040468e8096c17a9784f565812506ffb2b6557581aed6c18e6449b3ffb0990"
+    },
+    {
+      "path": "assets/audio/wood_paper/10_heal.wav.import",
+      "bytes": 502,
+      "sha256": "ce29630c5174ee674628d4a96acdb1f11e21f555f660b65e8bbc210e400fce7f"
+    },
+    {
+      "path": "assets/audio/wood_paper/11_spawn.wav",
+      "bytes": 42380,
+      "sha256": "5c7b797d8ab99ef04f87b113ec9da7dfcafca461de0cf3f14013295af2960a9d"
+    },
+    {
+      "path": "assets/audio/wood_paper/11_spawn.wav.import",
+      "bytes": 504,
+      "sha256": "627b875cd3e77a5496a94a71f6a5106dcdf1c7342094c3d87b5994cf5dbc9b25"
+    },
+    {
+      "path": "assets/audio/wood_paper/12_victory.wav",
+      "bytes": 52082,
+      "sha256": "c95fd287a47ab9ec5e91d611dec1fcdca4332de211144e4d9910e1fcef391cff"
+    },
+    {
+      "path": "assets/audio/wood_paper/12_victory.wav.import",
+      "bytes": 511,
+      "sha256": "6bf1bb2b0e809406b7ad76981fbb63e7d759da61c073445eb0853c4e24ea60b1"
+    },
+    {
+      "path": "assets/audio/wood_paper/approved_manifest.json",
+      "bytes": 1979,
+      "sha256": "d461bdc4c8ec884ff78106c84926c7a188a62cf5faa071a95321beb8ce6560a1"
+    },
+    {
+      "path": "assets/font.ttc",
+      "bytes": 19484784,
+      "sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a"
+    },
+    {
+      "path": "assets/font.ttc.import",
+      "bytes": 744,
+      "sha256": "8ff45a603af3857bb452d377146cbe1b8d86dcff510b0a5469e87fed04fb9a2c"
+    },
+    {
+      "path": "campaign.gd",
+      "bytes": 896,
+      "sha256": "70dd6e1f9fccea526aa84aa73b802d8cae0690f72a647225d78fff7f3262bdc2"
+    },
+    {
+      "path": "campaign.gd.uid",
+      "bytes": 20,
+      "sha256": "39b24eb782d12bba80ca2c4cb2a5ddafc1536ab7524888191ea788e760c69fcd"
+    },
+    {
+      "path": "card_input.gd",
+      "bytes": 4716,
+      "sha256": "539e8eed129bf76218dab3b3141c7549e814b77dfd2f9dcff35d08e74c111f52"
+    },
+    {
+      "path": "card_input.gd.uid",
+      "bytes": 20,
+      "sha256": "f97e7262ca4fe09c911568ab3e6ca731dc00e09af2fef854f2b619928d10dab7"
+    },
+    {
+      "path": "enemy_ai.gd",
+      "bytes": 2095,
+      "sha256": "edde8867a6638f421b6e581a6b67ad87972a2a090c0d2465d98982d397f95837"
+    },
+    {
+      "path": "enemy_ai.gd.uid",
+      "bytes": 20,
+      "sha256": "f3f5ce7fafe7eeaf9b7bc234631acfb6351414d168c729b1e33878daec636a28"
+    },
+    {
+      "path": "fan_hand.gd",
+      "bytes": 21127,
+      "sha256": "cde1ec89b9c43139b02a14561cb1248a4cf75f8427b35b0d13456ed5c2854612"
+    },
+    {
+      "path": "fan_hand.gd.uid",
+      "bytes": 19,
+      "sha256": "57f4112dffc079568cc7593add70d1f56b7c7bc97cd76e952e7237567c00f317"
+    },
+    {
+      "path": "free_move_card.gd",
+      "bytes": 682,
+      "sha256": "8fbe52103d345ed4fa76e390ee17ada465205c602f87b459d7b4ac0d404ecd03"
+    },
+    {
+      "path": "free_move_card.gd.uid",
+      "bytes": 20,
+      "sha256": "00dded53a7ff520eece00e0cfc489dafa72b3580afebf57fc29a9ed41cb9ab65"
+    },
+    {
+      "path": "frontend.gd",
+      "bytes": 5429,
+      "sha256": "fe196d253952fedb912ace63b60ccfaa055097a133bc08fb9fc5e0dc92067b57"
+    },
+    {
+      "path": "frontend.gd.uid",
+      "bytes": 20,
+      "sha256": "38587bc3c56ba64c10d1f25840dc0711eb8aeb4f29f7932cdfcbb45ba26449a6"
+    },
+    {
+      "path": "gdre_export.log",
+      "bytes": 1231,
+      "sha256": "9f3df52d34b91bdcceb7eb947835ed41199a5b7e73bff36e443e4674f27eb7b7"
+    },
+    {
+      "path": "main.gd",
+      "bytes": 45051,
+      "sha256": "b6dd67ad1b8773217c7156a1af28500fb4380aad611ce243fb9b48584cf5598e"
+    },
+    {
+      "path": "main.gd.uid",
+      "bytes": 20,
+      "sha256": "5b54f7d644d2478633686ff6d8f609e5e65380dbcc6038ec3807300d52c30aac"
+    },
+    {
+      "path": "main.tscn",
+      "bytes": 299,
+      "sha256": "68b3e62463b569016b18ce1e6d753d4b90e827de733cd7d49632800ec1fe8293"
+    },
+    {
+      "path": "pixel_audio.gd",
+      "bytes": 1879,
+      "sha256": "6a0c657cfd3fb188a6b7814ccbf0efa545adaa5d188c7017386aad09db6e18b6"
+    },
+    {
+      "path": "pixel_audio.gd.uid",
+      "bytes": 20,
+      "sha256": "31e100a7b3f651cbea383cff0efa2f99bb57636e97833b7da6b6799dfc9428d4"
+    },
+    {
+      "path": "player_skills.gd",
+      "bytes": 1053,
+      "sha256": "6656bfd97b03c8a622cd7d060cfa160a0043610850e5b4833434986919030680"
+    },
+    {
+      "path": "player_skills.gd.uid",
+      "bytes": 19,
+      "sha256": "475d7c18480dd644a73331e443eecbabd9fc1f6971d96e4b745ebeab350d9097"
+    },
+    {
+      "path": "project.godot",
+      "bytes": 711,
+      "sha256": "65cdc8029374d6a911e24c21c3027df1e5b0073541290f2ba2a243a1137cf1ea"
+    },
+    {
+      "path": "reward_choice.gd",
+      "bytes": 9583,
+      "sha256": "371480c65105e588a85728f42ac17bbaf8fc341e6d41d0a4616c29529956315d"
+    },
+    {
+      "path": "reward_choice.gd.uid",
+      "bytes": 19,
+      "sha256": "26f57103bce371e926bb9ce0e84360a7c8e0bd79fa4f81e976397daa16a9e097"
+    },
+    {
+      "path": "rules.gd",
+      "bytes": 2336,
+      "sha256": "baaf2dac0495fb315c9f622e9a7613728dc560740f68eee1f6912ba866feb361"
+    },
+    {
+      "path": "rules.gd.uid",
+      "bytes": 20,
+      "sha256": "fffa534589ccfcfc0c6de98a026d2c3ea39a35ab481cebaa0c209e309c38fea7"
+    },
+    {
+      "path": "sound_preview.gd",
+      "bytes": 834,
+      "sha256": "dccaefde40b0d86f55c6fd2fecb112cfa6401a5d1a664562b98cacb446bd4c6b"
+    },
+    {
+      "path": "sound_preview.gd.uid",
+      "bytes": 20,
+      "sha256": "7409b4d67e3a6b0bc58a2dee14bd9708080a2ce9031f543004d4bc2e1916db65"
+    },
+    {
+      "path": "tactics.gd",
+      "bytes": 2974,
+      "sha256": "01f70ebdd53f69c2d6a3cad26ba7d0f24a1045a93631d54430296817e89f0926"
+    },
+    {
+      "path": "tactics.gd.uid",
+      "bytes": 20,
+      "sha256": "0289191fe2d42d7c4c0c4a11f389610307733ea96b79135c1b5f1fcec3c72f73"
+    },
+    {
+      "path": "test_support.gd",
+      "bytes": 1076,
+      "sha256": "c531ab7deb106b55bc6acdec56ddece8177d216f1f2fb4aae553b731d26a2e00"
+    },
+    {
+      "path": "test_support.gd.uid",
+      "bytes": 20,
+      "sha256": "26b23e352c0935fd74f9d3859d6760235376ce589a9739b54aec8817849d6ff5"
+    },
+    {
+      "path": "theme.gd",
+      "bytes": 534,
+      "sha256": "49c1dcd28ef599d39c5b03319fd572f598625e4411842caa36a69df25173cac6"
+    },
+    {
+      "path": "theme.gd.uid",
+      "bytes": 20,
+      "sha256": "25c973b54e89622294b67636d05e9542c4daaf7644472ac98594e42d77795b79"
+    },
+    {
+      "path": "tutorial.gd",
+      "bytes": 16653,
+      "sha256": "21f66bc720cc49a27102b078c7822a34087cc64f63d520421514f2473dfd4b75"
+    },
+    {
+      "path": "tutorial.gd.uid",
+      "bytes": 20,
+      "sha256": "d8c0a422cc7ef15605bfb12468304302079e4bf5d9fd11460be9b59347a8ac2d"
+    },
+    {
+      "path": "undo_history.gd",
+      "bytes": 1821,
+      "sha256": "ebcd5a5b45d79ece7efae6b222b5818d3edb7c9feca94b05525582c54c5b4274"
+    },
+    {
+      "path": "undo_history.gd.uid",
+      "bytes": 20,
+      "sha256": "dc25f9ff378e234aea5a65f8ef95b15a2dc3eae6ba9a33c463a45e73a28cfec9"
+    },
+    {
+      "path": "verification/godot-import.txt",
+      "bytes": 3977,
+      "sha256": "e64d5c732b13c05123e34bc5466ba9ab1eb134e9cba0db5c246456ec0c3c4ffa"
+    },
+    {
+      "path": "verification/godot-startup.txt",
+      "bytes": 73,
+      "sha256": "a9912b85473f126d3f4f63ec824170c828df3473a292f866dde86cafda5b66da"
+    }
+  ]
+}
