@@ -834,7 +834,7 @@ func _draw():
 		status += " · 后续%d回合" % tuna_turns
 		text_at(Vector2(410, 410) if compact_landscape else (Vector2(24, minf(BOARD_RECT.end.y + 62, full_hand_area().position.y - 8)) if mobile_layout else Vector2(24, 602)), status, 14, THEME.HEADING)
 	var hint = context_hint()
-	if not hint.is_empty() and input_lock <= 0: text_at((Vector2(410, 130) if compact_landscape else Vector2(24, 105)) if mobile_layout else Vector2(24, 630), hint, 14 if mobile_layout else 16, RED if phase == "discard" or R.threatened(player, enemies) else THEME.HEADING)
+	if not hint.is_empty() and input_lock <= 0: text_at((Vector2(410, 130) if compact_landscape else Vector2(24, 105)) if mobile_layout else Vector2(24, 618), hint, 14 if mobile_layout else 16, RED if phase == "discard" or R.threatened(player, enemies) else THEME.HEADING)
 	draw_effects()
 	if phase == "discard": draw_rect(full_hand_area().grow(2), RED, false, 3)
 	handui.draw()
