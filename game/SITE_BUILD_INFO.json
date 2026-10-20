@@ -1,0 +1,71 @@
+{
+  "engine": "Godot 4.6.3",
+  "threads": false,
+  "game_version": "0.4.4",
+  "wasm_uncompressed_bytes": 37700666,
+  "wasm_gzip_bytes": 9382282,
+  "wasm_sha256": "26b61ce95247012ab3dca3ff51e96d1cdbff44ee91a8c20a83e150afca83f1b6",
+  "pck_bytes": 16845860,
+  "pck_sha256": "0e17c73f2300f5d9430ddfe512a25d62422e6e5f0dd47341ba0bc06fc7359f1b",
+  "mobile_shell": true,
+  "audio_style": "wood-and-paper",
+  "audio_effect_count": 12,
+  "player_start_lives": 1,
+  "enemy_general_hp": 3,
+  "home_screen": true,
+  "tutorial_count": 5,
+  "stage_count": 6,
+  "debug_stage_select": true,
+  "ai_update": "cannon-and-pawn",
+  "card_type_count": 16,
+  "reward_card_type_count": 13,
+  "new_reward_cards": [
+    "架炮",
+    "贯刺",
+    "追斩",
+    "震退",
+    "调息",
+    "换位",
+    "斜斩"
+  ],
+  "visual_style": "wood-and-paper",
+  "hand_layout": "large-rigid-curved-fan",
+  "drag_release_cards": true,
+  "undo_controls": [
+    "button",
+    "Ctrl+Z",
+    "Cmd+Z"
+  ],
+  "starting_skill_selection": [
+    "帅",
+    "马"
+  ],
+  "horse_unlock": "clear-stage-six-including-debug",
+  "unlock_persistence": "current-browser-local",
+  "temporary_free_move_card": true,
+  "wood_stake_enemy_phases": 3,
+  "temporary_card_excluded_from_normal_hand_limit": true,
+  "temporary_card_in_shared_fan": true,
+  "compact_landscape_piece_scale_fixed": true,
+  "resource_versioning": "content-addressed",
+  "legacy_compatibility_version": "0.4.1",
+  "game_entry": "game/launch-f09a76eaeb56a4b44d35ada3a3f622e3d3423e9eb4bc75656721cee332e11dc7.html",
+  "game_pack": "game/game-0e17c73f2300f5d9430ddfe512a25d62422e6e5f0dd47341ba0bc06fc7359f1b.pck",
+  "engine_bundle": "engine-2b7af85f766d18b79397de473e738984cbee531e6b148f89b2def340b524f0aa",
+  "shell_assets": {
+    "shell.css": "shell-33715e58825c43601b204833f63ebcb9092934f7392eb6df768afdbd8aa42b4c.css",
+    "shell.js": "shell-802c1219995bf462f2f28f4e76352e99316fcb54a05f25d07f86606b503e1d14.js"
+  },
+  "reward_options": [
+    "add-one-card",
+    "remove-one-copy",
+    "skip"
+  ],
+  "debug_uses_same_reward_options": true,
+  "free_card_refresh": "left-entry-only",
+  "desktop_logical_viewport": [
+    1280,
+    940
+  ],
+  "desktop_shell_aspect_ratio": "1280/940"
+}

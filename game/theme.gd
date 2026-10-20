@@ -1,0 +1,18 @@
+extends RefCounted
+
+const BACKGROUND = Color("2d2119")
+const PAPER = Color("f2e5cc")
+const PAPER_SELECTED = Color("ead5ac")
+const INK = Color("3c2a1c")
+const LIGHT = Color("f2e5cc")
+const BOARD = Color("d7b88a")
+const GRID = Color("805c3d")
+const BORDER = Color("a28056")
+const GOLD = Color("8b5b28")
+const HEADING = Color("e7bd76")
+const DANGER = Color("bb4b35")
+const SAFE = Color("387969")
+const BUTTON = Color("e6d4b0")
+const CARD_BACK = Color("795638")
+const SHADOW = Color("201710")
+const OVERLAY = Color(0.15, 0.1, 0.07, 0.94)

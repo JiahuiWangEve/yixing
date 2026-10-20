@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+godot="${GODOT_BIN:-$root/bin/godot}"
+[[ "$("$godot" --version)" == 4.6.3.stable.official.* ]] || { echo 'Requires Godot 4.6.3 standard' >&2; exit 1; }
+logs="${YIXING_LOG_DIR:-$root/verification/latest}"
+mkdir -p "$logs"
+# Every verification run uses a disposable save/cache so tests cannot overwrite progress.
+state="$(mktemp -d)"; trap 'rm -rf "$state"' EXIT
+export XDG_DATA_HOME="$state/data" XDG_CONFIG_HOME="$state/config" XDG_CACHE_HOME="$state/cache" GODOT_SILENCE_ROOT_WARNING=1
+run() {
+  local label="$1"; shift
+  local rc=0
+  timeout 120 "$godot" --headless --path "$root/game" "$@" > "$logs/$label.log" 2>&1 || rc=$?
+  if [[ $rc != 0 ]] || grep -Eq 'SCRIPT ERROR:|Parse Error:|(^|[[:space:]])ERROR:' "$logs/$label.log"; then
+    cat "$logs/$label.log"; echo "FAIL $label (exit $rc)" >&2; return 1
+  fi
+  echo "PASS $label (exit $rc)"
+}
+"$godot" --version > "$logs/version.txt"
+run import --editor --import
+for script in "$root"/game/*.gd; do
+  run "parse-$(basename "$script" .gd)" --check-only --script "$script"
+done
+run startup --quit-after 120
+run regression --script "$root/tests/recovered_checks.gd"

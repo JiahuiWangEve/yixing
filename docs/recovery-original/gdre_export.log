@@ -1,0 +1,36 @@
+GDRE Tools v2.7.4
+Ubuntu 24.04.3 LTS 24.04, headless
+Opening file: /workspace/scratch/9aa615b637ca/sites/yixing-source-inspection/dist/game/game-0e17c73f2300f5d9430ddfe512a25d62422e6e5f0dd47341ba0bc06fc7359f1b.pck
+Loaded 31 imported files
+Detected Engine Version: 4.6.3
+Detected Bytecode Revision: 4.5.0-stable (ebc36a7)
+Successfully loaded PCK!
+Version: 4.6.3
+Verified 67 files, no errors detected!
+Extracted 67 files, no errors detected!
+Saved project config.
+
+
+********************************EXPORT REPORT********************************
+
+Totals:                                 
+Decompiled scripts:                     17
+Scripts not decompiled:                 0
+Imported resources for export session:  31
+Successfully converted:                 31
+Lossy:                                  0
+Rewrote metadata:                       13
+Non-importable conversions:             0
+Not converted:                          0
+Failed conversions:                     0
+-------------
+
+
+
+------------------------------------------------------------------------------------
+
+Use Godot editor version 4.6.3 to edit the project.
+
+*******************************************************************************
+
+Recovery finished in 00m01s
