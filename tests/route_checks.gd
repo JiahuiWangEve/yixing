@@ -86,6 +86,7 @@ func run():
 	check(game.phase == phase and game.tutorial.active and not game.route.active(), "tutorial isolated")
 	for size in [Vector2(1280,940), Vector2(390,844), Vector2(844,390), Vector2(360,640)]:
 		game.configure_layout(size)
+		check(game.route.home_rect().end.y < 64, "map home button clears title in portrait and landscape")
 		check(not game.debug_skip_rect().intersects(game.END_TURN_RECT) and not game.debug_skip_rect().intersects(game.BOARD_RECT), "skip button clear of board and end turn")
 	print("ROUTE RESULT ", checks, " checks, ", failures, " failures")
 	game.free();quit(1 if failures else 0)

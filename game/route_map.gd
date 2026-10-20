@@ -109,6 +109,7 @@ func position(node: Dictionary) -> Vector2:
 	if game.compact_landscape: return Vector2(80 + node.row * 112, 215 + node.lane * 70)
 	var width = minf(game.ui_size.x - 100, 700)
 	return Vector2(game.ui_size.x * 0.5 + (node.lane - 1) * width * 0.43, 155 + (7 - node.row) * (game.ui_size.y - 285) / 7)
+func home_rect() -> Rect2: return Rect2(24, 12, 100, 44)
 func button(rect: Rect2, label: String):
 	game.panel(rect, game.THEME.BUTTON, game.THEME.BORDER)
 	game.text_at(rect.position + Vector2(12, 28), label, 16)
@@ -117,7 +118,7 @@ func row_rect(index: int) -> Rect2: return Rect2(24, 166 + index * 54, game.ui_s
 func capacity() -> int: return maxi(1, int((game.ui_size.y - 260) / 54))
 func footer_rect(i: int) -> Rect2: return Rect2(24 + i * 145, game.ui_size.y - 65, 136, 42)
 func click(pos: Vector2):
-	if game.home_rect().has_point(pos): game.show_home();return
+	if home_rect().has_point(pos): game.show_home();return
 	if game.screen == "map":
 		if footer_rect(0).has_point(pos): deck_view = not deck_view;return
 		if not deck_view:
@@ -130,7 +131,7 @@ func click(pos: Vector2):
 			if row_rect(i).has_point(pos): resolve(page * capacity() + i);return
 func draw():
 	game.draw_rect(Rect2(Vector2.ZERO, game.ui_size), game.THEME.BACKGROUND)
-	button(game.home_rect(), "首页")
+	button(home_rect(), "首页")
 	game.text_at(Vector2(24, 92), "山河棋路 · 第一章", 28, game.THEME.HEADING)
 	game.text_at(Vector2(24, 120), "种子 %d · 已行 %d / 8 · %s" % [state.seed, state.visited.size(), "敌将2命" if state.weakened else "敌将3命"], 16, game.THEME.LIGHT)
 	if game.screen == "route_choice":
