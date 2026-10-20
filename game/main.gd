@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.5.0"
+const BUILD_VERSION = "v0.5.1"
 const PROFILES = preload("res://start_profiles.gd")
 const THEME = preload("res://theme.gd")
 const FAN = preload("res://fan_hand.gd")
@@ -175,7 +175,10 @@ const CARDS = {
 	"pursuit": ["追斩", 1, "相邻敌子1点伤害；仅击杀时抽1张", "攻"], 
 	"shock": ["震退", 1, "相邻敌子1点伤害；存活且后格空则推1格", "攻"], 
 	"breath": ["调息", 0, "当前能量+1；本关消耗", "术"],
-	"cannon_shot": ["炮击", 2, "攻击姿态：直线隔恰好一子，造成1点伤害", "攻"],
+	"cannon_shot": ["炮击", 2, "直线隔恰好一子；行军2费1伤，攻击1费2伤", "攻"],
+	"advance": ["进击", 1, "正交相邻敌子1伤；击杀后进入其位置，不抽牌", "攻"],
+	"retreat_strike": ["回马枪", 1, "向目标反方向退1格再造成1伤，退路需空；不抽牌", "攻"],
+	"knight_assault": ["马踏连营", 2, "马步攻击1伤，遵守蹩腿；击杀后进入目标格，不抽牌", "攻"],
 	"deploy": ["展开", 1, "行军→攻击；本回合首次展开抽3张；消耗", "术", "仅炮车行军姿态可用。进入攻击姿态；每回合首次进入时抽3张，超出6张需弃牌。使用后本关移除，下关恢复。"],
 	"pack": ["转进", 0, "攻击→行军；不抽牌，保留免费移动额度", "术"],
 	"tuna": ["吐纳", 3, "下回合起连续3回合能量+1；消耗", "术", "使用当回合不返还能量。接下来3个玩家回合各以4能量开始；再次使用延长3回合，不叠加增量。过关清除。消耗：使用后本关移除，下关恢复。"],
@@ -452,10 +455,22 @@ func basic_legal(p: Vector2i) -> bool:
 	if not ((absi(d.x) == 2 and absi(d.y) == 1) or (absi(d.x) == 1 and absi(d.y) == 2)): return false
 	var leg = player + Vector2i(signi(d.x) if absi(d.x) == 2 else 0, signi(d.y) if absi(d.y) == 2 else 0)
 	return R.occupied(leg, enemies) < 0
+func card_cost(id: String) -> int:
+	return 1 if id == "cannon_shot" and artillery_mode == "attack" else int(CARDS[id][1])
+func card_data(id: String) -> Array:
+	var data: Array = CARDS[id].duplicate()
+	data[1] = card_cost(id)
+	if id == "cannon_shot":
+		data[2] = ("攻击姿态：1费2伤" if artillery_mode == "attack" else "行军姿态：2费1伤") + "；直线隔恰好一子"
+	return data
+func target_danger(id: String, p: Vector2i) -> bool:
+	if id == "stake": return placement_danger(p)
+	if id in ["advance", "retreat_strike", "knight_assault"]: return TACTICS.attack_danger(self, id, p)
+	return CARDS[id][3] == "移" and movement_danger(id, p)
 func can_commit_card(index: int, p: Vector2i) -> bool:
 	if phase != "play" or index < 0 or index >= hand.size(): return false
 	var id: String = hand[index]
-	if energy < CARDS[id][1] or (CARDS[id][3] == "移" and card_move_used): return false
+	if energy < card_cost(id) or (CARDS[id][3] == "移" and card_move_used): return false
 	if id == "life": return lives < 5
 	if id == "breath": return true
 	if id == "sweep":
@@ -474,7 +489,7 @@ func card_legal(id: String, p: Vector2i) -> bool:
 		"deploy": return player_skill == "artillery" and artillery_mode == "march"
 		"pack": return player_skill == "artillery" and artillery_mode == "attack"
 		"tuna": return player_skill == "king"
-		"cannon_shot": return player_skill == "artillery" and artillery_mode == "attack" and idx >= 0 and R.blockers(player, p, enemies) == 1
+		"cannon_shot": return player_skill == "artillery" and idx >= 0 and R.blockers(player, p, enemies) == 1
 		"sword": return idx >= 0 and dist == 1
 		"diagonal": return idx >= 0 and absi(d.x) == 1 and absi(d.y) == 1
 		"spear": return idx >= 0 and dist <= 2 and R.blockers(player, p, enemies) == 0
@@ -577,7 +592,7 @@ func play_card(i: int, p: Vector2i):
 	if phase != "play" or i < 0 or i >= hand.size(): return
 	var id = hand[i]
 	if not tutorial_allows("play", {"index": i, "target": p, "card": id}): return
-	if energy < CARDS[id][1]: notice = "能量不足。";return
+	if energy < card_cost(id): notice = "能量不足。";return
 	if CARDS[id][3] == "移" and card_move_used: notice = "本回合已使用移动牌。";return
 	if id not in ["sweep", "life", "breath"] and not card_legal(id, p): notice = "当前姿态或目标无法使用此牌。";return
 	if id == "life" and lives >= 5: notice = "生命已满，保留此牌。";return
@@ -589,7 +604,7 @@ func play_card(i: int, p: Vector2i):
 	history.record("play");free_selected = false;sync_hand_views()
 	effect("card_use", hand_visual_rect(i).position, hand_visual_rect(i).position - Vector2(0, 60), 0.34, 0, {"card": id, "size": hand_rect(i).size})
 	hand_views.remove_at(i);hand_ids.remove_at(i)
-	energy -= CARDS[id][1];hand.remove_at(i);selected = -1;handui.sync()
+	energy -= card_cost(id);hand.remove_at(i);selected = -1;handui.sync()
 	if not is_consumable(id): discard.append(id)
 	log_line("使用「%s」" % CARDS[id][0])
 	var idx = R.occupied(p, enemies)
@@ -598,7 +613,7 @@ func play_card(i: int, p: Vector2i):
 		"sword", "spear", "cannon", "diagonal", "cannon_shot":
 			var animation = "cannon" if id == "cannon_shot" else ("sword" if id == "diagonal" else id)
 			effect(animation, cell_pos(player), cell_pos(p), 0.3)
-			damage_enemy(idx, 0.3 if animation == "cannon" else 0.12)
+			damage_enemy(idx, 0.3 if animation == "cannon" else 0.12, 2 if id == "cannon_shot" and artillery_mode == "attack" else 1)
 		"deploy":
 			artillery_mode = "attack";refresh_free_card()
 			if not deploy_draw_used:
@@ -774,7 +789,7 @@ func _draw():
 			if input_lock <= 0 and free_selected and basic_legal(p) and ( not tutorial.active or tutorial.is_free_practice() or p in tutorial.target_cells()):
 				draw_circle(v, 19, Color(THEME.DANGER, 0.27) if R.threatened(p, enemies) else Color(THEME.SAFE, 0.25))
 			if input_lock <= 0 and selected >= 0 and hand[selected] not in UNTARGETED and card_legal(hand[selected], p) and ( not tutorial.active or tutorial.is_free_practice() or p in tutorial.target_cells()):
-				var danger = placement_danger(p) if hand[selected] == "stake" else (CARDS[hand[selected]][3] == "移" and movement_danger(hand[selected], p))
+				var danger = target_danger(hand[selected], p)
 				draw_circle(v, 19, Color(THEME.DANGER, 0.27) if danger else Color(THEME.SAFE, 0.25));draw_arc(v, 20, 0, TAU, 24, RED if danger else GOLD, 2)
 	if tutorial.active and input_lock <= 0:
 		for cell in tutorial.target_cells():

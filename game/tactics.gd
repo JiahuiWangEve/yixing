@@ -1,6 +1,6 @@
 extends RefCounted
 const R = preload("res://rules.gd")
-const IDS = ["stake", "pierce", "pursuit", "shock", "breath", "swap"]
+const IDS = ["stake", "pierce", "pursuit", "shock", "breath", "swap", "advance", "retreat_strike", "knight_assault"]
 static func enemy_target(game, p: Vector2i) -> bool:
 	var i = R.occupied(p, game.enemies)
 	return i >= 0 and game.enemies[i].kind != "stake"
@@ -10,6 +10,15 @@ static func legal(game, id: String, p: Vector2i) -> bool:
 	match id:
 		"stake": return distance > 0 and distance <= 2 and R.occupied(p, game.enemies) < 0
 		"pierce", "pursuit", "shock": return distance == 1 and enemy_target(game, p)
+		"advance": return distance == 1 and enemy_target(game, p)
+		"retreat_strike":
+			var dest = game.player - (p - game.player)
+			return distance == 1 and enemy_target(game, p) and R.inside(dest) and R.occupied(dest, game.enemies) < 0
+		"knight_assault":
+			var d: Vector2i = p - game.player
+			if not enemy_target(game, p) or not ((absi(d.x) == 2 and absi(d.y) == 1) or (absi(d.x) == 1 and absi(d.y) == 2)): return false
+			var leg = game.player + Vector2i(signi(d.x) if absi(d.x) == 2 else 0, signi(d.y) if absi(d.y) == 2 else 0)
+			return R.occupied(leg, game.enemies) < 0
 		"breath": return true
 		"swap":
 			var i = R.occupied(p, game.enemies)
@@ -21,8 +30,29 @@ static func swap_danger(game, target: Vector2i) -> bool:
 	if i < 0: return false
 	board[i].pos = game.player
 	return R.threatened(target, board)
+static func attack_danger(game, id: String, target: Vector2i) -> bool:
+	var board = game.enemies.duplicate(true)
+	var i = R.occupied(target, board)
+	if i < 0: return false
+	var killed = int(board[i].get("hp", game.enemy_health(board[i].kind))) <= 1
+	if killed: board.remove_at(i)
+	else: board[i].hp -= 1
+	var destination: Vector2i = game.player
+	if id == "retreat_strike": destination = game.player - (target - game.player)
+	elif killed: destination = target
+	return R.threatened(destination, board)
 static func apply(game, id: String, p: Vector2i, index: int):
 	match id:
+		"advance", "knight_assault", "retreat_strike":
+			var origin: Vector2i = game.player
+			if id == "retreat_strike":
+				game.player = origin - (p - origin)
+				game.move_piece({}, game.cell_pos(origin), game.cell_pos(game.player))
+			game.effect("sword", game.cell_pos(game.player), game.cell_pos(p), 0.3, 0.28 if id == "retreat_strike" else 0.0)
+			var killed: bool = game.damage_enemy(index, 0.4 if id == "retreat_strike" else 0.12)
+			if killed and id != "retreat_strike":
+				game.player = p
+				game.move_piece({}, game.cell_pos(origin), game.cell_pos(p), 0.2, id == "knight_assault")
 		"stake":
 			game.enemies.append({"kind": "stake", "pos": p, "visual": game.cell_pos(p), "cd": 0, "period": 0, "stun": 0, "ttl": 3})
 			game.effect("stake_place", game.cell_pos(p), game.cell_pos(p), 0.3)

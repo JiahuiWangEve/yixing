@@ -6,8 +6,8 @@ const DATA = {
 		"deck": ["sword", "sword", "sword", "spear", "spear", "horse", "life", "stun"],
 		"rewards": ["life", "sweep", "pierce", "shock", "tuna"]},
 	"horse": {"name": "马", "lives": 1,
-		"deck": ["sword", "sword", "spear", "horse", "horse", "straight", "straight", "pursuit"],
-		"rewards": ["horse", "straight", "swap", "pursuit"]},
+		"deck": ["sword", "sword", "sword", "spear", "spear", "straight", "pursuit", "stun"],
+		"rewards": ["straight", "swap", "pursuit", "advance", "retreat_strike", "knight_assault"]},
 	"artillery": {"name": "炮车", "lives": 1,
 		"deck": ["sword", "spear", "straight", "stake", "cannon_shot", "cannon_shot", "deploy", "pack"],
 		"rewards": ["stake", "cannon_shot", "deploy", "pack"]}

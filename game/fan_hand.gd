@@ -55,7 +55,7 @@ func _data(i: int) -> Array:
 			return ["行军", 0, "免费正交走1–2格，不穿透；每回合1次，移动抽1张", "移"]
 		return ["马步" if game.player_skill == "horse" else "帅步", 0, 
 			"免费马步，遵守蹩腿；每回合1次，移动抽1张，与点格共用" if game.player_skill == "horse" else "免费正交走1格；每回合1次，移动抽1张，与点格共用", "移"]
-	return game.CARDS[game.hand[_ordinary_index(i)]]
+	return game.card_data(game.hand[_ordinary_index(i)])
 func _consumable(i: int) -> bool:
 	return not _is_free(i) and game.is_consumable(game.hand[_ordinary_index(i)])
 func display_entries() -> Array:

@@ -87,7 +87,7 @@ func draw():
 	if valid_target():
 		var p = target_cell()
 		if p.x >= 0:
-			var danger = game.placement_danger(p) if game.hand[index] == "stake" else (game.CARDS[game.hand[index]][3] == "移" and game.movement_danger(game.hand[index], p))
+			var danger = game.target_danger(game.hand[index], p)
 			game.draw_arc(game.cell_pos(p), game.CELL * 0.42 + sin(game.tick * 8) * 2, 0, TAU, 32, game.RED if danger else game.GOLD, 3)
 
 func _draw_free():

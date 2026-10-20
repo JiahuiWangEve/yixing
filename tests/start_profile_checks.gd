@@ -4,12 +4,12 @@ const R = preload("res://rules.gd")
 const COMMON = ["sword", "spear", "diagonal", "push", "stun", "breath"]
 const DEDICATED = {
 	"king": ["life", "sweep", "pierce", "shock", "tuna"],
-	"horse": ["horse", "straight", "swap", "pursuit"],
+	"horse": ["straight", "swap", "pursuit", "advance", "retreat_strike", "knight_assault"],
 	"artillery": ["stake", "cannon_shot", "deploy", "pack"]
 }
 const INITIAL = {
 	"king": ["sword", "sword", "sword", "spear", "spear", "horse", "life", "stun"],
-	"horse": ["sword", "sword", "spear", "horse", "horse", "straight", "straight", "pursuit"],
+	"horse": ["sword", "sword", "sword", "spear", "spear", "straight", "pursuit", "stun"],
 	"artillery": ["sword", "spear", "straight", "stake", "cannon_shot", "cannon_shot", "deploy", "pack"]
 }
 var game
@@ -56,6 +56,7 @@ func run_checks():
 	root.add_child(game)
 	check_profiles_and_rewards()
 	check_movement_and_cannon()
+	check_horse_attacks()
 	check_deployment()
 	check_consumption()
 	check_tuna()
@@ -128,12 +129,19 @@ func check_movement_and_cannon():
 	game.add_enemy("p", Vector2i(4, 1), 99)
 	game.add_enemy("stake", Vector2i(4, 3), 0)
 	set_hand(["cannon_shot"])
+	game.enemies[1].hp = 3
 	game.play_card(0, Vector2i(4, 1))
-	check(game.hand == ["cannon_shot"] and game.energy == 3 and game.enemies.size() == 3, "cannon shot in marching stance changes no resources or target")
+	check(game.enemies[1].hp == 2 and game.energy == 1 and game.discard == ["cannon_shot"], "march cannon costs two and deals one")
+	set_hand(["cannon_shot"])
 	game.artillery_mode = "attack"
-	check(game.card_legal("cannon_shot", Vector2i(4, 1)), "cannon shot accepts exactly one stake screen")
+	check(game.card_cost("cannon_shot") == 1 and game.card_data("cannon_shot")[1] == 1 and game.can_commit_card(0, Vector2i(4, 1)), "attack cannon UI and affordability use one energy")
 	game.play_card(0, Vector2i(4, 1))
-	check(game.enemies.size() == 2 and game.energy == 1 and game.discard == ["cannon_shot"], "cannon shot costs two and damages target normally")
+	check(game.enemies.size() == 2 and game.energy == 0, "attack cannon costs one and deals two")
+	game.undo_action()
+	check(game.enemies[1].hp == 2 and game.energy == 1 and game.hand == ["cannon_shot"], "undo cannon restores damage resources and card")
+	game.artillery_mode = "march"
+	game.play_card(0, Vector2i(4, 1))
+	check(game.energy == 1 and game.hand == ["cannon_shot"] and game.enemies[1].hp == 2, "unaffordable march shot changes nothing")
 	reset("artillery")
 	game.artillery_mode = "attack"
 	game.player = Vector2i(4, 4)
@@ -345,3 +353,42 @@ func check_progress_and_tutorial():
 	game.start_tutorial(0)
 	check(game.tutorial.active and game.player_skill == "king" and game.lives == 1, "tutorial keeps explicit one-life teaching fixture")
 	game.tutorial.stop()
+
+func check_horse_attacks():
+	for id in ["advance", "knight_assault", "retreat_strike"]:
+		for hp in [1, 2]:
+			reset("horse")
+			game.player = Vector2i(4, 5)
+			var target = Vector2i(6, 4) if id == "knight_assault" else Vector2i(4, 4)
+			game.add_enemy("e", target, 99)
+			game.enemies.back().hp = hp
+			game.basic_used = true
+			game.card_move_used = true
+			set_hand([id])
+			var deck_before = game.deck.duplicate()
+			check(game.can_commit_card(0, target), id + " available after both movement quotas")
+			game.play_card(0, target)
+			var expected = Vector2i(4, 6) if id == "retreat_strike" else (target if hp == 1 else Vector2i(4, 5))
+			check(game.player == expected and game.enemies.size() == (1 if hp == 1 else 2), id + " movement follows kill or retreat rule")
+			check(game.energy == 3 - game.card_cost(id) and game.hand.is_empty() and game.deck == deck_before and game.discard == [id] and game.basic_used and game.card_move_used, id + " consumes energy without drawing or changing quotas")
+			if hp == 2: check(game.enemies.back().hp == 1, id + " deals exactly one damage")
+			game.undo_action()
+			check(game.player == Vector2i(4, 5) and game.hand == [id] and game.energy == 3 and game.enemies.back().hp == hp, id + " undo restores position target and hand")
+	reset("horse")
+	game.player = Vector2i(4, 5)
+	game.add_enemy("p", Vector2i(6, 4), 99)
+	game.add_enemy("stake", Vector2i(5, 5), 0)
+	set_hand(["knight_assault"])
+	game.play_card(0, Vector2i(6, 4))
+	check(game.hand == ["knight_assault"] and game.energy == 3 and game.player == Vector2i(4, 5), "blocked horse leg rejects attack without spending")
+	reset("horse")
+	game.player = Vector2i(4, 5)
+	game.add_enemy("p", Vector2i(4, 4), 99)
+	game.add_enemy("stake", Vector2i(4, 6), 0)
+	set_hand(["retreat_strike"])
+	game.play_card(0, Vector2i(4, 4))
+	check(game.hand == ["retreat_strike"] and game.energy == 3 and game.enemies[1].hp == 1, "blocked retreat rejects before damage or cost")
+	game.player = Vector2i(4, 9)
+	game.add_enemy("p", Vector2i(4, 8), 99)
+	check(not game.card_legal("retreat_strike", Vector2i(4, 8)), "retreat cannot leave board")
+	check(not game.card_legal("advance", Vector2i(4, 6)), "attack cannot target stake")

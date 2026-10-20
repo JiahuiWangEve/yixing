@@ -19,7 +19,7 @@ func run_checks():
 	check(game.screen == "home", "main scene opens home screen")
 	game.new_run()
 	check(game.lives == 2 and game.energy == 3 and game.hand.is_empty() and game.deck.size() == 8, "king initial resources")
-	check(game.CARDS.size() == 20 and game.CAMPAIGN.LAST_STAGE == 6, "20 cards and six stages")
+	check(game.CARDS.size() == 23 and game.CAMPAIGN.LAST_STAGE == 6, "23 cards and six stages")
 	check(game.enemies[0].hp == 3, "general has three HP")
 	reset(); game.basic_move(Vector2i(4,8))
 	check(game.hand.size() == 1 and game.basic_used and game.energy == 3, "free move draws and costs no energy")

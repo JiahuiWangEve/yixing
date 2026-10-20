@@ -101,7 +101,7 @@ func draw():
 		var profile_entry = game.screen in ["skill_selection", "debug_profile"] and i < 3
 		game.text_at(rect.position + Vector2(20, 26 if profile_entry else 35), entries()[i], 20, game.THEME.GRID if locked else game.THEME.INK)
 		if profile_entry:
-			var summaries = ["2 命 · 恢复与近战 · 奖励含续命、吐纳", "1 命 · 马步与移动牌 · 奖励偏重机动", "1 命 · 行军走 1–2 格 · 展开抽 3 张"]
+			var summaries = ["2 命 · 恢复与近战 · 奖励含续命、吐纳", "1 命 · 马步与进退攻击 · 击杀切入", "1 命 · 行军走 1–2 格 · 展开抽 3 张"]
 			game.text_at(rect.position + Vector2(20, 47), summaries[i], 14, game.THEME.GRID if locked else game.THEME.SAFE)
 	if game.screen == "skill_selection":
 		var bottom = button_rect(3).end.y
