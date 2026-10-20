@@ -1,10 +1,6 @@
 {
-  "version": "v0.5.3",
+  "version": "v0.6.0",
   "source_branch": "gpt",
-  "source_commit": "c4ac6dbbcb6b8d2131689e62fbe2365bec8571cc",
-  "godot": "4.6.3",
-  "thread_support": false,
-  "published_at": "2026-10-20T13:20:34.051Z",
-  "checks_passed": 159,
-  "checks_failed": 0
+  "source_commit": "2ea8bf8e8721bfa86f02a9a7d583ed20873822f5",
+  "build_run": "39464409689"
 }

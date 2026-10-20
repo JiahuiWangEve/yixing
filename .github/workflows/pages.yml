@@ -31,3 +31,28 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify live version and exported pack
+        env:
+          SITE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, time, urllib.request
+          expected = json.loads(pathlib.Path('build-info.json').read_text())
+          base = os.environ['SITE_URL'].rstrip('/')
+          expected_pack = hashlib.sha256(pathlib.Path('index.pck').read_bytes()).hexdigest()
+          for attempt in range(30):
+              try:
+                  query = '?verify=' + expected['source_commit'] + '-' + str(attempt)
+                  with urllib.request.urlopen(base + '/build-info.json' + query, timeout=30) as r:
+                      live = json.load(r)
+                  assert live == expected, (live, expected)
+                  with urllib.request.urlopen(base + '/index.pck' + query, timeout=60) as r:
+                      actual_pack = hashlib.sha256(r.read()).hexdigest()
+                  assert actual_pack == expected_pack, 'Published pack does not match deployment'
+                  print(json.dumps({'site': base, 'version': live['version'], 'source_commit': live['source_commit'], 'pack_sha256': actual_pack, 'verified': True}))
+                  break
+              except Exception as error:
+                  if attempt == 29: raise
+                  print('Waiting for Pages propagation:', error)
+                  time.sleep(6)
+          PY
