@@ -13,7 +13,6 @@ func cancel():
 	active = false;dragging = false;free_move = false;uid = -1;source = ""
 func press(position: Vector2, kind: String = "mouse") -> bool:
 	if game.screen != "game" or game.phase not in ["play", "discard"]: return false
-	if game.can_emergency_pack() and game.pack_button_rect().has_point(position): return false
 	if game.freecard.hit_test(position):
 
 

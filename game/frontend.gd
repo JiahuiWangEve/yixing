@@ -112,7 +112,7 @@ func draw():
 	if game.screen in ["skill_selection", "debug_profile"]:
 		var help_y = button_rect(3).end.y + (52 if game.screen == "skill_selection" else 28)
 		var help_x = 24 if game.mobile_layout else 420
-		game.text_at(Vector2(help_x, help_y), "炮车：展开抽3张；固定收炮占免费移动次数", 14, game.THEME.LIGHT)
+		game.text_at(Vector2(help_x, help_y), "炮车：展开抽3张；攻击走1格，行军走1～2格", 14, game.THEME.LIGHT)
 		game.text_at(Vector2(help_x, help_y + 22), "炮击须隔恰好一子；木桩也可被敌炮利用", 14, game.THEME.LIGHT)
 
 	game.text_at(Vector2(game.ui_size.x - 112, game.ui_size.y - 16), "游戏 " + game.BUILD_VERSION, 12, game.THEME.LIGHT.darkened(0.28))

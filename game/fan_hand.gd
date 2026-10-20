@@ -51,7 +51,7 @@ func _selection() -> int:
 func _data(i: int) -> Array:
 	if _is_free(i):
 		if game.player_skill == "artillery":
-			if game.artillery_mode == "attack": return ["炮步", 0, "攻击姿态：免费正交走1格，移动抽1张；与收炮共用免费行动", "移"]
+			if game.artillery_mode == "attack": return ["炮步", 0, "攻击姿态：免费正交走1格，移动抽1张；每回合一次", "移"]
 			return ["行军", 0, "免费正交走1–2格，不穿透；每回合1次，移动抽1张", "移"]
 		return ["马步" if game.player_skill == "horse" else "帅步", 0, 
 			"免费马步，遵守蹩腿；每回合1次，移动抽1张，与点格共用" if game.player_skill == "horse" else "免费正交走1格；每回合1次，移动抽1张，与点格共用", "移"]
