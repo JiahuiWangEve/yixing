@@ -48,7 +48,7 @@ func end_turn(label: String):
 	game.input_lock = 0;game.navigation_lock = 0;game.end_turn()
 	step("combat", label, [point(game.END_TURN_RECT.get_center())], 3000)
 func victory(label: String):
-	game.debug_skip();step("tap", label, [point(game.debug_skip_rect().get_center())])
+	game.debug_skip();step("tap", label, [point(game.debug_skip_rect().get_center())], 1600)
 func reward_return():
 	var target = game.rewardui.confirm_rect().get_center() if game.route.rewards_blocked() else game.rewardui.choice_rect(2).get_center()
 	game.input_lock = 0;game.navigation_lock = 0;game.choose_reward(-1)
