@@ -82,8 +82,6 @@ jobs:
             verification/latest/
           include-hidden-files: true
       - name: Commit Web export to gh-pages
-        # Temporary release hold while the newly requested booklet rules are implemented.
-        if: ${{ false }}
         run: |
           test "$(git ls-remote origin refs/heads/gpt | cut -f1)" = "$GITHUB_SHA" || { echo "Stale source; skip publication"; exit 0; }
           git fetch origin gh-pages
@@ -95,5 +93,6 @@ jobs:
           git add --all
           if ! git diff --cached --quiet; then
             git commit -m "Publish Web from gpt ${GITHUB_SHA}"
+            test "$(git ls-remote origin refs/heads/gpt | cut -f1)" = "$GITHUB_SHA" || { echo "Source changed during export copy; skip publication"; exit 0; }
             git push origin HEAD:gh-pages
           fi

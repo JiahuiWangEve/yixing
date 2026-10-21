@@ -122,8 +122,8 @@ func draw():
 	game.text_at(title_position(), title(), 24 if game.mobile_layout else 30, game.THEME.HEADING)
 	if game.route.rewards_blocked():
 		var pos = title_position() + Vector2(0, 50)
-		game.wrapped_text("兵书抄录代价：本战不获得加牌、删牌或其他战后奖励。行军进度照常推进。", Rect2(pos, Vector2(game.ui_size.x - pos.x - 24, 110)), 18, game.THEME.LIGHT)
-		game.text_at(pos + Vector2(0, 130), "之后仍有 %d 场战斗无收益" % game.route.state.reward_debt, 18, game.THEME.HEADING)
+		game.wrapped_text("课后作业：本战不获得加牌、删牌等常规战后奖励。行军进度照常推进。", Rect2(pos, Vector2(game.ui_size.x - pos.x - 24, 110)), 18, game.THEME.LIGHT)
+		game.wrapped_text(game.route.homework_summary(), Rect2(pos + Vector2(0, 130), Vector2(game.ui_size.x - pos.x - 24, 100)), 18, game.THEME.HEADING)
 		_button(confirm_rect(), "返回山河图")
 		return
 	match mode:

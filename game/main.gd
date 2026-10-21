@@ -10,7 +10,7 @@ const GESTURE = preload("res://card_input.gd")
 const SKILLS = preload("res://player_skills.gd")
 const FREE_MOVE = preload("res://free_move_card.gd")
 const HISTORY = preload("res://undo_history.gd")
-const UNTARGETED = ["sweep", "life", "breath", "deploy", "pack", "tuna", "suppress", "guard", "reload"]
+const UNTARGETED = ["sweep", "life", "breath", "deploy", "pack", "tuna", "suppress", "guard", "reload", "fatigue"]
 # One use per physical copy per stage; discarded unused copies still recycle.
 const CONSUMABLES = ["life", "breath", "deploy", "tuna", "guard", "permanent_stake"]
 const TACTICS = preload("res://tactics.gd")
@@ -171,6 +171,7 @@ const INK = THEME.INK
 const GOLD = THEME.GOLD
 const RED = THEME.DANGER
 const CARDS = {
+	"fatigue": ["疲惫", 2, "抽到时能量-1；留手每轮-1，最低0。打出弃置", "负", "负面牌。抽到时立即扣1能量，能量为0则不扣、不欠费。每个后续玩家回合开始，仍在手中时再扣1；多张分别结算。花2费打出后正常弃置，已扣能量不返还；不是消耗牌。"],
 	"sword_plus": ["短剑·淬锋", 1, "对正交相邻敌子造成2点伤害（强化）", "攻"],
 	"spear_plus": ["长枪·淬锋", 2, "直线两格内造成2点伤害，不穿透（强化）", "攻"],
 	"sword": ["短剑", 1, "对正交相邻敌子造成1点伤害", "攻"],
@@ -556,6 +557,7 @@ func card_legal(id: String, p: Vector2i) -> bool:
 	var idx = R.occupied(p, enemies)
 	if idx >= 0 and enemies[idx].kind == "stake": return false
 	match id:
+		"fatigue": return true
 		"deploy": return player_skill == "artillery" and artillery_mode == "march"
 		"pack": return player_skill == "artillery" and artillery_mode == "attack"
 		"tuna", "suppress", "guard": return player_skill == "king"
@@ -576,8 +578,10 @@ func draw_card():
 	if deck.is_empty(): notice = "牌库与弃牌堆已空。";return
 	sync_hand_ids()
 	var id = deck.pop_back();hand.append(id);hand_ids.append(next_card_uid);next_card_uid += 1
+	if id == "fatigue": energy = maxi(0, energy - 1)
 	handui.sync();effect("draw", Vector2.ZERO, Vector2.ZERO, 0.32)
 	log_line("抽到「%s」" % CARDS[id][0])
+	if id == "fatigue": notice = "疲惫：抽到立即扣1能量，最低0；不记欠费。"
 	if hand.size() > 6: phase = "discard";selected = -1;free_selected = false;notice = "选一张牌，再确认弃置。"
 func hand_rect(i: int) -> Rect2: return hand_visual_rect(i)
 func _gui_input(event):
@@ -693,6 +697,7 @@ func play_card(i: int, p: Vector2i):
 	var idx = R.occupied(p, enemies)
 	if id in TACTICS.IDS: TACTICS.apply(self, id, p, idx)
 	match id:
+		"fatigue": notice = "疲惫已弃置；已扣能量不返还。"
 		"sword", "spear", "sword_plus", "spear_plus", "cannon", "diagonal", "cannon_shot":
 			var animation = "cannon" if id == "cannon_shot" else ("sword" if id == "diagonal" else id.trim_suffix("_plus"))
 			effect(animation, cell_pos(player), cell_pos(p), 0.3)
@@ -864,7 +869,7 @@ func end_turn():
 	plan_intents()
 	tuna_active = tuna_turns > 0
 	if tuna_active: tuna_turns -= 1
-	energy = 4 if tuna_active else 3
+	energy = maxi(0, (4 if tuna_active else 3) - hand.count("fatigue"))
 	basic_used = false;card_move_used = false;deploy_draw_used = false;initial_threat = 2.0
 	refresh_free_card()
 	notice = "受击后已撤退；重新规划路线。" if hit else "新回合：移动抽牌，组合出招。"
@@ -1047,7 +1052,7 @@ func _draw():
 		draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.OVERLAY);text_at(Vector2(24, ui_size.y * 0.4) if mobile_layout else Vector2(410, 380), ("山河已定 · 第一章通关" if route.active() else "六关突破 · 原型通关") if phase == "win" else "此局已尽 · 再弈一局", 28 if mobile_layout else 36, THEME.HEADING)
 		text_at(Vector2(24, ui_size.y * 0.4 + 50) if mobile_layout else Vector2(430, 435), "重新开局，再行山河" if phase == "win" else "可悔棋，或重新开局", 20, THEME.LIGHT)
 		if phase == "win" and route.rewards_blocked():
-			text_at(Vector2(24, ui_size.y * 0.4 + 90) if mobile_layout else Vector2(410, 480), "兵书代价 · 本战收益抵消，剩余 %d 场" % route.state.reward_debt, 18, THEME.LIGHT)
+			text_at(Vector2(24, ui_size.y * 0.4 + 90) if mobile_layout else Vector2(410, 480), route.homework_summary(), 18, THEME.LIGHT)
 		if phase == "dead": text_at(Vector2(24, ui_size.y * 0.4 + 90) if mobile_layout else Vector2(480, 480), notice, 20, RED)
 		panel(RESTART_RECT, THEME.PAPER_SELECTED);text_at(RESTART_RECT.position + Vector2(16, 32 if mobile_layout else 27), "重新开局", 18, THEME.INK)
 

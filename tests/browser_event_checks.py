@@ -20,8 +20,8 @@ def parse(text):
     battle = text.split('\nbattle=', 1)[1].rsplit('\nscreen=', 1)[0]
     battle = variant_json(battle)
     return dict(screen=re.search(r'^screen="(\w+)"', text, re.M).group(1),
-                **{key:route[key] for key in ['current','pending','visited','prepared','reward_debt','reward_blocked']},
-                **{key:battle[key] for key in ['collection','hand','rewards','lives','phase']})
+                **{key:route[key] for key in ['current','pending','visited','prepared','reward_debt','reward_blocked','pending_homework','homework_awarded']},
+                **{key:battle[key] for key in ['collection','hand','rewards','lives','phase','energy','turn','deck','discard']})
 
 async def boot(page):
     await page.wait_for_function("!document.getElementById('status')", timeout=60000)
@@ -65,12 +65,12 @@ async def main():
                 else:
                     for pos in step['taps']:
                         await tap(*pos)
-                    await page.wait_for_timeout(1000 if step['kind']=='enter' else 400)
+                    await page.wait_for_timeout(1800 if step['kind']=='combat' else (1000 if step['kind']=='enter' else 400))
                 actual=await snap()
                 if actual!=step['expected']:
                     await screenshot('failure-'+str(number))
                     raise AssertionError((stem,number,step['label'],actual,step['expected']))
-                if step['label'] in ['confirm','debug victory','select_exchange','select_copy'] or step['kind']=='reload':
+                if step['label'] in ['confirm','debug victory','select_exchange','select_focus','select_homework','draw fatigue','retained fatigue next turn'] or step['kind']=='reload':
                     await screenshot(str(number)+'-'+step['label'].replace(' ','-'))
             assert not errors,(stem,errors)
             reports.append({'fixture':replay['fixture'],'viewport':[w,h],'state_assertions':len(replay['steps'])+1,'errors':errors,'final':await snap()})

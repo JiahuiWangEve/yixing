@@ -205,7 +205,7 @@ func active() -> bool: return not state.is_empty()
 func generate(seed_number: int):
 	var random = RandomNumberGenerator.new()
 	random.seed = seed_number
-	state = {"seed": seed_number, "nodes": [], "current": -1, "visited": [], "pending": -1, "prepared": false, "reward_debt": 0, "reward_blocked": false, "victory_recorded": false, "last_result": "", "done": false}
+	state = {"seed": seed_number, "nodes": [], "current": -1, "visited": [], "pending": -1, "prepared": false, "reward_debt": 0, "pending_homework": [], "homework_awarded": [], "reward_blocked": false, "victory_recorded": false, "last_result": "", "done": false}
 	var rows = [[1], [0, 1, 2], [0, 2], [1], [0, 1, 2], [0, 2], [0, 1, 2], [1]]
 	var types = [["battle"], ["event", "elite", "camp"], ["battle", "battle"], ["workshop"], ["battle", "camp", "elite"], ["event", "battle"], ["workshop", "battle", "camp"], ["boss"]]
 	for row in rows.size():
@@ -232,7 +232,7 @@ func enter(id: int):
 	deck_view = false;choices = [];choice_mode = "root";pending_choice = {};merchant_offer = -1;page = 0
 	if node.kind in ["battle", "elite", "boss"]:
 		game.stage = 6 if node.kind == "boss" else (maxi(4, node.layout) if node.kind == "elite" else node.layout)
-		state.reward_blocked = false;state.victory_recorded = false
+		state.reward_blocked = false;state.victory_recorded = false;state.homework_awarded = []
 		game.screen = "game";game.start_stage()
 		if state.prepared:
 			state.prepared = false;game.draw_card();game.draw_card()
@@ -258,11 +258,12 @@ func options() -> Array:
 	var result = []
 	if choice_mode == "confirm":
 		return [{"label": "确认 · " + pending_choice.label, "action": "confirm"}, {"label": "取消 · 不作改变", "action": "back"}]
-	if choice_mode in ["remove", "copy", "exchange"]:
+	if choice_mode in ["remove", "focus", "homework", "exchange"]:
 		for i in game.collection.size():
 			var action = choice_mode
-			var label = {"remove": "删除", "copy": "复制", "exchange": "交出"}[action] + card_label(i)
-			if action == "copy": label += " · 无收益场次+2"
+			var label = {"remove": "删除", "focus": "专注抄写", "homework": "课后作业", "exchange": "交出"}[action] + card_label(i)
+			if action == "focus": label += " · 立即复制并加入疲惫"
+			if action == "homework": label += " · 下一战无奖励，胜利后获得副本"
 			if action == "exchange": label += " → " + game.CARDS[node.offers[merchant_offer]][0]
 			result.append({"label": label, "action": action, "index": i, "offer": merchant_offer})
 		result.append({"label": "取消 · 返回选项", "action": "back"})
@@ -281,7 +282,8 @@ func options() -> Array:
 		for i in node.offers.size():
 			result.append({"label": "换取「%s」· 交出一张永久牌" % game.CARDS[node.offers[i]][0], "action": "select_exchange", "offer": i})
 	elif node.event_id == "manual":
-		result.append({"label": "抄录兵书 · 复制任意永久牌；无收益场次+2" if not game.collection.is_empty() else "抄录兵书 · 牌组已空，无法复制", "action": "select_copy" if not game.collection.is_empty() else "disabled"})
+		result.append({"label": "专注抄写 · 立即复制一张牌，并加入一张疲惫" if not game.collection.is_empty() else "专注抄写 · 牌组已空，无法复制", "action": "select_focus" if not game.collection.is_empty() else "disabled"})
+		result.append({"label": "课后作业 · 下一战无奖励，胜利后获得复制牌" if not game.collection.is_empty() else "课后作业 · 牌组已空，无法复制", "action": "select_homework" if not game.collection.is_empty() else "disabled"})
 		result.append({"label": "只记口诀 · 随机强化一张可强化牌" if random_upgrade_index() >= 0 else "只记口诀 · 没有可强化的牌", "action": "random_upgrade" if random_upgrade_index() >= 0 else "disabled"})
 	result.append({"label": "离开 · 保持现状", "action": "leave"})
 	return result
@@ -291,7 +293,7 @@ func resolve(index: int):
 	if choice.action == "disabled": return
 	if choice.action == "back":
 		choice_mode = "root";pending_choice = {};refresh_choices();return
-	if choice.action in ["select_remove", "select_copy", "select_exchange"]:
+	if choice.action in ["select_remove", "select_focus", "select_homework", "select_exchange"]:
 		choice_mode = choice.action.trim_prefix("select_");merchant_offer = choice.get("offer", -1);refresh_choices();return
 	if choice.action == "leave":
 		state.last_result = "已离开" + event_title(state.nodes[state.pending]);complete();return
@@ -300,7 +302,7 @@ func resolve(index: int):
 	# Mutate only after confirmation; no gameplay state changes in previews/cancel.
 	choice = pending_choice
 	var i = choice.get("index", -1)
-	if choice.action in ["upgrade", "remove", "copy", "exchange"] and (i < 0 or i >= game.collection.size()): return
+	if choice.action in ["upgrade", "remove", "focus", "homework", "exchange"] and (i < 0 or i >= game.collection.size()): return
 	var outcome = ""
 	match choice.action:
 		"upgrade":
@@ -316,9 +318,14 @@ func resolve(index: int):
 		"remove":
 			if game.collection.is_empty(): return
 			outcome = "已删除" + card_label(i);game.collection.remove_at(i)
-		"copy":
-			outcome = "已复制" + card_label(i);game.collection.append(game.collection[i]);state.reward_debt += 2
-			outcome += "；还有%d场无战后收益" % state.reward_debt
+		"focus":
+			# Card implementation is supplied by the combat module.
+			if not game.CARDS.has("fatigue"): return
+			outcome = "已复制" + card_label(i) + "，并加入一张疲惫"
+			game.collection.append(game.collection[i]);game.collection.append("fatigue")
+		"homework":
+			state.pending_homework.append(game.collection[i]);state.reward_debt = maxi(1, state.reward_debt)
+			outcome = "已记下" + card_label(i) + "：下一战无奖励，胜利后获得副本"
 		"exchange":
 			if choice.offer < 0 or choice.offer >= state.nodes[state.pending].offers.size(): return
 			game.collection[i] = state.nodes[state.pending].offers[choice.offer];outcome = "行商换得" + card_label(i)
@@ -334,15 +341,26 @@ func battle_victory() -> bool:
 	state.victory_recorded = true
 	state.reward_blocked = state.reward_debt > 0
 	if state.reward_blocked: state.reward_debt -= 1
+	# Every assignment refers to this next battle, not extra later battles.
+	# Deliver the committed card identity exactly once, even after it left the deck.
+	state.homework_awarded = state.pending_homework.duplicate()
+	for card in state.homework_awarded: game.collection.append(card)
+	state.pending_homework.clear()
 	return state.reward_blocked
+func homework_summary() -> String:
+	if not active() or state.homework_awarded.is_empty(): return ""
+	var names = PackedStringArray()
+	for card in state.homework_awarded: names.append(game.CARDS[card][0])
+	return "课后作业已交付：" + "、".join(names)
 func rewards_blocked() -> bool:
 	return active() and state.get("reward_blocked", false)
 func complete():
 	if not active() or state.pending < 0: return
 	if state.nodes[state.pending].kind in ["battle", "elite", "boss"]:
-		state.last_result = "战斗胜利；兵书抵消本场收益，剩%d场" % state.reward_debt if state.reward_blocked else "战斗胜利，继续行军。"
+		state.last_result = "战斗胜利；本场无常规奖励。" if state.reward_blocked else "战斗胜利，继续行军。"
+		if not state.homework_awarded.is_empty(): state.last_result += homework_summary()
 	state.current = state.pending;state.visited.append(state.pending);state.pending = -1
-	state.reward_blocked = false;state.victory_recorded = false;choice_mode = "root";pending_choice = {};merchant_offer = -1
+	state.reward_blocked = false;state.victory_recorded = false;state.homework_awarded = [];choice_mode = "root";pending_choice = {};merchant_offer = -1
 	game.history.clear();game.cancel_gesture();game.clear_effects();game.rewardui.reset()
 	game.hand = [];game.hand_ids = [];game.deck = [];game.discard = [];game.enemies = [];game.energy = 0;game.tuna_turns = 0;game.tuna_active = false
 	game.clear_battle_card_effects();game.encounter_state = {}
@@ -353,7 +371,7 @@ func complete():
 func save():
 	if not active(): return
 	var config = ConfigFile.new()
-	config.set_value("run", "version", 4)
+	config.set_value("run", "version", 5)
 	config.set_value("run", "route", state)
 	config.set_value("run", "battle", game.history.capture())
 	config.set_value("run", "screen", game.screen if game.screen in ["game", "map", "route_choice"] else "map")
@@ -371,7 +389,7 @@ func resume() -> bool:
 		var snapshot = JavaScriptBridge.eval("(function(){try{return localStorage.getItem('" + WEB_SAVE_KEY + "')||'';}catch(e){return '';}})()")
 		if snapshot is String and not snapshot.is_empty(): loaded = config.parse(snapshot) == OK
 	if not loaded: loaded = config.load(SAVE) == OK
-	if not loaded or config.get_value("run", "version", 0) != 4: return false
+	if not loaded or config.get_value("run", "version", 0) != 5: return false
 	var saved = config.get_value("run", "route", {})
 	var battle = config.get_value("run", "battle", {})
 	var saved_screen = config.get_value("run", "screen", "map")
@@ -390,7 +408,7 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 	# Validate the entire current-version envelope before touching live state.
 	if not saved is Dictionary or not battle is Dictionary: return false
 	if saved_screen not in ["map", "game", "route_choice"]: return false
-	for key in ["seed", "nodes", "current", "visited", "pending", "prepared", "reward_debt", "reward_blocked", "victory_recorded", "last_result", "done"]:
+	for key in ["seed", "nodes", "current", "visited", "pending", "prepared", "reward_debt", "pending_homework", "homework_awarded", "reward_blocked", "victory_recorded", "last_result", "done"]:
 		if not saved.has(key): return false
 	if not saved.nodes is Array or saved.nodes.size() != 16 or not saved.visited is Array: return false
 	if not saved.current is int or not saved.pending is int or not saved.seed is int: return false
@@ -398,6 +416,10 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 	for key in ["prepared", "reward_blocked", "victory_recorded", "done"]:
 		if not saved[key] is bool: return false
 	if not saved.reward_debt is int or saved.reward_debt < 0 or not saved.last_result is String: return false
+	for key in ["pending_homework", "homework_awarded"]:
+		if not saved[key] is Array: return false
+		for card in saved[key]:
+			if card not in game.CARDS: return false
 	if saved.done: return false
 	var kinds = ["battle", "event", "elite", "camp", "battle", "battle", "workshop", "battle", "camp", "elite", "event", "battle", "workshop", "battle", "camp", "boss"]
 	var rows = [0, 1, 1, 1, 2, 2, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7]
@@ -705,7 +727,7 @@ func draw_info():
 		game.text_at(Vector2(x, y), "山河在前，择路而行", 22, INK)
 		game.wrapped_text(state.last_result if not state.last_result.is_empty() else "先选地标查看，再确认出发", Rect2(x, y + 12, width, 58), 14, MUTED)
 		if side_layout():
-			game.wrapped_text("生命%d · 永久牌%d张 · 备战：%s · 兵书代价：接下来%d场无战后收益" % [game.lives, game.collection.size(), "下一战多抽2张" if state.prepared else "未整备", state.reward_debt], Rect2(x, y + 75, width, 110), 16, MUTED)
+			game.wrapped_text("生命%d · 永久牌%d张 · 备战：%s · 课后作业：接下来%d场无常规奖励" % [game.lives, game.collection.size(), "下一战多抽2张" if state.prepared else "未整备", state.reward_debt], Rect2(x, y + 75, width, 110), 16, MUTED)
 			game.text_at(Vector2(x, y + 180), "墨线箭头 · 当前可达", 18, INK)
 			game.text_at(Vector2(x, y + 215), "将军朱印 · 已经走过", 18, RED)
 			game.text_at(Vector2(x, y + 250), "黑色军符 · 节点类别", 18, INK)
@@ -737,6 +759,11 @@ func draw():
 		if choice_mode == "confirm" and pending_choice.action == "exchange":
 			var offer = game.CARDS[node.offers[pending_choice.offer]]
 			game.wrapped_text("换入牌：%s · %d费 · %s · 交出与换入同时生效，永久牌张数不变。" % [offer[0], offer[1], offer[2]], Rect2(32, row_rect(2).position.y + 8, game.ui_size.x - 64, 140), 17, INK)
+		if choice_mode == "confirm" and pending_choice.action == "focus" and game.CARDS.has("fatigue"):
+			var fatigue = game.CARDS.fatigue
+			game.wrapped_text("疲惫 · %d费\n%s\n复制牌与疲惫均加入永久牌组。" % [fatigue[1], fatigue[2]], Rect2(32, row_rect(2).position.y + 8, game.ui_size.x - 64, 140), 17, INK)
+		elif choice_mode == "confirm" and pending_choice.action == "homework":
+			game.wrapped_text("下一场胜利不提供常规加牌或删牌奖励。胜利后交付选定的复制牌，保留其强化效果。", Rect2(32, row_rect(2).position.y + 8, game.ui_size.x - 64, 140), 17, INK)
 		button(footer_rect(0), "上一页")
 		button(footer_rect(1), "下一页 %d" % (page + 1))
 		return

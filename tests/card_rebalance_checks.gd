@@ -344,7 +344,7 @@ func check_save_isolation():
 	fresh("horse", true)
 	game.route.save()
 	var current = ConfigFile.new()
-	check(current.load(game.route.SAVE) == OK and current.get_value("run", "version") == 4, "current saves use version four")
+	check(current.load(game.route.SAVE) == OK and current.get_value("run", "version") == 5, "current saves use version five")
 	check(game.route.SAVE == "user://route_run_v0100.cfg" and game.route.WEB_SAVE_KEY == "yixing.route_run.v0100", "native and Web save namespaces isolate this demo revision")
 	var legacy = ConfigFile.new();legacy.parse(current.encode_to_text())
 	legacy.set_value("run", "version", 1)

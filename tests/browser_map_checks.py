@@ -98,7 +98,7 @@ async def main():
    await state('route_choice',0,1)
    saved=await page.evaluate("localStorage.getItem('yixing.route_run.v0100')")
    route=json.loads(saved.split('\nroute=',1)[1].split('\nbattle=',1)[0].replace('&\"','\"'))
-   leave_index=3 if route['nodes'][1]['event_id']=='merchant' else 2
+   leave_index=3 if route['nodes'][1]['event_id']in ['merchant','manual'] else 2
    await tap(uw/2,199+leave_index*54,500); await state('map',1,-1)
    await shot('event-return'); await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
    await state('map',1,-1); await shot('map-resume')

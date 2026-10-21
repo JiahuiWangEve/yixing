@@ -485,7 +485,7 @@ func _draw_visual_card(i: int, transform: Transform2D, alpha: float = 1.0):
 		game.text_at(Vector2(7, name_y + j * name_step), name.substr(j, 1), name_size, _tint(game.THEME.INK, alpha))
 	if width >= 76:
 		var layout = _visual_text_layout(i, Vector2(width, height), focused)
-		game.text_at(Vector2(layout.body_left, 28.0 if large else 23.0), {"攻": "攻击", "移": "移动", "术": "术法"}.get(str(data[3]), str(data[3])), 18 if large else 14, _tint(game.THEME.SAFE, alpha))
+		game.text_at(Vector2(layout.body_left, 28.0 if large else 23.0), {"攻": "攻击", "移": "移动", "术": "术法", "负": "负面"}.get(str(data[3]), str(data[3])), 18 if large else 14, _tint(game.THEME.DANGER if str(data[3]) == "负" else game.THEME.SAFE, alpha))
 		if _consumable(i) and width >= 110:
 			var tag_size = 14 if large else 12
 			var tag_width = float(tag_size * 2 + 8)

@@ -54,7 +54,7 @@ func setup(game, name: String):
 func save_fixture(game, name: String):
 	var battle=game.history.capture()
 	check(game.route.valid_snapshot(game.route.state,battle,"game"),name+" valid ordinary snapshot")
-	var config=ConfigFile.new();config.set_value("run","version",4);config.set_value("run","route",game.route.state);config.set_value("run","battle",battle);config.set_value("run","screen","game")
+	var config=ConfigFile.new();config.set_value("run","version",5);config.set_value("run","route",game.route.state);config.set_value("run","battle",battle);config.set_value("run","screen","game")
 	check(config.save(OUT+"fixtures/"+name+".cfg")==OK,name+" fixture saved")
 func screenshot(viewport, name: String):
 	for frame in 3: await RenderingServer.frame_post_draw

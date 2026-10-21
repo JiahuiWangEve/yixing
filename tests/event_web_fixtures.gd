@@ -8,7 +8,7 @@ func _initialize(): call_deferred("run")
 func check(ok, label):
 	if not ok: failures += 1;push_error(label)
 func summary() -> Dictionary:
-	return {"screen": game.screen, "current": game.route.state.current, "pending": game.route.state.pending, "visited": game.route.state.visited.duplicate(), "prepared": game.route.state.prepared, "reward_debt": game.route.state.reward_debt, "reward_blocked": game.route.state.reward_blocked, "collection": game.collection.duplicate(), "hand": game.hand.duplicate(), "rewards": game.rewards.duplicate(), "lives": game.lives, "phase": game.phase}
+	return {"screen": game.screen, "current": game.route.state.current, "pending": game.route.state.pending, "visited": game.route.state.visited.duplicate(), "prepared": game.route.state.prepared, "reward_debt": game.route.state.reward_debt, "reward_blocked": game.route.state.reward_blocked, "pending_homework": game.route.state.pending_homework.duplicate(), "homework_awarded": game.route.state.homework_awarded.duplicate(), "energy": game.energy, "turn": game.turn, "deck": game.deck.duplicate(), "discard": game.discard.duplicate(), "collection": game.collection.duplicate(), "hand": game.hand.duplicate(), "rewards": game.rewards.duplicate(), "lives": game.lives, "phase": game.phase}
 func point(v): return [v.x,v.y]
 func step(kind: String, label: String, taps: Array = []):
 	steps.append({"kind":kind,"label":label,"taps":taps,"expected":summary()})
@@ -50,16 +50,20 @@ func setup(name: String, size: Vector2):
 		var event_id="herbalist" if name.begins_with("herb") else ("merchant" if name=="merchant" else "manual")
 		game.route.state.nodes[1].event_id=event_id
 		if name=="herb_full": game.lives=5
-		if name=="manual_stacked": game.route.state.reward_debt=2
+
 		if name=="manual_ineligible": game.collection=["sword_plus","life"]
 		game.route.enter(1)
+	if name.begins_with("fatigue"):
+		game.new_expedition();game.route.enter(0)
+		game.collection=["sword","fatigue","fatigue"];game.deck=["sword","fatigue","fatigue"];game.hand=[];game.hand_ids=[];game.discard=[]
+		game.energy=0 if name=="fatigue_zero" else 1
 	game.route.save();steps=[]
 func run():
 	DirAccess.make_dir_recursive_absolute(OUT+"fixtures")
 	game=load("res://main.tscn").instantiate();root.add_child(game)
 	var reports=[]
 	for size in [Vector2(1280,940),Vector2(390,844),Vector2(844,390),Vector2(360,640)]:
-		for name in ["herb_heal","herb_breath","herb_full","merchant","manual_copy","manual_stacked","manual_mnemonic","manual_ineligible","camp_prepare","camp_remove","workshop"]:
+		for name in ["herb_heal","herb_breath","herb_full","merchant","manual_focus","manual_homework","manual_mnemonic","manual_ineligible","camp_prepare","camp_remove","workshop","fatigue_zero","fatigue_one"]:
 			setup(name,size)
 			var filename=name+"-"+str(int(size.x))+".cfg"
 			check(game.route.valid_snapshot(game.route.state,game.history.capture(),game.screen),filename+" valid")
@@ -70,14 +74,20 @@ func run():
 				"herb_breath": choose("breath");choose("confirm")
 				"herb_full": choose("disabled");choose("breath");choose("confirm")
 				"merchant": choose("select_exchange");choose("exchange",0);choose("back");reload_step();choose("select_exchange");choose("exchange",0);choose("confirm")
-				"manual_copy","manual_stacked":
-					choose("select_copy");choose("copy",0);choose("back");reload_step();choose("select_copy");choose("copy",0);choose("confirm");reload_step()
-					if name=="manual_copy":
-						enter(4);victory();reload_step();reward_return();enter(6);choose("leave");enter(7);victory();reward_return();enter(10);choose("leave");enter(13);victory();reward_return()
+				"manual_focus","manual_homework":
+					var mode="focus" if name=="manual_focus" else "homework"
+					choose("select_"+mode);choose(mode,0);choose("back");reload_step();choose("select_"+mode);choose(mode,0);choose("confirm");reload_step()
+					enter(4);victory();reload_step();reward_return();enter(6);choose("leave");enter(7);victory();reward_return()
 				"manual_mnemonic": choose("random_upgrade");choose("back");reload_step();choose("random_upgrade");choose("confirm")
 				"manual_ineligible": choose("disabled");choose("leave")
 				"camp_prepare": choose("prepare");choose("back");choose("prepare");choose("confirm");reload_step();enter(5)
 				"camp_remove": choose("select_remove");choose("remove",0);choose("back");choose("select_remove");choose("remove",0);choose("confirm")
+				"fatigue_zero","fatigue_one":
+					for target in [Vector2i(4,8),Vector2i(4,7)]:
+						game.input_lock=0;game.navigation_lock=0;game.basic_move(target)
+						step("combat","draw fatigue",[point(game.cell_pos(target))])
+						game.input_lock=0;game.end_turn()
+						step("combat","retained fatigue next turn",[point(game.END_TURN_RECT.get_center())])
 				"workshop": choose("upgrade",1);choose("back");choose("upgrade",1);choose("confirm")
 			reports.append({"fixture":filename,"name":name,"viewport":point(size),"logical_size":point(game.ui_size),"initial":initial,"steps":steps.duplicate(true)})
 	var file=FileAccess.open(OUT+"replays.json",FileAccess.WRITE);file.store_string(JSON.stringify(reports,"  "));file.close()
