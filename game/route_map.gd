@@ -418,6 +418,8 @@ func resume() -> bool:
 	var saved = config.get_value("run", "route", {})
 	var battle = config.get_value("run", "battle", {})
 	var saved_screen = config.get_value("run", "screen", "map")
+	# Older v5 runs predate the optional air-drop recovery counter.
+	if battle is Dictionary and not battle.has("airdrop_recovery_turn"): battle.airdrop_recovery_turn = 0
 	if not valid_snapshot(saved, battle, saved_screen): return false
 	game.tutorial.stop();game.history.clear();game.cancel_gesture();game.clear_effects()
 	state = saved.duplicate(true)
@@ -504,6 +506,7 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 	for key in ["collection", "deck", "discard", "hand", "rewards"]:
 		for card in battle[key]:
 			if card not in game.CARDS: return false
+	if not battle.airdrop_recovery_turn is int or battle.airdrop_recovery_turn < 0 or battle.airdrop_recovery_turn > battle.turn + 1: return false
 	if battle.active_displacements < 0 or battle.shield_charges not in [0, 1] or battle.next_enemy_uid < 1: return false
 	if not battle.encounter_state.is_empty():
 		if not game.ENCOUNTERS.valid_state(battle.encounter_state): return false

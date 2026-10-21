@@ -12,6 +12,7 @@ func _init(owner): game = owner
 func cancel():
 	active = false;dragging = false;free_move = false;uid = -1;source = ""
 func press(position: Vector2, kind: String = "mouse") -> bool:
+	if game.phase == "play" and game.recovery_active(): return false
 	if game.screen != "game" or game.phase not in ["play", "discard"]: return false
 	if game.freecard.hit_test(position):
 

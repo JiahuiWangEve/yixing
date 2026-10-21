@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.14.0"
+const BUILD_VERSION = "v0.14.1"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -12,7 +12,7 @@ const FREE_MOVE = preload("res://free_move_card.gd")
 const HISTORY = preload("res://undo_history.gd")
 const UNTARGETED = ["sweep", "life", "breath", "deploy", "pack", "tuna", "suppress", "guard", "reload", "fatigue"]
 # One use per physical copy per stage; discarded unused copies still recycle.
-const CONSUMABLES = ["life", "breath", "deploy", "tuna", "guard", "permanent_stake"]
+const CONSUMABLES = ["life", "breath", "deploy", "tuna", "guard", "permanent_stake", "airdrop"]
 const TACTICS = preload("res://tactics.gd")
 const CAMPAIGN = preload("res://campaign.gd")
 const ENCOUNTERS = preload("res://encounters.gd")
@@ -49,6 +49,7 @@ var shield_charges = 0
 var pending_bleeds: Array = []
 var next_enemy_uid = 1
 var reload_ready = false
+var airdrop_recovery_turn = 0
 var free_card_uid = 0
 var free_selected = false
 var skill_system = SKILLS.new(self)
@@ -106,7 +107,7 @@ func full_hand_area() -> Rect2:
 func free_card_rect() -> Rect2: return handui.free_bounds()
 func hand_area() -> Rect2: return full_hand_area()
 func free_card_available() -> bool:
-	return screen == "game" and phase == "play" and not basic_used
+	return screen == "game" and phase == "play" and not basic_used and not recovery_active()
 func refresh_free_card():
 	free_selected = false
 	free_card_uid = next_card_uid;next_card_uid += 1
@@ -171,6 +172,7 @@ const INK = THEME.INK
 const GOLD = THEME.GOLD
 const RED = THEME.DANGER
 const CARDS = {
+	"airdrop": ["空投", 3, "飞至任意空格，周围3×3各3伤；命-1，下一回合停行动；消耗", "攻", "将专属。落点必须是其他空格，不能是敌子或木桩。落地周围3×3的每个敌子受3伤，自身扣1命（不被固守抵挡、不撤退）。命归零立即失败，即使同时击杀敌将。当前回合可继续；下一玩家回合不能移动或出牌，仍正常结算敌方与被动效果。消耗：本场移除，下场恢复。"],
 	"fatigue": ["疲惫", 2, "抽到时能量-1；留手每轮-1，最低0。打出弃置", "负", "负面牌。抽到时立即扣1能量，能量为0则不扣、不欠费。每个后续玩家回合开始，仍在手中时再扣1；多张分别结算。花2费打出后正常弃置，已扣能量不返还；不是消耗牌。"],
 	"sword_plus": ["短剑·淬锋", 1, "对正交相邻敌子造成2点伤害（强化）", "攻"],
 	"spear_plus": ["长枪·淬锋", 2, "直线两格内造成2点伤害，不穿透（强化）", "攻"],
@@ -274,7 +276,9 @@ func in_neighbor_square(p: Vector2i) -> bool:
 	return d != Vector2i.ZERO and absi(d.x) <= 1 and absi(d.y) <= 1
 func record_active_displacement(origin: Vector2i):
 	if player != origin: active_displacements += 1
+func recovery_active() -> bool: return airdrop_recovery_turn > 0 and turn == airdrop_recovery_turn
 func clear_battle_card_effects():
+	airdrop_recovery_turn = 0
 	active_displacements = 0;shield_charges = 0;pending_bleeds = [];reload_ready = false
 func queue_bleed(index: int, amount: int):
 	if index < 0 or index >= enemies.size() or enemies[index].kind == "stake": return
@@ -421,6 +425,7 @@ func discard_hand(index: int):
 	hand_page = mini(hand_page, maxi(0, (hand.size() - 1) / 2));hand_drawer = false;notice = "仍超出手牌上限，请继续弃置。" if phase == "discard" else "已弃置，继续行动。"
 	tutorial_after("discard", {"index": index})
 func select_card(index: int):
+	if phase == "play" and recovery_active(): return
 	if screen != "game" or phase not in ["play", "discard"] or index < 0 or index >= hand.size(): return
 	if selected == index: cancel_selection();return
 	if not tutorial_allows("select", {"index": index}): return
@@ -514,6 +519,7 @@ func placement_danger(p: Vector2i) -> bool:
 	board.append({"kind": "stake", "pos": p, "stun": 0})
 	return R.threatened(player, board)
 func basic_legal(p: Vector2i) -> bool:
+	if recovery_active(): return false
 	if not R.inside(p) or basic_used or R.occupied(p, enemies) >= 0: return false
 	var d = p - player
 	if player_skill == "artillery":
@@ -528,6 +534,8 @@ func card_cost(id: String) -> int:
 func card_data(id: String) -> Array:
 	var data: Array = CARDS[id].duplicate()
 	data[1] = card_cost(id)
+	if id == "airdrop" and lives <= 1:
+		data[2] = "仅剩1命：使用后直接失败；空格落地，周围3×3各3伤；消耗"
 	if id == "cannon_shot":
 		var amount = (2 if artillery_mode == "attack" else 1) + (1 if reload_ready else 0)
 		data[2] = "%s：%d费%d伤；直线隔恰好一子%s" % ["攻击姿态" if artillery_mode == "attack" else "行军姿态", data[1], amount, "；装填击杀抽1张" if reload_ready else ""]
@@ -536,10 +544,14 @@ func card_data(id: String) -> Array:
 		data[4] = "当前%d伤（1+主动位移%d次）。周围3×3选一个敌子。免费、移动牌与攻击附带的成功位移，每次行动计1次；受击转移、失败与切姿态不计。" % [1 + active_displacements, active_displacements]
 	return data
 func target_danger(id: String, p: Vector2i) -> bool:
+	if id == "airdrop":
+		var survivors = enemies.filter(func(enemy): return enemy.kind == "stake" or int(enemy.hp) > 3 or absi(enemy.pos.x - p.x) > 1 or absi(enemy.pos.y - p.y) > 1)
+		return lives <= 1 or R.threatened(p, survivors)
 	if id in ["stake", "permanent_stake"]: return placement_danger(p)
 	if id in ["advance", "retreat_strike", "knight_assault"]: return TACTICS.attack_danger(self, id, p)
 	return CARDS[id][3] == "移" and movement_danger(id, p)
 func can_commit_card(index: int, p: Vector2i) -> bool:
+	if recovery_active(): return false
 	if phase != "play" or index < 0 or index >= hand.size(): return false
 	var id: String = hand[index]
 	if energy < card_cost(id) or (CARDS[id][3] == "移" and card_move_used): return false
@@ -551,6 +563,7 @@ func can_commit_card(index: int, p: Vector2i) -> bool:
 		return false
 	return card_legal(id, p)
 func card_legal(id: String, p: Vector2i) -> bool:
+	if recovery_active(): return false
 	id = id.trim_suffix("_plus")
 	if not R.inside(p): return false
 	if id in TACTICS.IDS: return TACTICS.legal(self, id, p)
@@ -559,6 +572,7 @@ func card_legal(id: String, p: Vector2i) -> bool:
 	var idx = R.occupied(p, enemies)
 	if idx >= 0 and enemies[idx].kind == "stake": return false
 	match id:
+		"airdrop": return player_skill == "king" and idx < 0 and p != player
 		"fatigue": return true
 		"deploy": return player_skill == "artillery" and artillery_mode == "march"
 		"pack": return player_skill == "artillery" and artillery_mode == "attack"
@@ -677,6 +691,7 @@ func request_end_turn():
 	if screen != "game" or phase != "play" or input_lock > 0 or navigation_lock > 0: return
 	cancel_gesture();end_turn()
 func play_card(i: int, p: Vector2i):
+	if recovery_active(): return
 	if screen != "game": return
 	if phase != "play" or i < 0 or i >= hand.size(): return
 	var id = hand[i]
@@ -699,6 +714,20 @@ func play_card(i: int, p: Vector2i):
 	var idx = R.occupied(p, enemies)
 	if id in TACTICS.IDS: TACTICS.apply(self, id, p, idx)
 	match id:
+		"airdrop":
+			var origin = player
+			move_piece({}, cell_pos(origin), cell_pos(p), 0.0, true)
+			player = p;record_active_displacement(origin)
+			lives -= 1;airdrop_recovery_turn = turn + 1
+			for j in range(enemies.size() - 1, -1, -1):
+				if enemies[j].kind != "stake" and absi(enemies[j].pos.x - p.x) <= 1 and absi(enemies[j].pos.y - p.y) <= 1:
+					effect("sword", cell_pos(p), cell_pos(enemies[j].pos), 0.3, 0.28)
+					damage_enemy(j, 0.28, 3)
+			if lives <= 0:
+				phase = "dead";clear_battle_card_effects();ENCOUNTERS.cancel_pending(self)
+				notice = "空投自损，命数耗尽。";log_line(notice)
+				return # Self-cost defeat takes precedence over any simultaneous general kill.
+			notice = "空投完成：扣1命，下一回合不能移动或出牌。"
 		"fatigue": notice = "疲惫已弃置；已扣能量不返还。"
 		"sword", "spear", "sword_plus", "spear_plus", "cannon", "diagonal", "cannon_shot":
 			var animation = "cannon" if id == "cannon_shot" else ("sword" if id == "diagonal" else id.trim_suffix("_plus"))
@@ -775,6 +804,7 @@ func plan_intents():
 func end_turn():
 	if screen != "game" or phase != "play" or not tutorial_allows("end_turn"): return
 	history.record("end_turn");cancel_gesture()
+	if recovery_active(): log_line("空投休整：跳过本回合行动，敌方正常行动。")
 	selected = -1;free_selected = false;reload_ready = false
 	input_lock = 0.3
 
@@ -871,6 +901,7 @@ func end_turn():
 	else: resolve_reinforcements(timeline)
 	if not chapter_two: TACTICS.expire_stakes(self, maxf(timeline, input_lock))
 	turn += 1;history.trim()
+	if airdrop_recovery_turn > 0 and turn > airdrop_recovery_turn: airdrop_recovery_turn = 0
 	shield_charges = 0;active_displacements = 0
 	resolve_bleeds()
 	if phase not in ["play", "discard"]: return
@@ -880,7 +911,7 @@ func end_turn():
 	energy = maxi(0, (4 if tuna_active else 3) - hand.count("fatigue"))
 	basic_used = false;card_move_used = false;deploy_draw_used = false;initial_threat = 2.0
 	refresh_free_card()
-	notice = "受击后已撤退；重新规划路线。" if hit else "新回合：移动抽牌，组合出招。"
+	notice = "空投休整：本回合不能移动或出牌，请结束回合。" if recovery_active() else ("受击后已撤退；重新规划路线。" if hit else "新回合：移动抽牌，组合出招。")
 	tutorial_after("end_turn")
 func resolve_reinforcements(timeline: float):
 	if stage != 3 or phase != "play": return
@@ -924,6 +955,7 @@ func context_hint() -> String:
 	if tutorial.active: return tutorial.hint()
 	if phase == "discard": return "手牌超限：请选择1张普通牌弃置"
 	if phase != "play": return ""
+	if recovery_active(): return "空投休整：不能移动或出牌，请结束回合。"
 	if R.threatened(player, enemies): return "将军！结束回合前解除威胁。"
 	if free_selected: return "选择免费移动落点，或再次点牌取消。"
 	if player_skill == "artillery" and selected < 0:
@@ -1048,7 +1080,7 @@ func _draw():
 	text_at((Vector2(24, 500) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(397, 609), "命 %s" % "●".repeat(lives), 20, THEME.LIGHT)
 	text_at((Vector2(200, 500) if compact_landscape else Vector2(150, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(550, 609), "能量 %d" % energy, 20, THEME.LIGHT)
 	var confirm = selected >= 0 and (phase == "discard" or (phase == "play" and hand[selected] in UNTARGETED))
-	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else ("结束回合" if mobile_layout else "结束回合 [空格]")), 18, THEME.INK)
+	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else (("跳过回合" if mobile_layout else "跳过回合 [空格]") if recovery_active() else ("结束回合" if mobile_layout else "结束回合 [空格]"))), 18, THEME.INK)
 	var statuses: Array[String] = []
 	if tuna_active or tuna_turns > 0: statuses.append(("吐纳 本回合+1" if tuna_active else "吐纳") + " 后续%d回合" % tuna_turns)
 	if shield_charges > 0: statuses.append("固守 1次")

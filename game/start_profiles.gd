@@ -5,7 +5,7 @@ const COMMON = ["sword", "spear", "diagonal", "breath"]
 const DATA = {
 	"king": {"name": "帅", "lives": 2,
 		"deck": ["sword", "sword", "spear", "life"],
-		"rewards": ["life", "sweep", "pierce", "shock", "tuna", "suppress", "guard", "horse"]},
+		"rewards": ["life", "sweep", "pierce", "shock", "tuna", "suppress", "guard", "horse", "airdrop"]},
 	"horse": {"name": "马", "lives": 1,
 		"deck": ["sword", "sword", "spear", "advance"],
 		"rewards": ["straight", "pursuit", "advance", "retreat_strike", "knight_assault", "chain_assault"]},

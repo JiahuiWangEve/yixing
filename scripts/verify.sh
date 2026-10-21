@@ -69,3 +69,6 @@ run general-defense --script "$root/tests/general_defense_checks.gd"
 run chapter-two-mechanics --script "$root/tests/chapter_two_mechanics_checks.gd"
 run chapter-flow --script "$root/tests/chapter_flow_checks.gd"
 run chapter-web-fixtures --script "$root/tests/chapter_web_fixtures.gd"
+
+run airdrop --script "$root/tests/airdrop_checks.gd"
+run airdrop-web-fixtures --script "$root/tests/airdrop_web_fixtures.gd"

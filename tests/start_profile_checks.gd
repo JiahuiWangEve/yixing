@@ -3,7 +3,7 @@ extends SceneTree
 const R = preload("res://rules.gd")
 const COMMON = ["sword", "spear", "diagonal", "breath"]
 const DEDICATED = {
-	"king": ["life", "sweep", "pierce", "shock", "tuna", "suppress", "guard", "horse"],
+	"king": ["life", "sweep", "pierce", "shock", "tuna", "suppress", "guard", "horse", "airdrop"],
 	"horse": ["straight", "pursuit", "advance", "retreat_strike", "knight_assault", "chain_assault"],
 	"artillery": ["stake", "cannon_shot", "deploy", "pack", "permanent_stake", "reload"]
 }

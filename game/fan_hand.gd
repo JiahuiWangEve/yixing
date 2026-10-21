@@ -28,7 +28,7 @@ var hovered_index: int:
 	set(value):
 		_set_hover(_visual_index(value) if value >= 0 else (0 if value == FREE_INDEX and _has_free() else -1))
 func _has_free() -> bool:
-	return game.screen == "game" and game.phase in ["play", "discard"] and not game.basic_used
+	return game.screen == "game" and game.phase in ["play", "discard"] and not game.basic_used and not game.recovery_active()
 func _cards() -> Array:
 	var result: Array = []
 	if _has_free(): result.append("__free_" + game.player_skill)
