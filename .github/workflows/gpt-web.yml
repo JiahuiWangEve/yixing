@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: gpt-web-build
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -82,7 +82,10 @@ jobs:
             verification/latest/
           include-hidden-files: true
       - name: Commit Web export to gh-pages
+        # Temporary release hold while the newly requested booklet rules are implemented.
+        if: ${{ false }}
         run: |
+          test "$(git ls-remote origin refs/heads/gpt | cut -f1)" = "$GITHUB_SHA" || { echo "Stale source; skip publication"; exit 0; }
           git fetch origin gh-pages
           git worktree add --detach publish FETCH_HEAD
           cp -a build/web/. publish/
