@@ -4,6 +4,7 @@ Only ordinary clicks, touch, keys, and production localStorage are used. One
 legacy preference envelope is restored to check migration. No runtime hooks or
 claim of physical audio playback; CI supplies Chromium, which is not run locally.
 """
+import argparse
 import asyncio
 import io
 import json
@@ -21,7 +22,7 @@ OUT = ROOT / 'verification/sound-settings/browser'
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
 
 
-async def main():
+async def main(smoke=False):
     OUT.mkdir(parents=True, exist_ok=True)
     reports = []
     async with async_playwright() as p:
@@ -29,7 +30,7 @@ async def main():
         browser = await p.chromium.launch(**({'executable_path': executable} if executable else {}),
                                           headless=True, args=['--no-sandbox'])
         try:
-            for w, h in [(1280, 940), (390, 844), (360, 640), (844, 390)]:
+            for w, h in ([(1280, 940), (390, 844)] if smoke else [(1280, 940), (390, 844), (360, 640), (844, 390)]):
                 context = await browser.new_context(viewport={'width': w, 'height': h}, has_touch=True)
                 page = await context.new_page()
                 errors, assertions = [], []
@@ -200,4 +201,5 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    parser=argparse.ArgumentParser();parser.add_argument('--smoke',action='store_true')
+    asyncio.run(main(parser.parse_args().smoke))

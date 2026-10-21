@@ -80,12 +80,8 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           python3 tests/browser_release_smoke.py 2>&1 | tee build/release-smoke.log
-          python3 tests/browser_debug_undo_checks.py 2>&1 | tee build/debug-undo-smoke.log
-          python3 tests/browser_sound_settings_checks.py 2>&1 | tee build/sound-settings-smoke.log
-          python3 tests/browser_chapter_checks.py --smoke 2>&1 | tee build/chapter-smoke.log
-          python3 tests/browser_airdrop_checks.py 2>&1 | tee build/airdrop-smoke.log
+          python3 tests/browser_sound_settings_checks.py --smoke 2>&1 | tee build/sound-settings-smoke.log
           python3 tests/browser_pass_checks.py 2>&1 | tee build/pass-smoke.log
-          python3 tests/browser_picker_checks.py 2>&1 | tee build/picker-smoke.log
           python3 tests/browser_presentation_checks.py 2>&1 | tee build/presentation-smoke.log
       - name: Upload verification and exported site
         if: always()
@@ -177,12 +173,14 @@ jobs:
           trap 'kill "$server_pid"' EXIT
           # Run every suite even after an earlier failure; retain the overall red result.
           failed=0
-          for suite in map cannon rook event chapter; do
+          for suite in map cannon rook event chapter debug_undo airdrop sound_settings; do
             if ! python3 "tests/browser_${suite}_checks.py" > "build/${suite}-browser.log" 2>&1; then failed=1; fi
             cat "build/${suite}-browser.log"
           done
           if ! python3 tests/browser_picker_checks.py --full > build/picker-browser.log 2>&1; then failed=1; fi
           cat build/picker-browser.log
+          if ! python3 tests/browser_pass_checks.py --full > build/pass-browser.log 2>&1; then failed=1; fi
+          cat build/pass-browser.log
           exit "$failed"
       - name: Upload background regression evidence
         if: always()
@@ -191,6 +189,9 @@ jobs:
           name: yixing-regression-${{ github.sha }}
           path: |
             build/*browser.log
+            verification/v0.14.2/
+            verification/v0.14.1/
+            verification/sound-settings/
             verification/v0.14.5/
             verification/v0.14.4/
             verification/v0.14.3/

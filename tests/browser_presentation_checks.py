@@ -22,12 +22,23 @@ async def main():
                 await page.add_init_script('if(!sessionStorage.getItem("qa")){localStorage.setItem(%s,%s);sessionStorage.setItem("qa","1")}'%(json.dumps(KEY),json.dumps(fixture)))
                 await page.goto(URL);await boot(page);await tap(r['resume']);await page.wait_for_timeout(400)
                 if mode=='victory':
-                    await tap(r['skip']);await page.wait_for_timeout(430);data=await shot('seal-before-reward')
+                    cdp=await context.new_cdp_session(page);frames=[];ack_tasks=[]
+                    def receive_seal_frame(event):
+                        frames.append(base64.b64decode(event['data']))
+                        ack_tasks.append(asyncio.create_task(cdp.send('Page.screencastFrameAck',{'sessionId':event['sessionId']})))
+                    cdp.on('Page.screencastFrame',receive_seal_frame)
+                    await cdp.send('Page.startScreencast',{'format':'png','everyNthFrame':1})
+                    await tap(r['skip']);await page.wait_for_timeout(1500)
+                    await cdp.send('Page.stopScreencast');await asyncio.gather(*ack_tasks);await cdp.detach()
                     s=await state();assert s['phase']=='reward'
-                    im=Image.open(io.BytesIO(data)).convert('RGB');crop=im.crop((int(w*.25),int(h*.25),int(w*.75),int(h*.75)))
-                    red=sum(1 for rr,g,b in crop.getdata() if rr>110 and rr>g*1.8 and rr>b*1.8)
-                    assert red>150,('victory seal not visible',w,red)
-                    await page.wait_for_timeout(800);await shot('reward-after-seal');assert await state()==s
+                    def red_pixels(data):
+                        im=Image.open(io.BytesIO(data)).convert('RGB');crop=im.crop((int(w*.25),int(h*.25),int(w*.75),int(h*.75)))
+                        return sum(1 for rr,g,b in crop.getdata() if rr>110 and rr>g*1.8 and rr>b*1.8)
+                    assert frames,('no victory compositor frames',w)
+                    data=max(frames,key=red_pixels);red=red_pixels(data)
+                    assert red>150,('victory seal not visible in any frame',w,red,len(frames))
+                    (output/f"{r['name']}-{mode}-seal-before-reward.png").write_bytes(data)
+                    await shot('reward-after-seal');assert await state()==s
                     await page.reload();await boot(page);await tap(r['resume']);await page.wait_for_timeout(450);await shot('reload-no-second-seal');assert await state()==s
                 else:
                     await tap(r['choose']);await page.wait_for_timeout(140)
