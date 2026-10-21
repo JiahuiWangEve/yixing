@@ -12,10 +12,13 @@ OUT = ROOT / 'verification/v0.13.0/events'
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
 KEY = 'yixing.route_run.v0100'
 
+def variant_json(text):
+    return json.loads(re.sub(r'\bVector2i?\(([^()]*)\)', r'[\1]', text).replace('&"', '"'))
+
 def parse(text):
-    route = json.loads(text.split('\nroute=', 1)[1].split('\nbattle=', 1)[0])
+    route = variant_json(text.split('\nroute=', 1)[1].split('\nbattle=', 1)[0])
     battle = text.split('\nbattle=', 1)[1].rsplit('\nscreen=', 1)[0]
-    battle = json.loads(re.sub(r'\bVector2i?\(([^()]*)\)', r'[\1]', battle).replace('&"', '"'))
+    battle = variant_json(battle)
     return dict(screen=re.search(r'^screen="(\w+)"', text, re.M).group(1),
                 **{key:route[key] for key in ['current','pending','visited','prepared','reward_debt','reward_blocked']},
                 **{key:battle[key] for key in ['collection','hand','rewards','lives','phase']})
@@ -28,6 +31,9 @@ async def main():
     (OUT/'browser').mkdir(parents=True,exist_ok=True)
     reports=[]
     replays=json.loads((OUT/'replays.json').read_text())
+    # Fail before browser startup if the production Variant envelope is decoded incorrectly.
+    for replay in replays:
+        assert parse((OUT/'fixtures'/replay['fixture']).read_text()) == replay['initial'], replay['fixture']
     async with async_playwright() as p:
         executable=os.environ.get('CHROMIUM_PATH') or shutil.which('chromium')
         browser=await p.chromium.launch(**({'executable_path':executable} if executable else {}),headless=True,args=['--no-sandbox'])
