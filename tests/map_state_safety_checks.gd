@@ -16,7 +16,7 @@ func _initialize(): call_deferred("run")
 
 func create_game():
 	game = load("res://main.tscn").instantiate()
-	root.add_child(game)
+	root.add_child(game);game.settings.set_debug_mode(true)
 	game.set_process(false)
 	route = game.route
 

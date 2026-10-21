@@ -81,3 +81,5 @@ run picker-web-fixtures --script "$root/tests/picker_web_fixtures.gd"
 
 run presentation --script "$root/tests/presentation_checks.gd"
 run presentation-web-fixtures --script "$root/tests/presentation_web_fixtures.gd"
+
+run debug-undo --script "$root/tests/debug_undo_checks.gd"

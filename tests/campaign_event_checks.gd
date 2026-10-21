@@ -121,7 +121,7 @@ func check_manual_copy():
 	act("select_focus");confirmed("focus", 0);before.append_array(["sword_plus", "fatigue"])
 	check(game.collection == before and route.state.reward_debt == 0, "focus copies upgraded fourth same-name card plus exactly one fatigue, no reward debt")
 	check(route.resume() and game.collection == before, "copy and fatigue persist together")
-	route.resolve(0);game.undo_action();check(game.collection == before, "duplicate click and undo cannot replay focus")
+	route.resolve(0);undo_after_effects(game);check(game.collection == before, "duplicate click and undo cannot replay focus")
 	event_fixture("manual", "artillery");game.collection = ["deploy"];route.refresh_choices();act("select_focus");confirmed("focus", 0)
 	check(game.collection == ["deploy", "deploy", "fatigue"], "focus permits consumable copies")
 	event_fixture("manual");game.collection = ["fatigue"];route.refresh_choices();act("select_focus");confirmed("focus", 0)
@@ -164,7 +164,7 @@ func check_rest():
 	route.enter(5)
 	check(game.hand.size() == 2 and not route.state.prepared, "rest gives exactly two opening cards in next battle")
 	var hand = game.hand.duplicate();route.save();check(route.resume() and game.hand == hand and not route.state.prepared, "battle reload cannot consume preparation twice")
-	game.undo_action();check(game.hand == hand and not route.state.prepared, "opening prep cannot be undone into extra draws")
+	undo_after_effects(game);check(game.hand == hand and not route.state.prepared, "opening prep cannot be undone into extra draws")
 	camp_fixture();route.state.prepared = true;route.refresh_choices()
 	check(action_index("prepare") == -1 and action_index("select_remove") >= 0, "prepared state visibly disables stacking, leaves removal available")
 	act("leave");check(route.state.prepared, "leaving rest preserves earlier preparation")
@@ -222,14 +222,14 @@ func check_fatigue():
 	check(game.energy == 1, "zero-energy skipped fatigue creates no debt against later energy gain")
 	fatigue_fixture();game.energy = 3;game.hand = ["fatigue"];game.hand_ids = [];game.play_card(0, game.player)
 	check(game.energy == 1 and game.hand.is_empty() and game.discard == ["fatigue"], "paying two removes fatigue from hand into discard, not exhaust")
-	check(game.history.undo() and game.energy == 3 and game.hand == ["fatigue"] and game.discard.is_empty(), "fatigue play undo restores energy and exact card zones")
+	check(undo_after_effects(game) and game.energy == 3 and game.hand == ["fatigue"] and game.discard.is_empty(), "fatigue play undo restores energy and exact card zones")
 	game.input_lock = 0;game.play_card(0, game.player);game.draw_card()
 	check(game.energy == 0 and game.hand == ["fatigue"] and game.discard.is_empty(), "same-turn recycled fatigue triggers again on redraw")
 	fatigue_fixture();game.energy = 1;game.hand = ["fatigue"];game.hand_ids = [];game.play_card(0, game.player)
 	check(game.energy == 1 and game.hand == ["fatigue"] and game.discard.is_empty(), "insufficient energy cannot play fatigue")
 	fatigue_fixture();game.hand = ["fatigue", "fatigue", "sword"];game.hand_ids = [];game.energy = 0;game.end_turn()
 	check(game.energy == 1 and game.hand == ["fatigue", "fatigue", "sword"], "retained fatigue deducts once each at next player turn")
-	var after = game.history.capture();check(game.history.undo() and game.energy == 0, "turn undo restores pre-fatigue state")
+	var after = game.history.capture();check(undo_after_effects(game) and game.energy == 0, "turn undo restores pre-fatigue state")
 	game.end_turn();check(game.history.capture() == after, "replayed turn fatigue deduction is deterministic")
 	game.hand = ["fatigue", "fatigue", "fatigue", "fatigue"];game.hand_ids = [];game.input_lock = 0;game.end_turn()
 	check(game.energy == 0, "four retained fatigue cards cannot make next-turn energy negative")
@@ -252,7 +252,12 @@ func check_save_validation():
 	check(not route.resume() and route.state == original_route, "old demo map schema is rejected without modifying live state")
 	good.save(route.SAVE);check(route.resume(), "valid save survives rejection tests")
 func run():
-	game = load("res://main.tscn").instantiate();root.add_child(game);game.set_process(false);route = game.route
+	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true);game.set_process(false);route = game.route
 	check_generation();check_upgrade_registry();check_herbalist();check_merchant();check_manual_copy();check_manual_random();check_rest();check_reward_debt();check_fatigue();check_save_validation()
 	print("CAMPAIGN EVENT RESULT ", checks, " checks, ", failures, " failures")
 	game.free();quit(1 if failures else 0)
+
+# These rules tests model the completed-animation boundary before user input.
+func undo_after_effects(owner) -> bool:
+	owner.input_lock = 0;owner.navigation_lock = 0;owner.presentation.clear()
+	return owner.undo_action()

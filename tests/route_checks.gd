@@ -25,7 +25,7 @@ func act(action: String, index: int = -1):
 	check(false, "missing route action: " + action)
 func leave(): act("leave")
 func run():
-	game = load("res://main.tscn").instantiate();root.add_child(game)
+	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true)
 	for seed_number in 100:
 		game.route.generate(seed_number)
 		var saved = game.route.state.duplicate(true)
@@ -73,7 +73,7 @@ func run():
 		game.player = Vector2i(4, 9);game.enemies = [];game.add_enemy("g", Vector2i(4, 8), 3)
 		game.hand = ["sword_plus"];game.hand_ids = [];game.input_lock = 0;game.energy = 3;game.play_card(0, Vector2i(4, 8))
 		check(game.enemies[0].hp == 1 and game.discard == ["sword_plus"], "upgraded damage and discard")
-		game.undo_action();check(game.hand == ["sword_plus"] and game.enemies[0].hp == 3, "upgraded undo")
+		undo_after_effects(game);check(game.hand == ["sword_plus"] and game.enemies[0].hp == 3, "upgraded undo")
 		game.route.save();game.show_home();check(game.route.resume() and game.hand == ["sword_plus"], "battle reload")
 		skip_reward();game.route.enter(10);leave();game.route.enter(12);leave()
 		game.route.enter(15);game.debug_skip();game.debug_skip()
@@ -102,3 +102,8 @@ func run():
 		check(not game.debug_skip_rect().intersects(game.END_TURN_RECT) and not game.debug_skip_rect().intersects(game.BOARD_RECT), "skip button clear of board and end turn")
 	print("ROUTE RESULT ", checks, " checks, ", failures, " failures")
 	game.free();quit(1 if failures else 0)
+
+# These rules tests model the completed-animation boundary before user input.
+func undo_after_effects(owner) -> bool:
+	owner.input_lock = 0;owner.navigation_lock = 0;owner.presentation.clear()
+	return owner.undo_action()

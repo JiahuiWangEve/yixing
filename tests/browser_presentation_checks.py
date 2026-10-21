@@ -1,5 +1,6 @@
+from browser_settings import install_debug_settings
 """Capture visible old/new card and victory seal before reward UI on real Web."""
-import asyncio, io, json, os, shutil, time
+import asyncio, base64, io, json, os, shutil, time
 from PIL import Image, ImageChops, ImageStat
 from playwright.async_api import async_playwright
 from browser_event_checks import ROOT, KEY, parse, boot
@@ -12,7 +13,7 @@ async def main():
         for r in json.loads((OUT/'replays.json').read_text()):
             w,h=r['viewport'];uw,uh=r['logical_size'];scale=min(w/uw,h/uh);ox=(w-uw*scale)/2;oy=(h-uh*scale)/2
             for mode in ['victory','upgrade']:
-                context=await browser.new_context(viewport={'width':int(w),'height':int(h)},has_touch=True);page=await context.new_page();errors=[]
+                context=await browser.new_context(viewport={'width':int(w),'height':int(h)},has_touch=True);page=await context.new_page();await install_debug_settings(page);errors=[]
                 page.on('pageerror',lambda e:errors.append(str(e)))
                 async def tap(pos):await page.touchscreen.tap(ox+pos[0]*scale,oy+pos[1]*scale)
                 async def state():return parse(await page.evaluate('(key)=>localStorage.getItem(key)',KEY))
@@ -29,12 +30,34 @@ async def main():
                     await page.wait_for_timeout(800);await shot('reward-after-seal');assert await state()==s
                     await page.reload();await boot(page);await tap(r['resume']);await page.wait_for_timeout(450);await shot('reload-no-second-seal');assert await state()==s
                 else:
-                    await tap(r['choose']);await page.wait_for_timeout(140);await tap(r['confirm']);await page.wait_for_timeout(170)
-                    old=await shot('old-card');assert (await state())['collection']==r['after']
-                    await page.wait_for_timeout(650);new=await shot('upgraded-card')
-                    diff=ImageStat.Stat(ImageChops.difference(Image.open(io.BytesIO(old)).convert('RGB'),Image.open(io.BytesIO(new)).convert('RGB'))).mean
-                    assert sum(diff)>0.4,('old/new card unchanged',w,diff)
-                    await page.wait_for_timeout(1200);await tap(r['view']);await page.wait_for_timeout(150);await shot('read-only-deck');s=await state();assert s['collection']==r['after']
+                    await tap(r['choose']);await page.wait_for_timeout(140)
+                    # Stream compositor frames before input. Sequential screenshots
+                    # can themselves outlast this short animation on slow runners.
+                    cdp=await context.new_cdp_session(page);frames=[];ack_tasks=[]
+                    def receive_frame(event):
+                        frames.append((event['metadata'].get('timestamp',0),base64.b64decode(event['data'])))
+                        ack_tasks.append(asyncio.create_task(cdp.send('Page.screencastFrameAck',{'sessionId':event['sessionId']})))
+                    cdp.on('Page.screencastFrame',receive_frame)
+                    await cdp.send('Page.startScreencast',{'format':'png','everyNthFrame':1})
+                    await tap(r['confirm']);await page.wait_for_timeout(2100)
+                    await cdp.send('Page.stopScreencast');await asyncio.gather(*ack_tasks);await cdp.detach()
+                    assert (await state())['collection']==r['after']
+                    # Production card colors identify the two fully expanded
+                    # faces, not a flipped sliver or the map after dismissal.
+                    probe=(int(ox+(uw/2+65)*scale),int(oy+(uh/2+75)*scale))
+                    selected={};frame_info=[]
+                    for number,(stamp,data) in enumerate(frames):
+                        im=Image.open(io.BytesIO(data)).convert('RGB')
+                        x,y=probe;patch=im.crop((x-3,y-3,x+4,y+4));rgb=ImageStat.Stat(patch).mean
+                        label=next((label for label,target in [('old-card',(242,229,204)),('upgraded-card',(234,213,172))] if max(abs(rgb[i]-target[i]) for i in range(3))<5),None)
+                        frame_info.append({'frame':number,'timestamp':stamp,'probe_rgb':rgb,'phase':label})
+                        if label and label not in selected:selected[label]=(number,stamp,data)
+                    assert set(selected)=={'old-card','upgraded-card'},('missing distinct visible card phases',w,frame_info)
+                    assert selected['old-card'][0]<selected['upgraded-card'][0],frame_info
+                    for label,(_,stamp,data) in selected.items():
+                        (output/f"{r['name']}-{mode}-{label}.png").write_bytes(data)
+                    (output/f"{r['name']}-upgrade-frames.json").write_text(json.dumps(frame_info,indent=2))
+                    await tap(r['view']);await page.wait_for_timeout(150);await shot('read-only-deck');s=await state();assert s['collection']==r['after']
                     await page.keyboard.press('Enter');await page.keyboard.press('Space');await tap(r['back']);await page.wait_for_timeout(150);assert await state()==s
                     await page.reload();await boot(page);await tap(r['resume']);await page.wait_for_timeout(450);assert (await state())['collection']==r['after'];await shot('reload-no-reroll')
                 assert not errors,errors;reports.append({'viewport':[w,h],'mode':mode,'errors':errors});await context.close();print('PASS presentation',mode,w,flush=True)

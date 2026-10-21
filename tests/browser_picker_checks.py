@@ -1,3 +1,4 @@
+from browser_settings import install_debug_settings
 """Real touch grid selection on production saves; no game debug hooks."""
 import argparse, asyncio, hashlib, json, os, shutil, time
 from pathlib import Path
@@ -21,7 +22,7 @@ async def main(full=False):
         for replay in replays:
             w,h=replay['viewport'];uw,uh=replay['logical_size'];scale=min(w/uw,h/uh);ox=(w-uw*scale)/2;oy=(h-uh*scale)/2
             context=await browser.new_context(viewport={'width':int(w),'height':int(h)},has_touch=True)
-            page=await context.new_page();cdp=await context.new_cdp_session(page);errors=[];screens=[]
+            page=await context.new_page();await install_debug_settings(page);cdp=await context.new_cdp_session(page);errors=[];screens=[]
             page.on('pageerror',lambda e:errors.append(str(e)))
             page.on('console',lambda m: errors.append(m.text) if m.type=='error' and ('SCRIPT ERROR' in m.text or 'Parse Error' in m.text) else None)
             def xy(pos): return {'x':ox+pos[0]*scale,'y':oy+pos[1]*scale}

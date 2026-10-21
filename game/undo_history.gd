@@ -21,7 +21,7 @@ func trim():
 	oldest_turn = maxi(oldest_turn, maxi(1, game.turn - 3))
 	while not entries.is_empty() and int(entries[0].turn) < oldest_turn: entries.pop_front()
 func can_undo() -> bool:
-	return game.screen == "game" and not game.tutorial.active and not entries.is_empty()
+	return game.can_undo_action() and not entries.is_empty()
 func undo() -> bool:
 	if not can_undo(): return false
 	var snapshot: Dictionary = entries.pop_back().state
@@ -36,5 +36,7 @@ func undo() -> bool:
 	game.active_touch = -1;game.touch_dragged = true
 	game.clear_effects()
 	game.handui.reset()
+	if not game.settings.debug_mode: game.normal_undos_remaining -= 1
+	game.route.save()
 	game.queue_redraw()
 	return true

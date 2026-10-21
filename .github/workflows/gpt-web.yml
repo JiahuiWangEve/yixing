@@ -80,6 +80,7 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           python3 tests/browser_release_smoke.py 2>&1 | tee build/release-smoke.log
+          python3 tests/browser_debug_undo_checks.py 2>&1 | tee build/debug-undo-smoke.log
           python3 tests/browser_chapter_checks.py --smoke 2>&1 | tee build/chapter-smoke.log
           python3 tests/browser_airdrop_checks.py 2>&1 | tee build/airdrop-smoke.log
           python3 tests/browser_pass_checks.py 2>&1 | tee build/pass-smoke.log
@@ -95,11 +96,13 @@ jobs:
             build/export.log
             build/package-audit.log
             build/release-smoke.log
+            build/debug-undo-smoke.log
             build/chapter-smoke.log
             build/airdrop-smoke.log
             build/pass-smoke.log
             build/picker-smoke.log
             build/presentation-smoke.log
+            verification/v0.14.4/
             verification/v0.14.3/
             verification/v0.14.2/
             verification/v0.14.1/
@@ -184,6 +187,7 @@ jobs:
           name: yixing-regression-${{ github.sha }}
           path: |
             build/*browser.log
+            verification/v0.14.4/
             verification/v0.14.3/
             verification/v0.14.0/
             verification/v0.13.0/

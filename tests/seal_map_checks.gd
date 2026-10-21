@@ -9,7 +9,7 @@ func check(ok: bool, label: String):
 	if not ok: failures += 1;push_error(label)
 func _initialize(): call_deferred("run")
 func run():
-	game = load("res://main.tscn").instantiate();root.add_child(game)
+	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true)
 	var route = game.route
 	for size in [Vector2(1280,940), Vector2(390,844), Vector2(844,390), Vector2(360,640)]:
 		game.configure_layout(size);game.new_expedition();route.tick(0)

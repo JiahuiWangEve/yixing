@@ -215,7 +215,7 @@ func general_guard(size: Vector2):
 	report.steps = steps.duplicate(true);reports.append(report)
 func run():
 	DirAccess.make_dir_recursive_absolute(OUT + "fixtures")
-	game = load("res://main.tscn").instantiate();root.add_child(game);game.set_process(false)
+	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true);FileAccess.open(OUT+"fixtures/settings.cfg",FileAccess.WRITE).store_string(FileAccess.get_file_as_string(game.settings.SAVE));game.set_process(false)
 	for size in [Vector2(1280, 940), Vector2(390, 844), Vector2(360, 640), Vector2(844, 390)]:
 		game.configure_layout(size);rules_text_checks()
 		if int(size.x) in [1280, 390]: transition(size);final_boss(size)

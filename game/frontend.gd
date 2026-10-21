@@ -4,7 +4,7 @@ var game
 func _init(owner): game = owner
 func entries() -> Array:
 	match game.screen:
-		"home": return ["开始游戏", "教程", "声音：" + ("静音" if game.audio_system.muted else "开启"), "继续山河棋路存档"]
+		"home": return ["开始游戏", "教程", "声音：" + ("静音" if game.audio_system.muted else "开启"), "继续山河棋路存档", "调试模式：" + ("开" if game.settings.debug_mode else "关")]
 		"skill_selection": return ["将 · 四向一步", "马 · 马步移动" if game.skill_system.is_unlocked("horse") else "马 · 通关后解锁", "炮车 · 行军与驻扎" if game.skill_system.is_unlocked("artillery") else "炮车 · 通关后解锁", "返回首页"]
 		"debug_profile": return ["将 · 2命与恢复", "马 · 1命与机动", "炮车 · 1命与炮击", "返回首页"]
 		"tutorial_menu":
@@ -40,6 +40,7 @@ func activate(i: int):
 				2: game.audio_system.toggle_mute()
 				3:
 					if not game.route.resume(): game.notice = "此存档不可续用，请开始新征途。"
+				4: game.settings.set_debug_mode(not game.settings.debug_mode);game.queue_redraw()
 		"skill_selection":
 			match i:
 				0: game.skill_system.choose("king")
@@ -106,6 +107,8 @@ func draw():
 		if profile_entry:
 			var summaries = ["2 命 · 恢复与近战 · 奖励含续命、吐纳", "1 命 · 马步与进退攻击 · 击杀切入", "1 命 · 行军走 1–2 格 · 展开抽 3 张"]
 			game.text_at(rect.position + Vector2(20, 47), summaries[i], 14, game.THEME.GRID if locked else game.THEME.SAFE)
+	if game.screen == "home":
+		game.text_at(button_rect(4).position + Vector2(0, button_rect(4).size.y + 24), "关闭：整局悔棋3次；开启：不限次，可跳关", 14, game.THEME.LIGHT)
 	if game.screen == "skill_selection":
 		var bottom = button_rect(3).end.y
 		var footer = "解锁记录仅保存在当前浏览器；清除数据后会重置"

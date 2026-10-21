@@ -102,7 +102,7 @@ func run():
 	quit(1 if failures else 0)
 
 func integration_checks():
-	var game = load("res://main.tscn").instantiate();root.add_child(game)
+	var game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true)
 	game.tutorial.stop();game.player_skill="king";game.new_run()
 	game.enemies=[];game.player=Vector2i(0,8);game.lives=100;game.hand=[];game.hand_ids=[];game.deck=[];game.discard=[]
 	game.encounter_state={"config":{"id":"palace_final","tier":"boss","rules":[]},"phases":0,"guard_uids":[],"retaliated":false,"river_triggered":false,"signal_uid":-1,"cannon_uid":-1,"spawn_cell":Vector2i(-1,-1)}
@@ -115,7 +115,7 @@ func integration_checks():
 	check(support.action_credits == 1 and support.cd == support.period,"voluntary hold consumes exactly one credit and resets cooldown")
 	check(game.lives == 100 and game.player == Vector2i(0,8),"shield blocks existing attack before coordinated moves")
 	var after=game.history.capture()
-	check(game.history.undo() and game.history.capture() == before,"undo restores hold credit and board")
+	check(undo_after_effects(game) and game.history.capture() == before,"undo restores hold credit and board")
 	game.end_turn()
 	check(game.history.capture() == after,"undo replay produces same hold outcome")
 	# Elite march now banks a credit instead of executing a second same-phase move.
@@ -210,3 +210,8 @@ func extended_checks():
 	print("STRESS four cannons period1 credits3 elapsed_us=",elapsed," stats=",plan.stats)
 	check(plan.stats.evaluations<=CP.MAX_EVALUATIONS,"adversarial ready army respects hard phase budget")
 	apply(stress,Vector2i(4,5),plan)
+
+# These rules tests model the completed-animation boundary before user input.
+func undo_after_effects(owner) -> bool:
+	owner.input_lock = 0;owner.navigation_lock = 0;owner.presentation.clear()
+	return owner.undo_action()

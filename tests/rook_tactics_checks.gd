@@ -164,7 +164,7 @@ func runtime_checks():
 	check(rook.action_credits==1 and rook.cd==rook.period,"rook hold consumes exactly one boss credit and resets cooldown")
 	check(game.player==Vector2i(4,5) and game.lives==100,"shield preserves current-player fixture while existing attacker does not move")
 	var after=game.history.capture()
-	check(game.history.undo() and game.history.capture()==before,"undo restores rook hold board credits and RNG")
+	check(undo_after_effects(game) and game.history.capture()==before,"undo restores rook hold board credits and RNG")
 	game.end_turn();check(game.history.capture()==after,"hold replay deterministically reproduces exact state")
 	runtime_fixture(Vector2i(4,5));rook=add("r",Vector2i(0,0));rook.action_credits=3;rook.action_credit_delay=0
 	game.end_turn()
@@ -179,7 +179,12 @@ func runtime_checks():
 	var down=add("stake",Vector2i(0,1),999);down.permanent=true
 	game.end_turn();check(rook.pos==Vector2i(0,0) and rook.action_credits==2 and movement_count(rook.uid)==0,"boxed rook cannot count inability to move as a paid hold")
 func run():
-	game=load("res://main.tscn").instantiate();root.add_child(game)
+	game=load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true)
 	reach_checks();control_checks();barrier_and_cannon_checks();fast_and_budget_checks();runtime_checks()
 	print("ROOK TACTICS RESULT ",checks-failures," passed, ",failures," failed")
 	game.queue_free();quit(1 if failures else 0)
+
+# These rules tests model the completed-animation boundary before user input.
+func undo_after_effects(owner) -> bool:
+	owner.input_lock = 0;owner.navigation_lock = 0;owner.presentation.clear()
+	return owner.undo_action()

@@ -106,7 +106,7 @@ func check_undo_and_reload():
 	var pawn = pawn_fixture(2)
 	var uid = pawn.uid;var before = game.history.capture()
 	turn();var after = game.history.capture()
-	check(game.history.undo() and game.history.capture() == before, "undo restores credit balance countdown and RNG")
+	check(undo_after_effects(game) and game.history.capture() == before, "undo restores credit balance countdown and RNG")
 	turn();check(game.history.capture() == after, "replay spends same one credit and reaches same position")
 	check(actor(uid).action_credits == 1, "replayed actor retains remaining credit")
 	game.new_expedition()
@@ -190,7 +190,7 @@ func check_many_phases_and_other_elites():
 	game.damage_enemy(0, 0, 1);turn()
 	check(pawn.pos == Vector2i(2, 1) and movement_count(pawn.uid) == 1 and pawn.action_credits == 0, "elite retaliation also consumes only one action per phase")
 func run():
-	game = load("res://main.tscn").instantiate();root.add_child(game)
+	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true)
 	check_dual_trigger()
 	check_three_credits_and_natural_readiness()
 	check_freeze_block_and_attack()
@@ -201,3 +201,8 @@ func run():
 	check_many_phases_and_other_elites()
 	print("BOSS ACTION CREDIT RESULT ", checks - failures, " passed, ", failures, " failed")
 	game.queue_free();quit(1 if failures else 0)
+
+# These rules tests model the completed-animation boundary before user input.
+func undo_after_effects(owner) -> bool:
+	owner.input_lock = 0;owner.navigation_lock = 0;owner.presentation.clear()
+	return owner.undo_action()

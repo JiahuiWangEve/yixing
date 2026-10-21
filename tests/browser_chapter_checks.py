@@ -1,3 +1,4 @@
+from browser_settings import install_debug_settings
 """Replay chapter two through the exported Web UI, using ordinary saved games.
 
 Generate tests/chapter_web_fixtures.gd before export. JavaScript only writes the
@@ -111,7 +112,7 @@ async def main(smoke=False, validate_only=False):
                 scale = min(w / uw, h / uh)
                 ox, oy = (w - uw * scale) / 2, (h - uh * scale) / 2
                 context = await browser.new_context(viewport={'width': w, 'height': h}, has_touch=True)
-                page = await context.new_page()
+                page = await context.new_page();await install_debug_settings(page)
                 errors = []
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.on('console', lambda msg: errors.append(msg.text) if msg.type == 'error' and

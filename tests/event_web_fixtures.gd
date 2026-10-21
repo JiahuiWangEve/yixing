@@ -73,7 +73,7 @@ func setup(name: String, size: Vector2):
 	game.route.save();steps=[]
 func run():
 	DirAccess.make_dir_recursive_absolute(OUT+"fixtures")
-	game=load("res://main.tscn").instantiate();root.add_child(game)
+	game=load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true);FileAccess.open(OUT+"fixtures/settings.cfg",FileAccess.WRITE).store_string(FileAccess.get_file_as_string(game.settings.SAVE))
 	var reports=[]
 	for size in [Vector2(1280,940),Vector2(390,844),Vector2(844,390),Vector2(360,640)]:
 		for name in ["herb_heal","herb_breath","herb_full","merchant","manual_focus","manual_homework","manual_mnemonic","manual_ineligible","camp_prepare","camp_remove","workshop","fatigue_zero","fatigue_one"]:

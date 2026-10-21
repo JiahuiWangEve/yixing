@@ -329,6 +329,7 @@
     24320,
     24323,
     24328,
+    24335,
     24352,
     24378,
     24402,
@@ -437,6 +438,7 @@
     26827,
     26970,
     27010,
+    27169,
     27178,
     27424,
     27425,
@@ -700,6 +702,7 @@
     "game/fan_hand.gd",
     "game/free_move_card.gd",
     "game/frontend.gd",
+    "game/game_settings.gd",
     "game/general_evasion.gd",
     "game/main.gd",
     "game/main.tscn",
@@ -719,7 +722,7 @@
     "game/tutorial.gd",
     "game/undo_history.gd"
   ],
-  "subset_sha256": "d276a7bcb6faf9385d57d68e40bfb34e055e227ecea676ff7936376fbcb56dd0",
-  "subset_bytes": 291848,
+  "subset_sha256": "b4771a41c06e49ccb767e8d14cfec6f3f201945a4b852c007b94562a5ccd0303",
+  "subset_bytes": 292592,
   "license": "FONT_LICENSE.txt"
 }

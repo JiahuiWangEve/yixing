@@ -1,3 +1,4 @@
+from browser_settings import install_debug_settings
 """Production-Web pass-card gate with held side-zone highlight evidence.
 
 Default/--smoke runs desktop and portrait only; --full adds narrow portrait and
@@ -100,7 +101,7 @@ async def main(full=False, validate_only=False):
                 w, h = map(int, replay['viewport']);uw, uh = replay['logical_size']
                 scale = min(w / uw, h / uh);ox, oy = (w - uw * scale) / 2, (h - uh * scale) / 2
                 context = await browser.new_context(viewport={'width': w, 'height': h}, has_touch=True)
-                page = await context.new_page();cdp = await context.new_cdp_session(page)
+                page = await context.new_page();await install_debug_settings(page);cdp = await context.new_cdp_session(page)
                 errors = [];screenshots = [];highlights = [];events = []
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.on('console', lambda msg: errors.append(msg.text) if msg.type == 'error' and

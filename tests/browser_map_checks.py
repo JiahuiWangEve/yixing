@@ -1,3 +1,4 @@
+from browser_settings import install_debug_settings
 """Real Web smoke test; native rendering checks are not a substitute for this.
 Run a server over build/web on 8765 (or set YIXING_TEST_URL).
 """
@@ -19,7 +20,7 @@ async def main():
   viewports = [(1280,940),(390,844),(844,390),(360,640)] if os.environ.get('YIXING_FULL_REGRESSION') == '1' else [(1280,940),(390,844)]
   for w,h in viewports:
    context=await browser.new_context(viewport={'width':w,'height':h},has_touch=True)
-   page=await context.new_page(); errors=[]; assertions=[]; keyboard_assertions=[]
+   page=await context.new_page();await install_debug_settings(page); errors=[]; assertions=[]; keyboard_assertions=[]
    page.on('pageerror',lambda e:errors.append(str(e)))
    page.on('console',lambda m: errors.append(m.text) if m.type=='error' and ('SCRIPT ERROR' in m.text or 'Parse Error' in m.text) else None)
    await page.goto(URL); await page.wait_for_timeout(4500)

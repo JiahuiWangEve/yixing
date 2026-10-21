@@ -1,3 +1,4 @@
+from browser_settings import install_debug_settings
 """Exercise actual exported Godot through normal Continue/touch/Space flows.
 
 Generate fixtures first with tests/cannon_visual_capture.gd. Fixtures are valid
@@ -159,7 +160,7 @@ async def main():
             context=await browser.new_context(viewport={'width':w,'height':h},has_touch=True)
             geometry=layout(w,h)
             for name in NAMES:
-                page=await context.new_page();errors=[]
+                page=await context.new_page();await install_debug_settings(page);errors=[]
                 page.on('pageerror', lambda e:errors.append(str(e)))
                 page.on('console', lambda m:errors.append(m.text) if m.type=='error' and ('SCRIPT ERROR' in m.text or 'Parse Error' in m.text) else None)
                 fixture=(FIXTURES/f'{name}.cfg').read_text()

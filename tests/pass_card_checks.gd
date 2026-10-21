@@ -131,9 +131,9 @@ func check_free_card():
 		check(not game.free_card_available() and not game.freecard.visible(), identity + " redraw cannot regenerate the free card")
 		game.end_turn();settle()
 		check(game.turn == 2 and game.free_card_available() and game.freecard.visible() and not game.basic_used and game.free_card_uid != uid, identity + " next turn creates a new free card")
-		game.undo_action()
+		undo_after_effects(game)
 		check(game.turn == 1 and not game.free_card_available() and not game.freecard.visible() and not game.basic_used, identity + " undo turn restores the passed free-card state")
-		game.undo_action()
+		undo_after_effects(game)
 		check(game.free_card_available() and game.freecard.visible() and game.free_card_uid == uid and game.energy == 0 and not game.basic_used, identity + " undo free pass restores its original identity and quota")
 	fresh(["deploy", "pack"], "artillery")
 	check(game.pass_card(-1, true), "artillery free card can be passed before stance changes")
@@ -186,14 +186,14 @@ func check_identity_and_undo():
 	check(game.hand == ["sword", "sword"] and game.hand_ids == [ids[0], ids[2]] and game.discard == ["sword"], "pass removes only the selected duplicate UID")
 	settle();check(game.pass_card(1), "remaining right duplicate can also pass")
 	check(game.hand_ids == [ids[0]] and game.discard == ["sword", "sword"] and game.energy == 3, "repeated passes resolve current indices without substituting duplicate cards")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.hand_ids == [ids[0], ids[2]] and game.energy == 4 and game.discard == ["sword"], "one undo restores just the second passed copy")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.history.capture() == before and game.history.entries.is_empty(), "second undo restores exact original piles, UIDs, RNG, cost and effects")
 	fresh(["airdrop"])
 	before = game.history.capture()
 	check(game.pass_card(0), "consumable pass records history")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.history.capture() == before and game.hand == ["airdrop"] and game.airdrop_recovery_turn == 0, "undo consumable pass restores the copy without generating its effect")
 
 func touch(index: int, position: Vector2, pressed: bool, canceled: bool = false):
@@ -295,7 +295,7 @@ func check_side_drop_intent():
 		check(game.history.capture() == before and game.history.entries.is_empty(), "minor rightward movement inside pass zone does not trigger pass at " + str(size))
 		game.gesture.press(start, "touch");game.gesture.motion(start + Vector2(32, 0));game.gesture.release(start + Vector2(32, 0))
 		check(game.hand.size() == 5 and game.energy == 4 and game.discard == ["sword"] and game.history.entries.size() == 1, "deliberate rightward drag can pass a card already under the zone at " + str(size))
-		game.undo_action();start = overlap_source()
+		undo_after_effects(game);start = overlap_source()
 		game.gesture.press(start, "touch")
 		game.gesture.motion(Vector2(area.position.x - 20, start.y));game.gesture.motion(start);game.gesture.release(start)
 		check(game.hand.size() == 5 and game.energy == 4 and game.discard == ["sword"], "leaving then deliberately re-entering the zone can pass its underlying card at " + str(size))
@@ -338,7 +338,7 @@ func check_pass_persistence():
 		check(game.route.valid_snapshot(game.route.state, before, game.screen), identity + " uid-zero passed free card remains a valid v5 snapshot")
 		game.route.save()
 		check(game.route.save_error == OK, identity + " writes passed-card state to disposable save")
-		game.free();game = load("res://main.tscn").instantiate();root.add_child(game);game.set_process(false)
+		game.free();game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true);game.set_process(false)
 		check(game.route.resume() and game.history.capture() == before, identity + " new scene restores paid/free pass state exactly")
 		check(game.free_card_uid == 0 and not game.free_card_available() and not game.freecard.visible() and not game.basic_used and game.discard == ["airdrop"] and game.collection == permanent, identity + " reload neither reissues the passed free card nor exhausts its consumable")
 		for enemy in game.enemies: enemy.cd = 999;enemy.period = 999
@@ -346,7 +346,7 @@ func check_pass_persistence():
 		check(game.free_card_available() and game.free_card_uid > 0 and not game.basic_used, identity + " turn after resume reissues a fresh generated free card")
 
 func run():
-	game = load("res://main.tscn").instantiate();root.add_child(game)
+	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true)
 	check(game.has_method("can_pass_card") and game.has_method("pass_card"), "main exposes pass-card eligibility and commit APIs")
 	if failures == 0:
 		check_cost_and_no_target()
@@ -360,3 +360,8 @@ func run():
 		check_pass_persistence()
 	print("PASS CARD RESULT ", checks - failures, " passed, ", failures, " failed")
 	game.free();quit(1 if failures else 0)
+
+# These rules tests model the completed-animation boundary before user input.
+func undo_after_effects(owner) -> bool:
+	owner.input_lock = 0;owner.navigation_lock = 0;owner.presentation.clear()
+	return owner.undo_action()

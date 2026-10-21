@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.14.3"
+const BUILD_VERSION = "v0.14.4"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -36,6 +36,9 @@ const ENEMY_HEALTH = {"g": 3, "e": 3, "h": 2}
 var screen = "game"
 var tutorial = TUTORIAL.new()
 var frontend = FRONTEND.new(self)
+var settings = preload("res://game_settings.gd").new()
+const NORMAL_UNDO_LIMIT = 3
+var normal_undos_remaining = NORMAL_UNDO_LIMIT
 var rewardui = REWARD_UI.new(self)
 var card_picker = preload("res://card_picker.gd").new(self)
 var presentation = preload("res://presentation.gd").new(self)
@@ -149,9 +152,15 @@ func cancel_gesture():
 	if gesture != null: gesture.cancel()
 	if route != null: route.cancel_pointer()
 	active_touch = -1;touch_dragged = true
-func undo_action():
-	if tutorial.active: notice = "教学中不可悔棋";return
-	history.undo()
+func can_undo_action() -> bool:
+	return screen == "game" and not tutorial.active and input_lock <= 0 and navigation_lock <= 0 and not presentation.active() and not card_picker.active and not encounter_info_open and (settings.debug_mode or normal_undos_remaining > 0)
+func undo_action() -> bool:
+	if tutorial.active: notice = "教学中不可悔棋";return false
+	return history.undo()
+func undo_label() -> String:
+	if tutorial.active: return "教学禁用悔棋"
+	if settings.debug_mode: return "悔棋 · 不限次" if mobile_layout else "悔棋 Ctrl+Z · 不限次"
+	return "悔棋 · 剩%d次" % normal_undos_remaining if mobile_layout else "悔棋 Ctrl+Z · 剩%d次" % normal_undos_remaining
 # Passing is not playing: central guards deliberately ignore target/stance legality.
 func can_pass_card(index: int, free: bool = false) -> bool:
 	if screen != "game" or phase != "play" or recovery_active() or tutorial.active or encounter_info_open: return false
@@ -373,6 +382,7 @@ func _ready():
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	configure_layout(Vector2(1280, 940))
 	update_window_layout()
+	settings.load_settings()
 	skill_system.load_progress()
 	new_run()
 	show_home()
@@ -388,6 +398,7 @@ func new_expedition():
 	route.save()
 
 func new_run(preserve_tutorial: bool = false):
+	normal_undos_remaining = NORMAL_UNDO_LIMIT
 	presentation.clear();card_picker.close()
 	route.state = {}
 	history.clear();cancel_gesture();hand_ids = [];next_card_uid = 1;free_selected = false
@@ -696,7 +707,7 @@ func handle_click(pos: Vector2):
 		elif route.active(): new_expedition()
 		else: new_run()
 		return
-	if debug_skip_rect().has_point(pos) and not tutorial.active: debug_skip();return
+	if settings.debug_mode and debug_skip_rect().has_point(pos) and not tutorial.active: debug_skip();return
 	if input_lock > 0 or navigation_lock > 0: return
 	if phase == "reward":
 		var previous_mode: String = rewardui.mode
@@ -863,6 +874,7 @@ func debug_skip_rect() -> Rect2:
 	if mobile_layout: return Rect2(352, 64, 116, 40)
 	return Rect2(1040, 80, 116, 44)
 func debug_skip():
+	if not settings.debug_mode: return
 	if tutorial.active or screen != "game" or phase not in ["play", "discard"]: return
 	settle_victory()
 
@@ -1033,7 +1045,7 @@ func _draw():
 		panel(SOUND_RECT, THEME.BUTTON);text_at(SOUND_RECT.position + Vector2(12, 32 if mobile_layout else 27), "静音" if audio_system.muted else "声音 开", 16)
 		return
 	draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.BACKGROUND)
-	if not tutorial.active and phase in ["play", "discard"]:
+	if settings.debug_mode and not tutorial.active and phase in ["play", "discard"]:
 		panel(debug_skip_rect(), THEME.BUTTON);text_at(debug_skip_rect().position + Vector2(8, 24), "调试跳过", 18)
 	if not mobile_layout or compact_landscape: text_at(mobile_title_pos(), "弈 行", 28, THEME.HEADING)
 	panel(RESTART_RECT, THEME.BUTTON);text_at(RESTART_RECT.position + Vector2(16, 32 if mobile_layout else 27), "教学菜单" if tutorial.active else "重新开局", 18)
@@ -1164,7 +1176,7 @@ func _draw():
 		if phase == "dead": text_at(Vector2(24, ui_size.y * 0.4 + 90) if mobile_layout else Vector2(480, 480), notice, 20, RED)
 		panel(RESTART_RECT, THEME.PAPER_SELECTED);text_at(RESTART_RECT.position + Vector2(16, 32 if mobile_layout else 27), "重新开局", 18, THEME.INK)
 
-	panel(UNDO_RECT, THEME.BUTTON, GOLD if history.can_undo() else THEME.BORDER);text_at(UNDO_RECT.position + Vector2(8, 29), "教学禁用悔棋" if tutorial.active else ("悔棋 · 3回合" if mobile_layout else "悔棋 Ctrl+Z · 最多3回合"), 14 if mobile_layout else 16)
+	panel(UNDO_RECT, THEME.BUTTON, GOLD if history.can_undo() else THEME.BORDER);text_at(UNDO_RECT.position + Vector2(8, 29), undo_label(), 14 if mobile_layout else 16)
 	panel(home_rect(), THEME.BUTTON);text_at(home_rect().position + Vector2(10, 29 if mobile_layout else 27), "首页" if mobile_layout else "返回首页", 18)
 	panel(SOUND_RECT, THEME.BUTTON);text_at(SOUND_RECT.position + Vector2(12, 32 if mobile_layout else 27), "静音" if audio_system.muted else "声音 开", 16)
 

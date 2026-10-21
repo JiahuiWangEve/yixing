@@ -51,6 +51,9 @@ async def main():
                 try:
                     await page.goto(URL)
                     await boot()
+                    # Enable through the real home toggle; no saved fixture injection.
+                    await tap(*((640,497) if desktop else (240,max(150,uh*.25)+326)))
+                    assert 'debug_mode=true' in (await page.evaluate("localStorage.getItem('yixing.settings.v1')") or '')
                     menu = (640, 209) if desktop else (240, max(150, uh*.25)+30)
                     await tap(*menu)
                     await tap(*menu)

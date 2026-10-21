@@ -22,7 +22,7 @@ func run():
 		viewport.size = size;viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 		add_child(viewport)
 		var game = load("res://main.tscn").instantiate()
-		viewport.add_child(game);game.set_process(false);game.configure_layout(Vector2(size))
+		viewport.add_child(game);game.settings.set_debug_mode(true);game.set_process(false);game.configure_layout(Vector2(size))
 		viewport.size_2d_override = Vector2i(game.ui_size);viewport.size_2d_override_stretch = true;game.size = game.ui_size
 		game.new_expedition();var route = game.route;route.tick(0)
 		var suffix = "-" + str(size.x)

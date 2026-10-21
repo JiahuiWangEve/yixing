@@ -10,7 +10,7 @@ func run():
 	DirAccess.make_dir_recursive_absolute(OUT)
 	for size in [Vector2i(1280,940), Vector2i(390,844), Vector2i(360,640), Vector2i(844,390)]:
 		var viewport = SubViewport.new();viewport.size = size;viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS;add_child(viewport)
-		var game = load("res://main.tscn").instantiate();viewport.add_child(game);game.set_process(false);game.configure_layout(Vector2(size))
+		var game = load("res://main.tscn").instantiate();viewport.add_child(game);game.settings.set_debug_mode(true);game.set_process(false);game.configure_layout(Vector2(size))
 		viewport.size_2d_override = Vector2i(game.ui_size);viewport.size_2d_override_stretch = true;game.size = game.ui_size
 		game.new_expedition();game.route.enter(0);game.route.complete();game.route.enter(3)
 		game.collection = []

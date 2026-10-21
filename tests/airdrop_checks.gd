@@ -17,7 +17,7 @@ func fresh():
 func next_turn():
 	game.clear_effects();game.navigation_lock = 0;game.end_turn()
 func run():
-	game = load("res://main.tscn").instantiate();root.add_child(game)
+	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true)
 	check(game.CARDS.airdrop[1] == 3 and game.is_consumable("airdrop"), "three energy and per-copy exhaust")
 	for identity in game.PROFILES.DATA:
 		check(("airdrop" in game.PROFILES.DATA[identity].rewards) == (identity == "king"), "only king reward pool " + identity)
@@ -81,7 +81,7 @@ func check_sacrifice_priority():
 	check(game.phase == "dead" and game.lives == 0 and not game.general_alive(), "self sacrifice loses even with simultaneous general death")
 	check(game.collection == collection and not game.route.state.victory_recorded and game.route.state.reward_debt == 1, "no victory rewards/homework before self-loss")
 	game.debug_skip();check(game.phase == "dead", "debug victory cannot escape already dead")
-	game.undo_action();check(game.lives == 1 and game.phase == "play" and game.general_alive() and game.hand == ["airdrop"] and game.airdrop_recovery_turn == 0, "undo restores whole sacrifice before action")
+	undo_after_effects(game);check(game.lives == 1 and game.phase == "play" and game.general_alive() and game.hand == ["airdrop"] and game.airdrop_recovery_turn == 0, "undo restores whole sacrifice before action")
 	game.lives = 2;game.play_card(0, Vector2i(4,1))
 	check(game.lives == 1 and game.phase == "reward" and game.airdrop_recovery_turn == 0, "surviving general kill wins and clears recovery")
 func check_recovery():
@@ -96,7 +96,7 @@ func check_recovery():
 	game.basic_move(Vector2i(4,7));game.select_free_card()
 	check(game.player == before.player and game.hand == before.hand and game.energy == before.energy and game.selected == -1 and not game.free_selected, "direct click/play/movement paths blocked")
 	check(not game.gesture.press(game.handui.bounds(0).get_center()), "drag start blocked")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.turn == 1 and game.airdrop_recovery_turn == 2 and not game.recovery_active(), "undo enemy phase restores pending recovery rather than discarding it")
 	next_turn();check(game.recovery_active(), "replaying the turn re-enters recovery")
 	game.clear_effects();var space = InputEventKey.new();space.pressed = true;space.keycode = KEY_SPACE;game._input(space)
@@ -110,7 +110,7 @@ func check_recovery_bleed():
 	var uid = target.uid;var before = game.history.capture()
 	next_turn()
 	check(not game.recovery_active() and target.hp == 3 and game.pending_bleeds.is_empty() and game.turn == 3, "skipped recovery turn still deals exactly the second ending tick")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.history.capture() == before and game.recovery_active(), "undo skipped recovery restores one bleed tick and recovery lock together")
 	next_turn()
 	var restored = {}
@@ -143,3 +143,8 @@ func check_chapter_window():
 	next_turn();check(not game.recovery_active() and game.encounter_state.ghosts.size() == 1, "no early revival when recovery turn ends")
 	game.player = Vector2i(8,9);next_turn()
 	check(game.encounter_state.ghosts.is_empty(), "second complete window permits normal end-phase revival")
+
+# These rules tests model the completed-animation boundary before user input.
+func undo_after_effects(owner) -> bool:
+	owner.input_lock = 0;owner.navigation_lock = 0;owner.presentation.clear()
+	return owner.undo_action()

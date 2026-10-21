@@ -33,7 +33,7 @@ func count_relay() -> int:
 		if enemy.kind == "h" and enemy.get("reinforcement", false): n += 1
 	return n
 func run():
-	game = load("res://main.tscn").instantiate();root.add_child(game)
+	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true)
 	check_rules()
 	check_templates()
 	check_double_step()
@@ -215,7 +215,7 @@ func check_round_trips():
 	fixture("rook_pressure", "elite", ["double_step"]);game.enemies = [game.enemies[0]]
 	var pawn = add("p", Vector2i(2, 0));pawn.march_mark = true;pawn.normal_moves = 1;pawn.intent = Vector2i(2, 1)
 	var before = game.history.capture();game.end_turn();var after = game.history.capture()
-	check(game.history.undo() and game.history.capture() == before, "undo restores modifier counters positions and RNG")
+	check(undo_after_effects(game) and game.history.capture() == before, "undo restores modifier counters positions and RNG")
 	game.end_turn();check(game.history.capture() == after, "replay produces same modifier result and RNG")
 	game.new_expedition();game.route.enter(0);game.debug_skip();game.input_lock = 0;game.choose_reward(-1);game.route.enter(2)
 	var saved = game.history.capture();var saved_route = game.route.state.duplicate(true)
@@ -278,7 +278,7 @@ func check_actual_modifiers():
 	check(move_effects(cannon.uid) == 1 and cannon.action_credits == 0, "river cannon consumes credit once next phase")
 	fixture("horse_cannon", "elite", ["horse_relay"]);game.encounter_state.phases = 4;game.encounter_state.spawn_cell = Vector2i(0, 0)
 	var saved = game.history.capture();game.end_turn();var spawned = game.history.capture()
-	check(game.history.undo() and game.history.capture() == saved and count_relay() == 0, "undo wave removes horse and restores forecast/UID")
+	check(undo_after_effects(game) and game.history.capture() == saved and count_relay() == 0, "undo wave removes horse and restores forecast/UID")
 	game.end_turn();check(game.history.capture() == spawned and count_relay() == 1, "replay wave spawns identical horse exactly once")
 func press_key(code: int):
 	var event = InputEventKey.new();event.pressed = true;event.keycode = code;game._input(event)
@@ -436,7 +436,7 @@ func check_reactive_decision():
 	# Replay restores the input position and RNG, and computes the same fresh reaction.
 	rook = isolated_mover("r", Vector2i(0, 0));rook.intent = Vector2i(0, 5);game.player = Vector2i(7, 8)
 	var before = game.history.capture();game.end_turn();var after = game.history.capture()
-	check(game.history.undo() and game.history.capture() == before, "undo restores pre-reaction state and legacy stale intent without using it")
+	check(undo_after_effects(game) and game.history.capture() == before, "undo restores pre-reaction state and legacy stale intent without using it")
 	game.end_turn();check(game.history.capture() == after, "reactive decisions replay exactly after undo")
 	# Persist a legal, incorrect old intent; resume must still use current state.
 	game.new_expedition();game.route.enter(0)
@@ -448,3 +448,8 @@ func check_reactive_decision():
 	game.end_turn();check(game.enemies[index_of(uid)].pos == expected, "resumed stale intent cannot override fresh enemy decision")
 	var source = FileAccess.get_file_as_string("res://main.gd")
 	check(not 'var intent: Vector2i = inspected.get("intent"' in source, "board inspection no longer draws future destination")
+
+# These rules tests model the completed-animation boundary before user input.
+func undo_after_effects(owner) -> bool:
+	owner.input_lock = 0;owner.navigation_lock = 0;owner.presentation.clear()
+	return owner.undo_action()

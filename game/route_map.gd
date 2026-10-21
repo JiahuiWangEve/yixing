@@ -416,6 +416,7 @@ func save():
 	if not active(): return
 	var config = ConfigFile.new()
 	config.set_value("run", "version", 5)
+	config.set_value("run", "normal_undos_remaining", game.normal_undos_remaining)
 	config.set_value("run", "route", state)
 	config.set_value("run", "battle", game.history.capture())
 	config.set_value("run", "screen", game.screen if game.screen in ["game", "map", "route_choice"] else "map")
@@ -440,6 +441,9 @@ func resume() -> bool:
 	# Older v5 runs predate the optional air-drop recovery counter.
 	if battle is Dictionary and not battle.has("airdrop_recovery_turn"): battle.airdrop_recovery_turn = 0
 	if not valid_snapshot(saved, battle, saved_screen): return false
+	var remaining = config.get_value("run", "normal_undos_remaining", game.NORMAL_UNDO_LIMIT)
+	if not remaining is int or remaining < 0 or remaining > game.NORMAL_UNDO_LIMIT: return false
+	game.normal_undos_remaining = remaining
 	game.card_picker.close();game.presentation.clear()
 	game.tutorial.stop();game.history.clear();game.cancel_gesture();game.clear_effects()
 	state = saved.duplicate(true)

@@ -8,7 +8,7 @@ func save_fixture(name: String):
 	FileAccess.open(OUT+"fixtures/"+name+".cfg",FileAccess.WRITE).store_string(FileAccess.get_file_as_string(game.route.SAVE))
 func run():
 	DirAccess.make_dir_recursive_absolute(OUT+"fixtures")
-	game=load("res://main.tscn").instantiate();root.add_child(game);game.set_process(false)
+	game=load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true);FileAccess.open(OUT+"fixtures/settings.cfg",FileAccess.WRITE).store_string(FileAccess.get_file_as_string(game.settings.SAVE));game.set_process(false)
 	var reports=[]
 	for size in [Vector2(1280,940),Vector2(390,844)]:
 		game.configure_layout(size);game.seed_value=14343;game.player_skill="king";game.new_expedition();game.route.enter(0)

@@ -1,3 +1,4 @@
+from browser_settings import install_debug_settings
 """Real exported Web regression, resumed only through ordinary Continue UI.
 
 Generate native fixtures with rook_visual_capture.gd first. All gameplay uses
@@ -204,7 +205,7 @@ async def main():
                 geometry = layout(width, height)
                 try:
                     for name in NAMES:
-                        page = await context.new_page()
+                        page = await context.new_page();await install_debug_settings(page)
                         errors = []
                         page.on('pageerror', lambda error: errors.append(str(error)))
                         page.on('console', lambda message: errors.append(message.text) if message.type == 'error' and

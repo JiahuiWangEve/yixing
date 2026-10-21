@@ -1,3 +1,4 @@
+from browser_settings import install_debug_settings
 """Replay production event saves through actual exported Web UI at four sizes.
 
 Native test driver generates fixtures plus deterministic expected state. JS only
@@ -66,7 +67,7 @@ async def main():
             w,h=replay['viewport']; uw,uh=replay['logical_size']
             scale=min(w/uw,h/uh); ox=(w-uw*scale)/2; oy=(h-uh*scale)/2
             context=await browser.new_context(viewport={'width':int(w),'height':int(h)},has_touch=True)
-            page=await context.new_page(); errors=[]
+            page=await context.new_page();await install_debug_settings(page); errors=[]
             page.on('pageerror',lambda e:errors.append(str(e)))
             page.on('console',lambda m: errors.append(m.text) if m.type=='error' and ('SCRIPT ERROR' in m.text or 'Parse Error' in m.text) else None)
             stem=replay['name']+'-'+str(int(w))

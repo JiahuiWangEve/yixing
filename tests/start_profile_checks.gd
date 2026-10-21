@@ -53,7 +53,7 @@ func _initialize():
 
 func run_checks():
 	game = load("res://main.tscn").instantiate()
-	root.add_child(game)
+	root.add_child(game);game.settings.set_debug_mode(true)
 	check_profiles_and_rewards()
 	check_movement_and_cannon()
 	check_horse_attacks()
@@ -130,7 +130,7 @@ func check_movement_and_cannon():
 	check(game.free_selected and game.artillery_mode == "attack", "attack movement card selects movement instead of packing")
 	game.basic_move(Vector2i(2, 4))
 	check(game.player == Vector2i(2, 4) and game.basic_used and game.hand.size() == 2 and game.artillery_mode == "attack", "attack step draws one and stays deployed")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.player == Vector2i(2, 5) and not game.basic_used and game.artillery_mode == "attack" and game.hand.size() == 1, "undo attack step restores position draw and quota")
 	reset("artillery")
 	game.player = Vector2i(4, 4)
@@ -145,7 +145,7 @@ func check_movement_and_cannon():
 	check(game.card_cost("cannon_shot") == 1 and game.card_data("cannon_shot")[1] == 1 and game.can_commit_card(0, Vector2i(4, 1)), "attack cannon UI and affordability use one energy")
 	game.play_card(0, Vector2i(4, 1))
 	check(game.enemies.size() == 2 and game.energy == 0, "attack cannon costs one and deals two")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.enemies[1].hp == 2 and game.energy == 1 and game.hand == ["cannon_shot"], "undo cannon restores damage resources and card")
 	game.artillery_mode = "march"
 	game.play_card(0, Vector2i(4, 1))
@@ -187,7 +187,7 @@ func check_deployment():
 	game.play_card(0, game.player)
 	check(game.artillery_mode == "attack" and game.energy == 2 and game.hand.size() == 3 and game.deck.size() == 3 and game.deploy_draw_used, "deploy costs one switches stance and draws three immediately")
 	check("deploy" not in game.discard, "deploy exhausts instead of entering discard")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.artillery_mode == "march" and game.energy == 3 and game.hand == ["deploy"] and game.deck == original_deck and not game.deploy_draw_used and game.rng.state == random_before, "undo deploy restores stance hand deck quota energy and RNG")
 	reset("artillery")
 	set_hand(["deploy"])
@@ -223,7 +223,7 @@ func check_deployment():
 	set_hand(["pack"])
 	game.play_card(0, game.player)
 	check(game.artillery_mode == "march" and game.basic_used and game.hand.is_empty(), "pack card remains and does not refresh spent free movement")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.artillery_mode == "attack" and game.basic_used and game.hand == ["pack"], "undo pack card restores attack stance and hand")
 	reset("artillery")
 	set_hand(["deploy", "sword", "sword", "sword", "sword", "sword"])
@@ -296,9 +296,9 @@ func check_tuna():
 	check(game.tuna_turns == 6 and game.energy == 0, "two tuna copies extend duration to six turns")
 	game.end_turn()
 	check(game.energy == 4 and game.tuna_turns == 5, "stacking tuna does not increase per-turn bonus above one")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.tuna_turns == 6 and game.energy == 0 and game.turn == 1, "undo turn restores pending tuna duration and energy")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.tuna_turns == 3 and game.hand == ["tuna"] and game.energy == 3, "undo tuna restores consumed copy and pending duration")
 	game.stage = 2
 	game.start_stage()
@@ -332,7 +332,7 @@ func check_undo_determinism():
 	var unique_ids = {}
 	for id in game.hand_ids: unique_ids[id] = true
 	check(game.hand.size() == 4 and game.hand_ids.size() == 4 and unique_ids.size() == 4 and game.deck.is_empty() and game.discard.is_empty(), "deploy draws across discard shuffle with unique card instance IDs")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.hand == ["deploy", "sword"] and game.hand_ids == ids_before and game.next_card_uid == next_uid_before and game.deck == ["cannon_shot"] and game.discard == ["stake", "pack"] and game.rng.state == random_before, "undo restores card IDs and pre-shuffle piles exactly")
 	game.play_card(0, game.player)
 	check(game.hand == expected_hand and game.hand_ids == expected_ids, "replaying deployment after undo yields identical drawn cards and IDs")
@@ -343,7 +343,7 @@ func check_undo_determinism():
 	game.play_card(0, Vector2i(4, 0))
 	var rolled_rewards = game.rewards.duplicate()
 	check(game.phase == "reward", "winning attack reaches reward state for deterministic undo")
-	game.undo_action()
+	undo_after_effects(game)
 	check(game.phase == "play" and game.enemies.size() == 1 and game.enemies[0].hp == 1 and game.hand == ["sword"], "undo winning attack restores combat state")
 	game.play_card(0, Vector2i(4, 0))
 	check(game.rewards == rolled_rewards, "replaying winning attack after undo cannot reroll reward choices")
@@ -381,7 +381,7 @@ func check_horse_attacks():
 			check(game.player == expected and game.enemies.size() == (1 if hp == 1 else 2), id + " movement follows kill or retreat rule")
 			check(game.energy == 3 - game.card_cost(id) and game.hand.is_empty() and game.deck == deck_before and game.discard == [id] and game.basic_used and game.card_move_used, id + " consumes energy without drawing or changing quotas")
 			if hp == 2: check(game.enemies.back().hp == 1, id + " deals exactly one damage")
-			game.undo_action()
+			undo_after_effects(game)
 			check(game.player == Vector2i(4, 5) and game.hand == [id] and game.energy == 3 and game.enemies.back().hp == hp, id + " undo restores position target and hand")
 	reset("horse")
 	game.player = Vector2i(4, 5)
@@ -416,3 +416,8 @@ func check_stance_quota():
 	game.player = Vector2i(4, 5)
 	game.add_enemy("stake", Vector2i(4, 4), 0)
 	check(not game.basic_legal(Vector2i(4, 4)), "attack step cannot land on occupied square")
+
+# These rules tests model the completed-animation boundary before user input.
+func undo_after_effects(owner) -> bool:
+	owner.input_lock = 0;owner.navigation_lock = 0;owner.presentation.clear()
+	return owner.undo_action()

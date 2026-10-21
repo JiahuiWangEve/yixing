@@ -9,7 +9,7 @@ func check(ok: bool, label: String):
 func fresh():
 	game.new_expedition();game.route.enter(0);game.input_lock = 0;game.navigation_lock = 0
 func run():
-	game = load("res://main.tscn").instantiate();root.add_child(game);game.set_process(false)
+	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true);game.set_process(false)
 	for chapter in [1,2]:
 		for kind in ["battle","boss"]:
 			game.new_expedition();game.route.generate(4242,chapter)

@@ -269,10 +269,10 @@ func check_snapshots_and_save_validation():
 		E.markers(game);E.status(game);E.summary(game.encounter_state.config);E.details(game.encounter_state.config)
 	check(game.history.capture() == before, "all chapter2 marker status and preview queries are read-only")
 	turn();var after = game.history.capture()
-	check(game.history.undo() and game.history.capture() == before, "undo restores full ghost and wave lifecycle")
+	check(undo_after_effects(game) and game.history.capture() == before, "undo restores full ghost and wave lifecycle")
 	turn();check(game.history.capture() == after, "replayed phase yields identical lifecycle and RNG")
 	phase_to(5);before = game.history.capture();turn();after = game.history.capture()
-	check(not actor(uid).is_empty() and game.history.undo() and game.history.capture() == before, "undo resurrection restores nonblocking ghost and stable uid")
+	check(not actor(uid).is_empty() and undo_after_effects(game) and game.history.capture() == before, "undo resurrection restores nonblocking ghost and stable uid")
 	turn();check(game.history.capture() == after, "resurrection replay exactly restores own HP UID and wave state")
 	# Use a real chapter-two route node and native save/resume, not a detached
 	# dictionary fixture. Node configuration remains the generated fixed config.
@@ -305,7 +305,7 @@ func check_snapshots_and_save_validation():
 	check(general.hp == 8 and not game.encounter_state.has("retaliated"), "chapter2 boss hit never activates chapter1 last stand")
 
 func run():
-	game = load("res://main.tscn").instantiate();root.add_child(game)
+	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true)
 	check_authored_armies()
 	check_full_turn_timing()
 	check_ghost_collision_and_blocking()
@@ -315,3 +315,8 @@ func run():
 	check_snapshots_and_save_validation()
 	print("CHAPTER TWO MECHANICS RESULT ", checks - failures, " passed, ", failures, " failed")
 	game.queue_free();quit(1 if failures else 0)
+
+# These rules tests model the completed-animation boundary before user input.
+func undo_after_effects(owner) -> bool:
+	owner.input_lock = 0;owner.navigation_lock = 0;owner.presentation.clear()
+	return owner.undo_action()
