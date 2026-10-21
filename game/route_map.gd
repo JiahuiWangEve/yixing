@@ -1,16 +1,27 @@
 extends RefCounted
 # Chapter state lives outside battle undo snapshots. Forward-only edges and stored
 # rewards make navigation deterministic, independently of combat RNG.
-const LANDSCAPE = preload("res://assets/map/ink_landscape.png")
-const LANDMARKS = preload("res://assets/map/military_landmarks.png")
-const PAPER = Color("e8d6b6")
-const PAPER_LIGHT = Color("f2e6cf")
-const INK = Color("3d4037")
-const MUTED = Color("716c58")
-const RED = Color("9d4736")
-const HISTORY = Color("3f665e")
-# Pixel-exact regions of the supplied transparent two-row atlas. No redraws.
-const ART_REGIONS = [Rect2(0, 48, 444, 465), Rect2(444, 48, 446, 465), Rect2(890, 80, 443, 433), Rect2(1333, 48, 441, 465), Rect2(0, 522, 444, 365), Rect2(444, 522, 446, 365), Rect2(890, 522, 443, 365), Rect2(1333, 522, 441, 365)]
+# Flat, transparent woodcut symbols: the paper remains visible through the ink gaps.
+const SYMBOLS = {
+	"battle": preload("res://assets/map/seals/battle.svg"),
+	"elite": preload("res://assets/map/seals/elite.svg"),
+	"camp": preload("res://assets/map/seals/camp.svg"),
+	"workshop": preload("res://assets/map/seals/workshop.svg"),
+	"event": preload("res://assets/map/seals/event.svg"),
+	"outpost": preload("res://assets/map/seals/outpost.svg"),
+	"boss": preload("res://assets/map/seals/boss.svg")
+}
+const VICTORY_SEAL = preload("res://assets/map/seals/victory_seal.svg")
+const PAPER = Color("f3f0e7")
+const PAPER_LIGHT = Color("f8f5ed")
+const INK = Color("161713")
+const MUTED = Color("706f66")
+const RED = Color("b32922")
+const STAMP_SECONDS = 0.42
+var stamp_node = -1
+var stamp_elapsed = STAMP_SECONDS
+var decoration_cache: Array = []
+var decoration_key = ""
 const SAVE = "user://route_run_v080.cfg"
 const WEB_SAVE_KEY = "yixing.route_run.v080"
 const LABELS = {"battle": "战", "elite": "精", "camp": "营", "workshop": "坊", "event": "事", "outpost": "寨", "boss": "帅"}
@@ -37,6 +48,7 @@ const DETAILS = {"battle": "战胜守军后选择战利品。", "elite": "较强
 
 func reset_view():
 	selected_node = -1;travel_target = -1;travel_elapsed = 0.0
+	stamp_node = -1;stamp_elapsed = STAMP_SECONDS
 	pointer_id = -2;pointer_dragged = false;focus_needed = true
 func side_layout() -> bool: return not game.mobile_layout or game.compact_landscape
 func map_rect() -> Rect2:
@@ -55,7 +67,7 @@ func scroll_limit() -> float: return maxf(0, content_height() - map_rect().size.
 func content_point(node: Dictionary) -> Vector2:
 	# Uneven terrain, not a centered ladder. Topology is unchanged in generate().
 	var xs = [0.46, 0.15, 0.50, 0.85, 0.22, 0.76, 0.53, 0.13, 0.48, 0.86, 0.24, 0.73, 0.15, 0.49, 0.84, 0.79]
-	var ys = [0.94, 0.82, 0.79, 0.83, 0.69, 0.66, 0.56, 0.45, 0.43, 0.46, 0.33, 0.31, 0.20, 0.18, 0.21, 0.075]
+	var ys = [0.94, 0.82, 0.79, 0.83, 0.69, 0.66, 0.56, 0.45, 0.43, 0.46, 0.33, 0.33, 0.20, 0.18, 0.21, 0.075]
 	var margin = 28.0 if game.mobile_layout else 42.0
 	return Vector2(map_rect().position.x + margin + xs[node.id] * (map_rect().size.x - margin * 2), map_rect().position.y + 32 + ys[node.id] * (content_height() - 80))
 func focus_current():
@@ -86,6 +98,7 @@ func confirm():
 	travel_target = selected_node;selected_node = -1;travel_elapsed = 0.0;pointer_id = -2
 func tick(delta: float):
 	if game.screen != "map": return
+	stamp_elapsed = minf(STAMP_SECONDS, stamp_elapsed + delta)
 	if layout_size != game.ui_size:
 		layout_size = game.ui_size;focus_needed = true;pointer_id = -2
 	if focus_needed: focus_current()
@@ -205,6 +218,7 @@ func complete():
 	game.clear_battle_card_effects()
 	game.selected = -1;game.free_selected = false;game.handui.reset();game.reinforcement_pending = 0
 	game.phase = "play";game.screen = "map";choices = [];page = 0;reset_view()
+	stamp_node = state.current;stamp_elapsed = 0.0
 	save()
 func save():
 	if not active(): return
@@ -306,7 +320,7 @@ func position(node: Dictionary) -> Vector2:
 	return content_point(node) - Vector2(0, scroll_y)
 func home_rect() -> Rect2: return Rect2(24, 12, 100, 44)
 func button(rect: Rect2, label: String, primary: bool = false):
-	game.panel(rect, RED if primary else PAPER_LIGHT, RED if primary else Color("a08a66"))
+	game.panel(rect, INK if primary else PAPER_LIGHT, INK if primary else Color("aaa89c"))
 	var text_size = 18 if rect.size.y >= 58 else 16
 	var width = game.FONT.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, text_size).x
 	game.text_at(rect.get_center() + Vector2(-width * 0.5, text_size * 0.36), label, text_size, PAPER_LIGHT if primary else INK)
@@ -335,77 +349,139 @@ func click(pos: Vector2):
 		if footer_rect(1).has_point(pos): page = mini(maxi(0, (choices.size() - 1) / capacity()), page + 1);return
 		for i in capacity():
 			if row_rect(i).has_point(pos): resolve(page * capacity() + i);return
-func atlas_index(node: Dictionary) -> int:
-	match node.kind:
-		"elite": return 1
-		"camp": return 2
-		"workshop": return 3
-		"event": return 4 if node.id == 1 else 7
-		"outpost": return 5
-		"boss": return 6
-	return 0
 func landmark_width() -> float:
-	return 138.0 if not game.mobile_layout else (118.0 if game.compact_landscape else 108.0)
+	return 102.0 if not game.mobile_layout else (92.0 if game.compact_landscape else 88.0)
 func art_rect(node: Dictionary) -> Rect2:
-	var region = ART_REGIONS[atlas_index(node)]
-	var width = landmark_width() * (1.18 if node.kind == "boss" else 1.0)
-	var height = width * region.size.y / region.size.x
-	return Rect2(position(node) - Vector2(width * 0.5, height - 10), Vector2(width, height))
+	var width = landmark_width() * (1.2 if node.kind == "boss" else 1.0)
+	return Rect2(position(node) - Vector2(width * 0.5, width - 10), Vector2(width, width))
 func hit_rect(node: Dictionary) -> Rect2:
 	var rect = art_rect(node)
-	return Rect2(rect.position - Vector2(4, 2), rect.size + Vector2(8, 35))
+	return Rect2(rect.position - Vector2(6, 3), rect.size + Vector2(12, 36))
+func stamp_rect(node: Dictionary) -> Rect2:
+	var rect = art_rect(node)
+	var side = landmark_width() * 0.50
+	return Rect2(Vector2(rect.end.x - side * 0.25, rect.position.y + 3), Vector2(side, side))
 func centered_text(point: Vector2, value: String, font_size: int, color: Color):
 	var width = game.FONT.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 	game.text_at(point - Vector2(width * 0.5, 0), value, font_size, color)
+func decoration_clear(rect: Rect2) -> bool:
+	# Decoration uses unscrolled content coordinates, never the current viewport.
+	var bounds = Rect2(map_rect().position + Vector2(14, 14), Vector2(map_rect().size.x - 28, content_height() - 28))
+	if not bounds.encloses(rect): return false
+	for node in state.nodes:
+		var reserved = hit_rect(node).merge(stamp_rect(node)).grow(24)
+		reserved.position.y += scroll_y
+		if reserved.intersects(rect): return false
+		for next in node.next:
+			for step in 41:
+				var point = edge_point(content_point(node), content_point(state.nodes[next]), step / 40.0)
+				if rect.grow(18).has_point(point): return false
+	return true
+func decoration_layout() -> Array:
+	var key = str(state.get("seed", 0)) + ":" + str(game.ui_size)
+	if key == decoration_key: return decoration_cache
+	decoration_key = key;decoration_cache = []
+	if not active(): return decoration_cache
+	var random = RandomNumberGenerator.new();random.seed = int(state.seed) + 1409
+	for attempt in 160:
+		var size = Vector2(random.randf_range(52, 92), random.randf_range(25, 40))
+		var rect = Rect2(map_rect().position + Vector2(random.randf_range(18, map_rect().size.x - size.x - 18), random.randf_range(25, content_height() - size.y - 25)), size)
+		if not decoration_clear(rect): continue
+		var separate = true
+		for existing in decoration_cache:
+			if existing.rect.grow(90).intersects(rect): separate = false
+		if not separate: continue
+		decoration_cache.append({"rect": rect, "kind": ["mountains", "river", "fields"][decoration_cache.size() % 3]})
+		if decoration_cache.size() == 5: break
+	return decoration_cache
+func draw_paper():
+	var area = map_rect()
+	game.draw_rect(area, PAPER_LIGHT)
+	# Restrained neutral fibres, not brown vignette, burnt edges or parchment curls.
+	var random = RandomNumberGenerator.new();random.seed = 9631
+	for i in 420:
+		var p = area.position + Vector2(random.randf() * area.size.x, random.randf() * area.size.y)
+		var q = p + Vector2(random.randf_range(1, 5), random.randf_range(-2, 2))
+		game.draw_line(p, q, Color(0.35, 0.34, 0.29, 0.045), 0.7, true)
+	for item in decoration_layout():
+		var r: Rect2 = item.rect
+		r.position.y -= scroll_y
+		var c = Color(0.20, 0.21, 0.18, 0.11)
+		if item.kind == "mountains":
+			for offset in [0.0, 0.32, 0.60]:
+				game.draw_polyline(PackedVector2Array([r.position + r.size * Vector2(offset, 0.9), r.position + r.size * Vector2(offset + 0.16, 0.1 + offset * 0.3), r.position + r.size * Vector2(offset + 0.36, 0.9)]), c, 1.1, true)
+		elif item.kind == "river":
+			for row in 3:
+				var points = PackedVector2Array()
+				for step in 20: points.append(r.position + Vector2(step * r.size.x / 19.0, r.size.y * (0.2 + row * 0.25) + sin(step * 0.42) * 2))
+				game.draw_polyline(points, c, 1.0, true)
+		else:
+			for row in 4: game.draw_line(r.position + Vector2(0, row * r.size.y / 4), r.position + Vector2(r.size.x, row * r.size.y / 4 + 4), c, 1, true)
+			for col in 5: game.draw_line(r.position + Vector2(col * r.size.x / 5, 0), r.position + Vector2(col * r.size.x / 5 + 8, r.size.y), c, 1, true)
 func draw_route_edge(node: Dictionary, target: Dictionary):
 	var traversed = node.id in state.visited and target.id in state.visited
 	var available = node.id == state.current and target.id in legal()
 	var selected = available and target.id == selected_node
-	var points = PackedVector2Array()
-	for step in 49: points.append(edge_point(position(node), position(target), step / 48.0))
-	# Every visible road is a real directed edge; states share exactly this geometry.
-	game.draw_polyline(points, Color("e4cda4"), 8 if selected else 6, true)
-	game.draw_polyline(points, RED if available else (HISTORY if traversed else Color("b09b7d")), 3.0 if available or traversed else 1.6, true)
+	var color = INK if available or traversed else Color("a5a399")
+	var from = position(node);var to = position(target)
+	# Roads stop outside the symbols and their permanent labels. No opaque icon backing.
+	for step in 80:
+		if not traversed and step % 6 >= 4: continue
+		var p = edge_point(from, to, step / 80.0)
+		var q = edge_point(from, to, (step + 1) / 80.0)
+		var hidden = false
+		for obstacle in state.nodes:
+			if hit_rect(obstacle).grow(3).has_point(p) or hit_rect(obstacle).grow(3).has_point(q): hidden = true;break
+			if obstacle.id in state.visited and (stamp_rect(obstacle).grow(5).has_point(p) or stamp_rect(obstacle).grow(5).has_point(q)): hidden = true;break
+		if not hidden: game.draw_line(p, q, color, 2.4 if selected else (1.9 if available or traversed else 1.3), true)
 	if available:
-		for t in [0.35, 0.64]:
-			var p = edge_point(position(node), position(target), t)
-			var q = edge_point(position(node), position(target), t + 0.025)
-			var direction = (q - p).normalized()
-			game.draw_line(p - direction.rotated(0.65) * 7, p, RED, 2, true)
-			game.draw_line(p - direction.rotated(-0.65) * 7, p, RED, 2, true)
+		var p = edge_point(from, to, 0.52)
+		var q = edge_point(from, to, 0.54)
+		var direction = (q - p).normalized()
+		game.draw_line(p - direction.rotated(0.65) * 7, p, INK, 1.8, true)
+		game.draw_line(p - direction.rotated(-0.65) * 7, p, INK, 1.8, true)
+func draw_stamp(node: Dictionary):
+	var rect = stamp_rect(node)
+	var progress = clampf(stamp_elapsed / STAMP_SECONDS, 0, 1) if stamp_node == node.id else 1.0
+	var scale = 1.0 + 0.48 * pow(1.0 - progress, 3)
+	var color = Color.WHITE;color.a = minf(0.94, progress * 4.0)
+	game.draw_set_transform(rect.get_center(), -0.13, Vector2.ONE * scale)
+	game.draw_texture_rect(VICTORY_SEAL, Rect2(-rect.size * 0.5, rect.size), false, color)
+	game.draw_set_transform(Vector2.ZERO)
 func draw_landmark(node: Dictionary):
 	var point = position(node)
 	var available = node.id in legal()
-	var visited = node.id in state.visited
 	var selected = node.id == selected_node
-	var color = RED if available else (HISTORY if visited else MUTED)
+	var rect = art_rect(node)
 	if selected:
-		game.draw_circle(point + Vector2(0, -5), landmark_width() * 0.48, Color(0.98, 0.87, 0.65, 0.45))
-		game.draw_arc(point + Vector2(0, -5), landmark_width() * 0.48, 0.12, PI - 0.12, 40, RED, 2, true)
-	game.draw_texture_rect_region(LANDMARKS, art_rect(node), ART_REGIONS[atlas_index(node)], Color.WHITE if available or visited or selected else Color(0.84, 0.84, 0.78, 0.88))
-	var label = {"battle":"军阵", "elite":"精锐", "camp":"营地", "workshop":"工坊", "event":"渡口" if node.id == 1 else "石桥", "outpost":"关隘", "boss":"终点城寨"}[node.kind]
-	var label_width = 86.0 if node.kind == "boss" else 64.0
-	game.panel(Rect2(point + Vector2(-label_width * 0.5, 13), Vector2(label_width, 25)), Color(0.95, 0.89, 0.76, 0.94), color if available or selected else Color.TRANSPARENT)
-	centered_text(point + Vector2(0, 32), label, 17, color)
-	if available or visited:
-		var badge = point + Vector2(label_width * 0.5 + 7, 25)
-		game.draw_circle(badge, 9, color)
-		centered_text(badge + Vector2(0, 4), "✓" if visited else "·", 13, PAPER_LIGHT)
+		var frame = hit_rect(node).grow(3)
+		for corner in [frame.position, Vector2(frame.end.x, frame.position.y), frame.end, Vector2(frame.position.x, frame.end.y)]:
+			var direction = (frame.get_center() - corner).sign()
+			game.draw_line(corner, corner + Vector2(direction.x * 13, 0), INK, 1.8, true)
+			game.draw_line(corner, corner + Vector2(0, direction.y * 13), INK, 1.8, true)
+	game.draw_texture_rect(SYMBOLS[node.kind], rect, false)
+	var label = {"battle":"战斗", "elite":"精英", "camp":"休整", "workshop":"工坊", "event":"奇遇", "outpost":"关隘", "boss":"决战"}[node.kind]
+	centered_text(point + Vector2(0, 31), label, 19, INK)
+	if available:
+		game.draw_line(point + Vector2(-22, 36), point + Vector2(22, 36), INK, 1.2, true)
+		game.draw_circle(point + Vector2(-30, 25), 2.5, INK)
+	if node.id in state.visited: draw_stamp(node)
 func draw_piece():
-	var piece = march_point(clampf(travel_elapsed / TRAVEL_SECONDS, 0, 1)) if travel_target >= 0 else position(state.nodes[maxi(0, state.current)])
-	# Lift the token slightly; its ground anchor follows the road's cubic exactly.
-	piece += Vector2(0, -22)
-	game.draw_circle(piece + Vector2(2, 6), 22, Color(0.18, 0.15, 0.1, 0.24))
-	game.draw_circle(piece, 23, Color("ad7850"))
-	game.draw_circle(piece - Vector2(0, 3), 22, PAPER_LIGHT)
-	game.draw_arc(piece - Vector2(0, 3), 18, 0, TAU, 48, RED, 1.7, true)
-	centered_text(piece + Vector2(0, 5), {"king":"帅", "horse":"马", "artillery":"炮"}.get(game.player_skill, "帅"), 25, RED)
+	var piece: Vector2
+	if travel_target >= 0:
+		piece = march_point(clampf(travel_elapsed / TRAVEL_SECONDS, 0, 1)) - Vector2(0, 15)
+	else:
+		var rect = art_rect(state.nodes[maxi(0, state.current)])
+		piece = Vector2(rect.position.x - 18, rect.get_center().y + 8)
+	# A flat vermilion commander mark, not a wooden chess-piece sticker.
+	game.draw_circle(piece, 21, PAPER_LIGHT)
+	game.draw_arc(piece, 21, 0, TAU, 48, RED, 2.5, true)
+	centered_text(piece + Vector2(0, 9), "帅", 27, RED)
 func draw_map():
 	var area = map_rect()
-	game.draw_texture_rect(LANDSCAPE, Rect2(area.position - Vector2(0, scroll_y), Vector2(area.size.x, content_height())), false)
+	draw_paper()
 	for node in state.nodes:
 		for next in node.next: draw_route_edge(node, state.nodes[next])
-	# Back-to-front order lets nearer landmarks sit naturally over the path.
 	for id in range(state.nodes.size() - 1, -1, -1): draw_landmark(state.nodes[id])
 	draw_piece()
 	# Fixed opaque masks provide a strict visual viewport for the immediate-mode canvas.
@@ -413,30 +489,29 @@ func draw_map():
 	game.draw_rect(Rect2(0, area.end.y, game.ui_size.x, game.ui_size.y - area.end.y), PAPER)
 	game.draw_rect(Rect2(0, area.position.y, area.position.x, area.size.y), PAPER)
 	game.draw_rect(Rect2(area.end.x, area.position.y, game.ui_size.x - area.end.x, area.size.y), PAPER)
-	game.draw_rect(area, Color("937b58"), false, 2)
-	game.draw_rect(area.grow(-5), Color(0.42, 0.35, 0.23, 0.30), false, 1)
+	game.draw_rect(area, Color("c4c1b5"), false, 1)
 	if scroll_limit() > 0:
 		var track = Rect2(area.end.x - 6, area.position.y + 8, 3, area.size.y - 16)
-		game.draw_rect(track, Color(0.27, 0.25, 0.20, 0.16))
+		game.draw_rect(track, Color(0.27, 0.25, 0.20, 0.12))
 		var thumb_h = maxf(24, track.size.y * area.size.y / content_height())
-		game.draw_rect(Rect2(track.position + Vector2(0, (track.size.y - thumb_h) * scroll_y / scroll_limit()), Vector2(3, thumb_h)), Color("9d7850"))
+		game.draw_rect(Rect2(track.position + Vector2(0, (track.size.y - thumb_h) * scroll_y / scroll_limit()), Vector2(3, thumb_h)), MUTED)
 func draw_header():
 	button(home_rect(), "‹ 首页")
 	var title_x = 146.0 if game.compact_landscape else 150.0
 	game.text_at(Vector2(title_x, 47), "弈 行", 33, INK)
-	var subtitle = "第一章 · 山河棋路"
+	var subtitle = "第一章 · 朱印行军"
 	if game.compact_landscape:
 		game.text_at(Vector2(265, 45), subtitle, 21, INK)
-		game.text_at(Vector2(16, 78), "已行 %d / 8  ·  %s  ·  拖动山河查看前路" % [state.visited.size(), "敌将2命" if state.weakened else "敌将3命"], 16, MUTED)
+		game.text_at(Vector2(16, 78), "已行 %d / 8  ·  %s  ·  拖动军图查看前路" % [state.visited.size(), "敌将2命" if state.weakened else "敌将3命"], 16, MUTED)
 	else:
 		game.text_at(Vector2(26, 92), subtitle, 23, INK)
 		game.text_at(Vector2(game.ui_size.x - (370 if not game.mobile_layout else 192), 91), "已行 %d / 8  ·  %s" % [state.visited.size(), "敌将2命" if state.weakened else "敌将3命"], 16, MUTED)
 	if not game.mobile_layout:
 		game.text_at(Vector2(290, 45), "一子入山河，百战成归途", 18, MUTED)
-		game.text_at(Vector2(1050, 45), game.BUILD_VERSION + " · 手绘山河", 16, MUTED)
+		game.text_at(Vector2(1050, 45), game.BUILD_VERSION + " · 朱印军符", 16, MUTED)
 func draw_info():
 	var info = info_rect()
-	game.panel(info, PAPER_LIGHT, Color("baa17c"))
+	game.panel(info, PAPER_LIGHT, Color("c4c1b5"))
 	var x = info.position.x + 16
 	var y = info.position.y + 29
 	var width = info.size.x - 32
@@ -444,18 +519,17 @@ func draw_info():
 		var node = state.nodes[selected_node]
 		var reachable = selected_node in legal()
 		var status = "可出发" if reachable else ("已行经" if selected_node in state.visited else "当前不可达")
-		game.text_at(Vector2(x, y), TITLES[node.kind] + " · " + status, 20, RED if reachable else INK)
+		game.text_at(Vector2(x, y), TITLES[node.kind] + " · " + status, 20, INK)
 		game.wrapped_text(DETAILS[node.kind], Rect2(x, y + 8, width, 48), 16, MUTED)
 		if side_layout():
-			game.wrapped_text("选择只作查看。确认后，棋子沿真实道路行进；抵达才会进入节点。" if reachable else "只能沿当前地标相连的朱红道路前进，不能跳关或回头。", Rect2(x, y + 86, width, 90), 17, MUTED)
+			game.wrapped_text("选择只作查看。确认后，棋子沿真实道路行进；抵达才会进入节点。" if reachable else "只能沿当前地标相连的深墨箭头前进，不能跳关或回头。", Rect2(x, y + 86, width, 90), 17, MUTED)
 			if info.size.y > 600:
-				var region = ART_REGIONS[atlas_index(node)]
-				var art_size = Vector2(width - 30, (width - 30) * region.size.y / region.size.x)
-				game.draw_texture_rect_region(LANDMARKS, Rect2(Vector2(x + 15, y + 195), art_size), region)
+				var side = minf(width - 50, 210)
+				game.draw_texture_rect(SYMBOLS[node.kind], Rect2(Vector2(x + (width - side) * 0.5, y + 195), Vector2.ONE * side), false)
 		button(cancel_rect(), "取消选择")
 		if reachable: button(confirm_rect(), "确认出发  ↑", true)
 	elif travel_target >= 0:
-		game.text_at(Vector2(x, y), "沿途行军中…", 22, RED)
+		game.text_at(Vector2(x, y), "沿途行军中…", 22, INK)
 		game.wrapped_text("正在前往「%s」，抵达后进入。" % TITLES[state.nodes[travel_target].kind], Rect2(x, y + 13, width, 56), 16, MUTED)
 		var progress = clampf(travel_elapsed / TRAVEL_SECONDS, 0, 1)
 		game.draw_rect(Rect2(x, info.end.y - 30, width, 4), Color("cbbb9c"))
@@ -464,13 +538,12 @@ func draw_info():
 		game.text_at(Vector2(x, y), "山河在前，择路而行", 22, INK)
 		game.text_at(Vector2(x, y + 29), "先选地标查看，再确认出发", 16, MUTED)
 		if side_layout():
-			game.wrapped_text("从田野渡河，循山路攻入终点城寨。每次分路，都会改变这一局的牌组。", Rect2(x, y + 65, width, 84), 18, MUTED)
-			game.text_at(Vector2(x, y + 180), "朱红 · 当前可达", 18, RED)
-			game.text_at(Vector2(x, y + 215), "青墨 · 已经走过", 18, HISTORY)
-			game.text_at(Vector2(x, y + 250), "淡墨 · 尚未行经", 18, MUTED)
+			game.wrapped_text("我方执红，黑印标记前路。通关盖下将军朱印，分路决定牌组。", Rect2(x, y + 65, width, 84), 18, MUTED)
+			game.text_at(Vector2(x, y + 180), "墨线箭头 · 当前可达", 18, INK)
+			game.text_at(Vector2(x, y + 215), "将军朱印 · 已经走过", 18, RED)
+			game.text_at(Vector2(x, y + 250), "黑色军符 · 节点类别", 18, INK)
 			if info.size.y > 600:
-				game.wrapped_text("滚轮 / 拖动查看山河
-点击「回到当前」定位棋子", Rect2(x, y + 320, width, 80), 17, MUTED)
+				game.wrapped_text("滚轮或拖动查看军图；点击「回到当前」定位棋子。", Rect2(x, y + 320, width, 80), 17, MUTED)
 		button(footer_rect(0), "收起牌组" if deck_view else "查看牌组")
 		button(center_rect(), "回到当前")
 func draw_deck():

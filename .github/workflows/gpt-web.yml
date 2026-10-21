@@ -63,7 +63,7 @@ jobs:
             build/web/
             build/export.log
             build/browser.log
-            verification/v0.8.0/browser/
+            verification/v0.9.0/browser/
             verification/latest/
           include-hidden-files: true
       - name: Commit Web export to gh-pages

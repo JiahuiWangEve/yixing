@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.8.0"
+const BUILD_VERSION = "v0.9.0"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0

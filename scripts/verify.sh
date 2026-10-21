@@ -38,3 +38,5 @@ run card-rebalance --script "$root/tests/card_rebalance_checks.gd"
 run current-tutorials --script "$root/tests/current_tutorial_checks.gd"
 
 run space-shortcut --script "$root/tests/space_shortcut_checks.gd"
+
+run seal-map --script "$root/tests/seal_map_checks.gd"
