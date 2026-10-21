@@ -223,6 +223,7 @@ func check_reward_return():
 
 func check_choice_resume():
 	fresh();route.enter(0);game.debug_skip();game.choose_reward(-1)
+	route.state.nodes[1].event_id = "herbalist"
 	route.enter(1)
 	var original_choices = route.choices.duplicate(true)
 	var cards = game.collection.duplicate()
@@ -232,7 +233,9 @@ func check_choice_resume():
 	check(game.screen == "route_choice" and game.collection == cards, "drag across choice cannot activate it")
 	touch(choice_pos, true);touch(choice_pos, false, 0, true)
 	check(game.screen == "route_choice" and route.state.pending == 1, "canceled choice touch cannot resolve node")
-	tap(choice_pos);cards.append("spear")
+	tap(choice_pos)
+	check(game.screen == "route_choice" and game.collection == cards, "choice release previews without mutation")
+	tap(route.row_rect(0).get_center());cards.append("breath")
 	check(game.screen == "map" and route.state.current == 1 and game.collection == cards, "choice resolves on release exactly once")
 	touch(choice_pos, false)
 	check(game.collection == cards and route.state.visited == [0, 1], "late duplicate choice release cannot grant another card")

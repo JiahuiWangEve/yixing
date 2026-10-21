@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.12.0"
+const BUILD_VERSION = "v0.13.0"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -171,8 +171,8 @@ const INK = THEME.INK
 const GOLD = THEME.GOLD
 const RED = THEME.DANGER
 const CARDS = {
-	"sword_plus": ["短剑·淬锋", 1, "对正交相邻敌子造成2点伤害（营地升级）", "攻"],
-	"spear_plus": ["长枪·淬锋", 2, "直线两格内造成2点伤害，不穿透（营地升级）", "攻"],
+	"sword_plus": ["短剑·淬锋", 1, "对正交相邻敌子造成2点伤害（强化）", "攻"],
+	"spear_plus": ["长枪·淬锋", 2, "直线两格内造成2点伤害，不穿透（强化）", "攻"],
 	"sword": ["短剑", 1, "对正交相邻敌子造成1点伤害", "攻"],
 	"diagonal": ["斜斩", 1, "对斜角相邻敌子造成1点伤害", "攻"],
 	"spear": ["长枪", 2, "直线两格内造成1点伤害，不穿透", "攻"],
@@ -387,9 +387,11 @@ func choose_reward(index: int = -1):
 	if screen != "game" or phase != "reward" or input_lock > 0 or navigation_lock > 0 or index < -1 or index >= rewards.size(): return
 	var data = {"index": index, "mode": "skip" if index < 0 else "add"}
 	if not tutorial_allows("reward", data): return
+	if route.rewards_blocked() and index >= 0: return
 	if index >= 0: collection.append(rewards[index])
 	finish_reward(data)
 func delete_reward(index: int):
+	if route.rewards_blocked(): return
 	if screen != "game" or phase != "reward" or input_lock > 0 or navigation_lock > 0 or index < 0 or index >= collection.size(): return
 	var data = {"index": index, "mode": "remove"}
 	if not tutorial_allows("reward", data): return
@@ -737,7 +739,9 @@ func play_card(i: int, p: Vector2i):
 func settle_victory():
 	if screen != "game" or phase not in ["play", "discard"]: return
 	cancel_gesture();clear_effects();rewardui.reset();clear_battle_card_effects()
-	if route.active(): history.clear()
+	if route.active():
+		history.clear()
+		route.battle_victory()
 	selected = -1;free_selected = false;reinforcement_pending = 0;input_lock = 0;navigation_lock = 0
 	if stage == CAMPAIGN.LAST_STAGE:
 		phase = "win";log_line("章节突破！" if route.active() else "六关突破！")
@@ -746,7 +750,7 @@ func settle_victory():
 	else:
 		phase = "reward";roll_rewards()
 		if route.active():
-			rewards = route.state.nodes[route.state.pending].loot.duplicate()
+			rewards = [] if route.rewards_blocked() else route.state.nodes[route.state.pending].loot.duplicate()
 			route.save()
 func debug_skip_rect() -> Rect2:
 	if compact_landscape: return Rect2(410, 440, 116, 44)
@@ -1042,6 +1046,8 @@ func _draw():
 	if phase in ["dead", "win"] and input_lock <= 0:
 		draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.OVERLAY);text_at(Vector2(24, ui_size.y * 0.4) if mobile_layout else Vector2(410, 380), ("山河已定 · 第一章通关" if route.active() else "六关突破 · 原型通关") if phase == "win" else "此局已尽 · 再弈一局", 28 if mobile_layout else 36, THEME.HEADING)
 		text_at(Vector2(24, ui_size.y * 0.4 + 50) if mobile_layout else Vector2(430, 435), "重新开局，再行山河" if phase == "win" else "可悔棋，或重新开局", 20, THEME.LIGHT)
+		if phase == "win" and route.rewards_blocked():
+			text_at(Vector2(24, ui_size.y * 0.4 + 90) if mobile_layout else Vector2(410, 480), "兵书代价 · 本战收益抵消，剩余 %d 场" % route.state.reward_debt, 18, THEME.LIGHT)
 		if phase == "dead": text_at(Vector2(24, ui_size.y * 0.4 + 90) if mobile_layout else Vector2(480, 480), notice, 20, RED)
 		panel(RESTART_RECT, THEME.PAPER_SELECTED);text_at(RESTART_RECT.position + Vector2(16, 32 if mobile_layout else 27), "重新开局", 18, THEME.INK)
 

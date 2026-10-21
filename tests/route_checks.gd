@@ -15,6 +15,14 @@ func paths(id: int, path: Array, nodes: Array) -> Array:
 func skip_reward():
 	game.input_lock = 0;game.navigation_lock = 0
 	game.debug_skip();game.choose_reward(-1)
+func act(action: String, index: int = -1):
+	for i in game.route.choices.size():
+		var choice = game.route.choices[i]
+		if choice.action == action and (index < 0 or choice.get("index", -1) == index):
+			game.route.resolve(i)
+			return
+	check(false, "missing route action: " + action)
+func leave(): act("leave")
 func run():
 	game = load("res://main.tscn").instantiate();root.add_child(game)
 	for seed_number in 100:
@@ -27,14 +35,14 @@ func run():
 		var seen = []
 		for path in paths(0, [], nodes):
 			check(path.size() == 8 and nodes[path.back()].kind == "boss", "eight steps terminate at boss")
-			var camps = 0;var branches = 0
+			var workshops = 0;var branches = 0
 			for i in path.size():
 				var n = nodes[path[i]]
 				if n.id not in seen: seen.append(n.id)
-				if n.kind == "camp": camps += 1
+				if n.kind == "workshop": workshops += 1
 				if n.next.size() > 1: branches += 1
 				if i > 0: check(not (n.kind == "elite" and nodes[path[i-1]].kind == "elite"), "no consecutive elites")
-			check(camps > 0 and branches >= 3, "camp and three branch decisions on every route")
+			check(workshops > 0 and branches >= 3, "workshop and three branch decisions on every route")
 		check(seen.size() == 16, "every node reachable")
 	for identity in ["king", "horse", "artillery"]:
 		game.player_skill = identity;game.new_expedition()
@@ -49,36 +57,37 @@ func run():
 		game.choose_reward(0);var count = game.collection.size();game.choose_reward(0)
 		check(game.collection.size() == count and game.screen == "map" and game.route.state.visited == [0], "reward resolves once")
 		check(game.hand.is_empty() and game.enemies.is_empty() and game.energy == 0 and game.tuna_turns == 0, "map clears battle state")
-		game.route.enter(1);game.route.resolve(0);game.route.resolve(0)
-		check(game.route.state.visited.size() == 2 and game.route.state.prepared, "event once")
-		game.route.enter(4)
-		check(game.hand.size() == 1 and not game.route.state.prepared, "prepared draw consumed once")
+		game.route.enter(3)
+		act("prepare");act("confirm")
+		check(game.route.state.prepared, "rest prepares next battle")
+		game.route.enter(5)
+		check(game.screen == "game" and game.encounter_state.config.tier == "battle", "former weakening gate now ordinary battle")
+		check(game.hand.size() == 2 and not game.route.state.prepared, "prepared two draws consumed once")
 		skip_reward();game.route.enter(6)
-		game.route.resolve(0)
-		check("sword_plus" in game.collection, "camp upgrades single instance")
+		act("upgrade", 0);act("confirm")
+		check("sword_plus" in game.collection, "workshop upgrades single instance")
 		game.route.enter(7)
-		check("sword_plus" in game.deck and not game.history.can_undo(), "upgrade crosses battle; map cannot undo")
-		if identity == "artillery": check("deploy" in game.deck, "consumable restored")
+		check("sword_plus" in game.deck + game.hand and not game.history.can_undo(), "upgrade crosses battle; map cannot undo")
+		if identity == "artillery": check("deploy" in game.deck + game.hand, "consumable restored")
 		game.player = Vector2i(4, 9);game.enemies = [];game.add_enemy("g", Vector2i(4, 8), 3)
 		game.hand = ["sword_plus"];game.hand_ids = [];game.input_lock = 0;game.energy = 3;game.play_card(0, Vector2i(4, 8))
 		check(game.enemies[0].hp == 1 and game.discard == ["sword_plus"], "upgraded damage and discard")
 		game.undo_action();check(game.hand == ["sword_plus"] and game.enemies[0].hp == 3, "upgraded undo")
 		game.route.save();game.show_home();check(game.route.resume() and game.hand == ["sword_plus"], "battle reload")
-		skip_reward();game.route.enter(10);game.route.resolve(0);game.route.enter(12);game.route.resolve(game.route.choices.size()-2)
+		skip_reward();game.route.enter(10);leave();game.route.enter(12);leave()
 		game.route.enter(15);game.debug_skip();game.debug_skip()
 		check(game.phase == "win" and game.route.state.done and game.skill_system.horse_unlocked, "boss chapter win and unlock")
 		check(not game.route.resume(), "finished run cannot replay rewards")
 	game.new_expedition();game.route.enter(0);skip_reward();game.route.enter(3)
-	game.collection = [];game.route.choices = game.route.options();game.route.resolve(0)
-	check(game.screen == "map" and game.collection.is_empty(), "empty workshop can leave")
-	game.route.enter(5);game.route.resolve(0)
-	check(game.route.state.weakened, "outpost sets visible defense reduction")
-	game.route.enter(6);game.route.resolve(0);game.route.enter(8)
-	game.collection = ["sword_plus", "sword"];game.route.choices = game.route.options();game.route.resolve(0);game.route.resolve(0)
-	check(game.collection == ["sword"], "workshop removes only selected upgraded instance once")
-	game.route.enter(10);game.route.resolve(0);game.route.enter(12);game.route.resolve(0);game.route.enter(15)
-	check(game.enemies[0].hp == 8, "boss defense actually weakened")
-	game.new_expedition();check(game.route.state.visited.is_empty() and not game.route.state.weakened and "sword_plus" not in game.collection, "new run resets chapter")
+	game.collection = [];game.route.choices = game.route.options();leave()
+	check(game.screen == "map" and game.collection.is_empty(), "empty rest can leave")
+	game.route.enter(5);skip_reward();game.route.enter(6);leave();game.route.enter(8)
+	game.collection = ["sword_plus", "sword"];game.route.choices = game.route.options()
+	act("select_remove");act("remove", 0);act("confirm")
+	check(game.collection == ["sword"], "rest removes only selected upgraded instance once")
+	game.route.enter(10);leave();game.route.enter(12);leave();game.route.enter(15)
+	check(game.enemies[0].hp == 9, "boss baseline remains nine without removed weakening event")
+	game.new_expedition();check(game.route.state.visited.is_empty() and "weakened" not in game.route.state and "sword_plus" not in game.collection, "new run resets chapter")
 	game.start_debug_stage(6)
 	for i in 5: game.navigation_lock = 0;game.choose_reward(-1)
 	game.debug_skip();check(game.phase == "win" and not game.route.active(), "legacy debug retained")

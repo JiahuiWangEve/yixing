@@ -47,7 +47,7 @@ func run():
 		route.tick(0.5)
 		assert(game.screen == "route_choice" and route.state.pending == 1)
 		await capture(viewport, game, "native-event" + suffix)
-		route.resolve(0);route.tick(0)
+		route.resolve(route.choices.size() - 1);route.tick(0)
 		route.scroll_y = 0;route.selected_node = 15
 		await capture(viewport, game, "native-summit" + suffix)
 		route.selected_node = -1;route.deck_view = true

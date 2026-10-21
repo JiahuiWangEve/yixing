@@ -68,6 +68,9 @@ func add_hit_index(pos: Vector2) -> int:
 
 func click(pos: Vector2):
 	if game.screen != "game" or game.phase != "reward" or game.input_lock > 0 or game.navigation_lock > 0: return
+	if game.route.rewards_blocked():
+		if confirm_rect().has_point(pos): game.choose_reward(-1)
+		return
 	if mode == "choice":
 		match choice_hit_index(pos):
 			0: mode = "add";selected = -1;page = 0
@@ -97,6 +100,7 @@ func title_position() -> Vector2:
 	if game.compact_landscape: return Vector2(24, 112)
 	return Vector2(24, 85)
 func title() -> String:
+	if game.route.rewards_blocked(): return "破阵成功 · 本战收益抵消"
 	if mode == "add": return "加牌 · 选择 1 张新牌"
 	if mode == "remove": return "删牌 · 永久移除 1 张"
 	if game.debug_remaining > 0: return "预选奖励 %d / %d" % [game.debug_reward_total - game.debug_remaining + 1, game.debug_reward_total]
@@ -116,6 +120,12 @@ func _count(id: String) -> int:
 func draw():
 	game.draw_rect(Rect2(Vector2.ZERO, game.ui_size), game.THEME.OVERLAY)
 	game.text_at(title_position(), title(), 24 if game.mobile_layout else 30, game.THEME.HEADING)
+	if game.route.rewards_blocked():
+		var pos = title_position() + Vector2(0, 50)
+		game.wrapped_text("兵书抄录代价：本战不获得加牌、删牌或其他战后奖励。行军进度照常推进。", Rect2(pos, Vector2(game.ui_size.x - pos.x - 24, 110)), 18, game.THEME.LIGHT)
+		game.text_at(pos + Vector2(0, 130), "之后仍有 %d 场战斗无收益" % game.route.state.reward_debt, 18, game.THEME.HEADING)
+		_button(confirm_rect(), "返回山河图")
+		return
 	match mode:
 		"choice": _draw_choice()
 		"add": _draw_add()

@@ -344,7 +344,7 @@ func check_save_isolation():
 	fresh("horse", true)
 	game.route.save()
 	var current = ConfigFile.new()
-	check(current.load(game.route.SAVE) == OK and current.get_value("run", "version") == 3, "current saves use version three")
+	check(current.load(game.route.SAVE) == OK and current.get_value("run", "version") == 4, "current saves use version four")
 	check(game.route.SAVE == "user://route_run_v0100.cfg" and game.route.WEB_SAVE_KEY == "yixing.route_run.v0100", "native and Web save namespaces isolate this demo revision")
 	var legacy = ConfigFile.new();legacy.parse(current.encode_to_text())
 	legacy.set_value("run", "version", 1)
@@ -417,12 +417,12 @@ func check_stage_cleanup_and_camp():
 	game.active_displacements = 2;game.shield_charges = 1;game.reload_ready = true;game.queue_bleed(0, 2)
 	game.debug_skip();game.choose_reward(-1)
 	check(game.screen == "map" and game.active_displacements == 0 and game.shield_charges == 0 and not game.reload_ready and game.pending_bleeds.is_empty(), "map return clears every battle-only buff and delayed effect")
-	game.route.enter(1);game.route.resolve(0);game.route.enter(4);game.debug_skip();game.choose_reward(-1);game.route.enter(6)
+	game.route.enter(3);game.route.resolve(game.route.choices.size() - 1);game.route.enter(5);game.debug_skip();game.choose_reward(-1);game.route.enter(6)
 	game.collection = ["sword", "spear", "pierce", "sweep", "guard", "permanent_stake", "reload", "chain_assault"]
 	var options = game.route.options();var upgraded = []
 	for option in options:
 		if option.action == "upgrade": upgraded.append(game.collection[option.index])
-	check(exact_cards(upgraded, ["sword", "spear"]), "camp still upgrades only sword and spear, with no accidental generic plus cards")
+	check(exact_cards(upgraded, ["sword", "spear"]), "workshop upgrades only sword and spear, with no accidental generic plus cards")
 
 func check_text_layout():
 	var ids = ["sweep", "shock", "pierce", "guard", "suppress", "chain_assault", "permanent_stake", "reload"]

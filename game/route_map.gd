@@ -4,11 +4,10 @@ extends RefCounted
 # Flat, transparent woodcut symbols: the paper remains visible through the ink gaps.
 const SYMBOLS = {
 	"battle": preload("res://assets/map/seals/battle.svg"),
-	"elite": preload("res://assets/map/seals/elite.svg"),
+	"elite": preload("res://assets/map/seals/outpost.svg"),
 	"camp": preload("res://assets/map/seals/camp.svg"),
 	"workshop": preload("res://assets/map/seals/workshop.svg"),
 	"event": preload("res://assets/map/seals/event.svg"),
-	"outpost": preload("res://assets/map/seals/outpost.svg"),
 	"boss": preload("res://assets/map/seals/boss.svg")
 }
 const VICTORY_SEAL = preload("res://assets/map/seals/victory_seal.svg")
@@ -71,7 +70,13 @@ func ensure_road_cache():
 			road_cache[Vector2i(node.id, next)] = {"solid": solid, "dashed": dashed, "from": from, "to": to, "bounds": Rect2(from, Vector2.ZERO).expand(to).grow(8)}
 const SAVE = "user://route_run_v0100.cfg"
 const WEB_SAVE_KEY = "yixing.route_run.v0100"
-const LABELS = {"battle": "战", "elite": "精", "camp": "营", "workshop": "坊", "event": "事", "outpost": "寨", "boss": "帅"}
+const UPGRADES = preload("res://card_upgrades.gd")
+const EVENT_IDS = ["herbalist", "merchant", "manual"]
+const EVENT_TITLES = {"herbalist": "药庐", "merchant": "行商", "manual": "兵书"}
+var choice_mode = "root"
+var pending_choice: Dictionary = {}
+var merchant_offer = -1
+const LABELS = {"battle": "战", "elite": "关", "camp": "营", "workshop": "坊", "event": "事", "boss": "帅"}
 var game
 var state: Dictionary = {}
 var choices: Array = []
@@ -90,8 +95,8 @@ var pointer_last = Vector2.ZERO
 var pointer_dragged = false
 var pointer_scroll = false
 var layout_size = Vector2.ZERO
-const TITLES = {"battle": "军旗阵地", "elite": "精锐军阵", "camp": "行军营地", "workshop": "山间工坊", "event": "渡口偶遇", "outpost": "关隘据点", "boss": "终点城寨"}
-const DETAILS = {"battle": "战胜守军后选择战利品。", "elite": "较强敌阵；胜利后选择战利品。", "camp": "升级一张剑或枪，或为下一战整备。", "workshop": "永久删除一张牌，也可直接离开。", "event": "借渡整备，或访师获得一张长枪。", "outpost": "破寨令章末敌将生命由9降为8。", "boss": "击败敌将即完成本章。"}
+const TITLES = {"battle": "军旗阵地", "elite": "关隘", "camp": "休整", "workshop": "工坊", "event": "奇遇", "boss": "终点城寨"}
+const DETAILS = {"battle": "战胜守军后选择战利品。", "elite": "关隘精英守军；敌将5血，战胜后选择战利品。", "camp": "轻装上阵：删一张牌；养精蓄锐：下一战初始多抽2张。", "workshop": "强化一张可强化的永久牌。", "event": "药庐、行商、兵书各有三分之一概率，生成后固定。", "boss": "敌将9血；击败敌将即完成本章。"}
 
 func reset_view():
 	selected_node = -1;travel_target = -1;travel_elapsed = 0.0
@@ -200,15 +205,19 @@ func active() -> bool: return not state.is_empty()
 func generate(seed_number: int):
 	var random = RandomNumberGenerator.new()
 	random.seed = seed_number
-	state = {"seed": seed_number, "nodes": [], "current": -1, "visited": [], "pending": -1, "prepared": false, "weakened": false, "done": false}
+	state = {"seed": seed_number, "nodes": [], "current": -1, "visited": [], "pending": -1, "prepared": false, "reward_debt": 0, "reward_blocked": false, "victory_recorded": false, "last_result": "", "done": false}
 	var rows = [[1], [0, 1, 2], [0, 2], [1], [0, 1, 2], [0, 2], [0, 1, 2], [1]]
-	var types = [["battle"], ["event", "elite", "workshop"], ["battle", "outpost"], ["camp"], ["battle", "workshop", "elite"], ["event", "battle"], ["camp", "battle", "workshop"], ["boss"]]
+	var types = [["battle"], ["event", "elite", "camp"], ["battle", "battle"], ["workshop"], ["battle", "camp", "elite"], ["event", "battle"], ["workshop", "battle", "camp"], ["boss"]]
 	for row in rows.size():
 		for col in rows[row].size():
 			var loot = game.PROFILES.draw_rewards(game.player_skill, random)
 			state.nodes.append({"id": state.nodes.size(), "row": row, "lane": rows[row][col], "kind": types[row][col], "next": [], "loot": loot, "layout": clampi(row + random.randi_range(0, 1), 1, 5)})
 	for node in state.nodes:
 		node.encounter = game.ENCOUNTERS.node_config(node.kind, node.row, random)
+		if node.kind == "event":
+			node.event_id = EVENT_IDS[random.randi_range(0, EVENT_IDS.size() - 1)]
+			node.offers = game.PROFILES.draw_rewards(game.player_skill, random)
+			node.upgrade_seed = random.randi()
 	for node in state.nodes:
 		for target in state.nodes:
 			if target.row == node.row + 1 and (abs(target.lane - node.lane) <= 1 or rows[node.row].size() == 1 or rows[target.row].size() == 1): node.next.append(target.id)
@@ -220,48 +229,120 @@ func enter(id: int):
 	if game.screen != "map" or id not in legal(): return
 	state.pending = id
 	var node = state.nodes[id]
-	deck_view = false;choices = []
+	deck_view = false;choices = [];choice_mode = "root";pending_choice = {};merchant_offer = -1;page = 0
 	if node.kind in ["battle", "elite", "boss"]:
 		game.stage = 6 if node.kind == "boss" else (maxi(4, node.layout) if node.kind == "elite" else node.layout)
+		state.reward_blocked = false;state.victory_recorded = false
 		game.screen = "game";game.start_stage()
-		if node.kind == "boss" and state.weakened:
-			for enemy in game.enemies:
-				if enemy.kind == "g": enemy.hp = 8;enemy.max_hp = 8
 		if state.prepared:
-			state.prepared = false;game.draw_card()
+			state.prepared = false;game.draw_card();game.draw_card()
+			game.notice = "养精蓄锐：开战额外抽2张牌。"
 	else:
 		game.screen = "route_choice"
 		choices = options()
 	save()
+func event_title(node: Dictionary) -> String:
+	return EVENT_TITLES.get(node.get("event_id", ""), "奇遇") if node.kind == "event" else TITLES[node.kind]
+func refresh_choices():
+	page = 0;choices = options()
+func card_label(index: int) -> String:
+	return "「%s」第%d张" % [game.CARDS[game.collection[index]][0], index + 1]
+func random_upgrade_index() -> int:
+	var eligible = UPGRADES.eligible_indices(game.collection)
+	if eligible.is_empty(): return -1
+	var random = RandomNumberGenerator.new()
+	random.seed = state.nodes[state.pending].upgrade_seed
+	return eligible[random.randi_range(0, eligible.size() - 1)]
 func options() -> Array:
-	var kind = state.nodes[state.pending].kind
+	var node = state.nodes[state.pending]
 	var result = []
-	if kind == "camp":
+	if choice_mode == "confirm":
+		return [{"label": "确认 · " + pending_choice.label, "action": "confirm"}, {"label": "取消 · 不作改变", "action": "back"}]
+	if choice_mode in ["remove", "copy", "exchange"]:
 		for i in game.collection.size():
-			if game.collection[i] in ["sword", "spear"]: result.append({"label": "升级「%s」第%d张 · 伤害+1" % [game.CARDS[game.collection[i]][0], i + 1], "action": "upgrade", "index": i})
-		result.append({"label": "整备 · 下一战初始额外抽1张", "action": "prepare"})
-	elif kind == "workshop":
-		for i in game.collection.size(): result.append({"label": "删除「%s」第%d张" % [game.CARDS[game.collection[i]][0], i + 1], "action": "remove", "index": i})
-	elif kind == "outpost":
-		result.append({"label": "破寨 · 章末敌将生命由9降为8", "action": "weaken"})
-	else:
-		result.append({"label": "借渡 · 下一战初始额外抽1张", "action": "prepare"})
-		result.append({"label": "访师 · 获得一张长枪", "action": "card"})
-	result.append({"label": "离开 · 保持牌组", "action": "leave"})
+			var action = choice_mode
+			var label = {"remove": "删除", "copy": "复制", "exchange": "交出"}[action] + card_label(i)
+			if action == "copy": label += " · 无收益场次+2"
+			if action == "exchange": label += " → " + game.CARDS[node.offers[merchant_offer]][0]
+			result.append({"label": label, "action": action, "index": i, "offer": merchant_offer})
+		result.append({"label": "取消 · 返回选项", "action": "back"})
+		return result
+	if node.kind == "workshop":
+		for i in UPGRADES.eligible_indices(game.collection):
+			result.append({"label": "强化" + card_label(i) + " · " + UPGRADES.description(game.collection[i]), "action": "upgrade", "index": i})
+		if result.is_empty(): result.append({"label": "没有可强化的牌", "action": "disabled"})
+	elif node.kind == "camp":
+		result.append({"label": "轻装上阵 · 删除一张永久牌" if not game.collection.is_empty() else "轻装上阵 · 牌组已空", "action": "select_remove" if not game.collection.is_empty() else "disabled"})
+		result.append({"label": "养精蓄锐 · 下一战初始多抽2张" if not state.prepared else "已养精蓄锐 · 额外抽牌不叠加", "action": "prepare" if not state.prepared else "disabled"})
+	elif node.event_id == "herbalist":
+		result.append({"label": "药庐疗养 · 生命+1（上限5）" if game.lives < 5 else "生命已达上限5 · 无需疗养", "action": "heal" if game.lives < 5 else "disabled"})
+		result.append({"label": "取调息方 · 获得一张调息", "action": "breath"})
+	elif node.event_id == "merchant":
+		for i in node.offers.size():
+			result.append({"label": "换取「%s」· 交出一张永久牌" % game.CARDS[node.offers[i]][0], "action": "select_exchange", "offer": i})
+	elif node.event_id == "manual":
+		result.append({"label": "抄录兵书 · 复制任意永久牌；无收益场次+2" if not game.collection.is_empty() else "抄录兵书 · 牌组已空，无法复制", "action": "select_copy" if not game.collection.is_empty() else "disabled"})
+		result.append({"label": "只记口诀 · 随机强化一张可强化牌" if random_upgrade_index() >= 0 else "只记口诀 · 没有可强化的牌", "action": "random_upgrade" if random_upgrade_index() >= 0 else "disabled"})
+	result.append({"label": "离开 · 保持现状", "action": "leave"})
 	return result
 func resolve(index: int):
 	if game.screen != "route_choice" or state.pending < 0 or index < 0 or index >= choices.size(): return
 	var choice = choices[index]
+	if choice.action == "disabled": return
+	if choice.action == "back":
+		choice_mode = "root";pending_choice = {};refresh_choices();return
+	if choice.action in ["select_remove", "select_copy", "select_exchange"]:
+		choice_mode = choice.action.trim_prefix("select_");merchant_offer = choice.get("offer", -1);refresh_choices();return
+	if choice.action == "leave":
+		state.last_result = "已离开" + event_title(state.nodes[state.pending]);complete();return
+	if choice.action != "confirm":
+		pending_choice = choice.duplicate(true);choice_mode = "confirm";refresh_choices();return
+	# Mutate only after confirmation; no gameplay state changes in previews/cancel.
+	choice = pending_choice
+	var i = choice.get("index", -1)
+	if choice.action in ["upgrade", "remove", "copy", "exchange"] and (i < 0 or i >= game.collection.size()): return
+	var outcome = ""
 	match choice.action:
-		"upgrade": game.collection[choice.index] += "_plus"
-		"prepare": state.prepared = true
-		"remove": game.collection.remove_at(choice.index)
-		"weaken": state.weakened = true
-		"card": game.collection.append("spear")
+		"upgrade":
+			if not UPGRADES.can_upgrade(game.collection[i]): return
+			game.collection[i] = UPGRADES.upgraded_id(game.collection[i]);outcome = "已强化" + card_label(i)
+		"random_upgrade":
+			i = random_upgrade_index()
+			if i < 0: return
+			game.collection[i] = UPGRADES.upgraded_id(game.collection[i]);outcome = "口诀领悟：已强化" + card_label(i)
+		"prepare":
+			if state.prepared: return
+			state.prepared = true;outcome = "已养精蓄锐：下一战初始多抽2张"
+		"remove":
+			if game.collection.is_empty(): return
+			outcome = "已删除" + card_label(i);game.collection.remove_at(i)
+		"copy":
+			outcome = "已复制" + card_label(i);game.collection.append(game.collection[i]);state.reward_debt += 2
+			outcome += "；还有%d场无战后收益" % state.reward_debt
+		"exchange":
+			if choice.offer < 0 or choice.offer >= state.nodes[state.pending].offers.size(): return
+			game.collection[i] = state.nodes[state.pending].offers[choice.offer];outcome = "行商换得" + card_label(i)
+		"heal":
+			if game.lives >= 5: return
+			game.lives += 1;outcome = "药庐疗养：生命+1，现有%d" % game.lives
+		"breath": game.collection.append("breath");outcome = "已获得一张调息"
+	state.last_result = outcome
 	complete()
+func battle_victory() -> bool:
+	if not active() or state.pending < 0 or state.nodes[state.pending].kind not in ["battle", "elite", "boss"]: return false
+	if state.victory_recorded: return state.reward_blocked
+	state.victory_recorded = true
+	state.reward_blocked = state.reward_debt > 0
+	if state.reward_blocked: state.reward_debt -= 1
+	return state.reward_blocked
+func rewards_blocked() -> bool:
+	return active() and state.get("reward_blocked", false)
 func complete():
 	if not active() or state.pending < 0: return
+	if state.nodes[state.pending].kind in ["battle", "elite", "boss"]:
+		state.last_result = "战斗胜利；兵书抵消本场收益，剩%d场" % state.reward_debt if state.reward_blocked else "战斗胜利，继续行军。"
 	state.current = state.pending;state.visited.append(state.pending);state.pending = -1
+	state.reward_blocked = false;state.victory_recorded = false;choice_mode = "root";pending_choice = {};merchant_offer = -1
 	game.history.clear();game.cancel_gesture();game.clear_effects();game.rewardui.reset()
 	game.hand = [];game.hand_ids = [];game.deck = [];game.discard = [];game.enemies = [];game.energy = 0;game.tuna_turns = 0;game.tuna_active = false
 	game.clear_battle_card_effects();game.encounter_state = {}
@@ -272,7 +353,7 @@ func complete():
 func save():
 	if not active(): return
 	var config = ConfigFile.new()
-	config.set_value("run", "version", 3)
+	config.set_value("run", "version", 4)
 	config.set_value("run", "route", state)
 	config.set_value("run", "battle", game.history.capture())
 	config.set_value("run", "screen", game.screen if game.screen in ["game", "map", "route_choice"] else "map")
@@ -290,7 +371,7 @@ func resume() -> bool:
 		var snapshot = JavaScriptBridge.eval("(function(){try{return localStorage.getItem('" + WEB_SAVE_KEY + "')||'';}catch(e){return '';}})()")
 		if snapshot is String and not snapshot.is_empty(): loaded = config.parse(snapshot) == OK
 	if not loaded: loaded = config.load(SAVE) == OK
-	if not loaded or config.get_value("run", "version", 0) != 3: return false
+	if not loaded or config.get_value("run", "version", 0) != 4: return false
 	var saved = config.get_value("run", "route", {})
 	var battle = config.get_value("run", "battle", {})
 	var saved_screen = config.get_value("run", "screen", "map")
@@ -302,21 +383,23 @@ func resume() -> bool:
 	game.screen = config.get_value("run", "screen", "map")
 	game.input_lock = 0;game.navigation_lock = 0;game.selected = -1;game.free_selected = false
 	game.rewardui.reset();game.handui.reset();page = 0;deck_view = false;reset_view()
+	choice_mode = "root";pending_choice = {};merchant_offer = -1
 	choices = options() if game.screen == "route_choice" else []
 	return true
 func valid_snapshot(saved, battle, saved_screen) -> bool:
 	# Validate the entire current-version envelope before touching live state.
 	if not saved is Dictionary or not battle is Dictionary: return false
 	if saved_screen not in ["map", "game", "route_choice"]: return false
-	for key in ["seed", "nodes", "current", "visited", "pending", "prepared", "weakened", "done"]:
+	for key in ["seed", "nodes", "current", "visited", "pending", "prepared", "reward_debt", "reward_blocked", "victory_recorded", "last_result", "done"]:
 		if not saved.has(key): return false
 	if not saved.nodes is Array or saved.nodes.size() != 16 or not saved.visited is Array: return false
 	if not saved.current is int or not saved.pending is int or not saved.seed is int: return false
 	if saved.current < -1 or saved.current >= 16 or saved.pending < -1 or saved.pending >= 16: return false
-	for key in ["prepared", "weakened", "done"]:
+	for key in ["prepared", "reward_blocked", "victory_recorded", "done"]:
 		if not saved[key] is bool: return false
+	if not saved.reward_debt is int or saved.reward_debt < 0 or not saved.last_result is String: return false
 	if saved.done: return false
-	var kinds = ["battle", "event", "elite", "workshop", "battle", "outpost", "camp", "battle", "workshop", "elite", "event", "battle", "camp", "battle", "workshop", "boss"]
+	var kinds = ["battle", "event", "elite", "camp", "battle", "battle", "workshop", "battle", "camp", "elite", "event", "battle", "workshop", "battle", "camp", "boss"]
 	var rows = [0, 1, 1, 1, 2, 2, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7]
 	var lanes = [1, 0, 1, 2, 0, 2, 1, 0, 1, 2, 0, 2, 0, 1, 2, 1]
 	for id in 16:
@@ -329,6 +412,13 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 		if node.kind in ["battle", "elite", "boss"]:
 			if not game.ENCOUNTERS.valid_config(node.encounter) or node.encounter.tier != node.kind: return false
 		elif node.encounter != {}: return false
+		if node.kind == "event":
+			if node.get("event_id", "") not in EVENT_IDS or not node.get("upgrade_seed") is int: return false
+			if not node.get("offers") is Array or node.offers.size() != 3: return false
+			var unique = {}
+			for offer in node.offers:
+				if offer not in game.CARDS or unique.has(offer): return false
+				unique[offer] = true
 		var expected = []
 		for target in 16:
 			if rows[target] == rows[id] + 1 and (abs(lanes[target] - lanes[id]) <= 1 or rows[id] in [0, 3, 7] or rows[target] in [0, 3, 7]): expected.append(target)
@@ -386,9 +476,12 @@ func button(rect: Rect2, label: String, primary: bool = false):
 	game.panel(rect, INK if primary else PAPER_LIGHT, INK if primary else Color("aaa89c"))
 	var text_size = 18 if rect.size.y >= 58 else 16
 	var width = game.FONT.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, text_size).x
+	if width > rect.size.x - 16:
+		game.wrapped_text(label, Rect2(rect.position + Vector2(8, 2), rect.size - Vector2(16, 4)), 14, PAPER_LIGHT if primary else INK)
+		return
 	game.text_at(rect.get_center() + Vector2(-width * 0.5, text_size * 0.36), label, text_size, PAPER_LIGHT if primary else INK)
 var page = 0
-func row_rect(index: int) -> Rect2: return Rect2(24, 166 + index * 54, game.ui_size.x - 48, 46)
+func row_rect(index: int) -> Rect2: return Rect2(24, 176 + index * 54, game.ui_size.x - 48, 46)
 func capacity() -> int: return maxi(1, int((game.ui_size.y - 260) / 54))
 func footer_rect(i: int) -> Rect2:
 	if game.screen == "map":
@@ -524,7 +617,7 @@ func draw_landmark(node: Dictionary):
 			game.draw_line(corner, corner + Vector2(direction.x * 13, 0), INK, 1.8, true)
 			game.draw_line(corner, corner + Vector2(0, direction.y * 13), INK, 1.8, true)
 	game.draw_texture_rect(SYMBOLS[node.kind], rect, false)
-	var label = {"battle":"战斗", "elite":"精英", "camp":"休整", "workshop":"工坊", "event":"奇遇", "outpost":"关隘", "boss":"决战"}[node.kind]
+	var label = {"battle":"战斗", "elite":"关隘", "camp":"休整", "workshop":"工坊", "event":"奇遇", "boss":"决战"}[node.kind]
 	centered_text(point + Vector2(0, 31), label, 19, INK)
 	if available:
 		game.draw_line(point + Vector2(-22, 36), point + Vector2(22, 36), INK, 1.2, true)
@@ -569,10 +662,14 @@ func draw_header():
 	var subtitle = "第一章 · 朱印行军"
 	if game.compact_landscape:
 		game.text_at(Vector2(265, 45), subtitle, 21, INK)
-		game.text_at(Vector2(16, 78), "已行 %d / 8  ·  %s  ·  拖动军图查看前路" % [state.visited.size(), "敌将2命" if state.weakened else "敌将3命"], 16, MUTED)
+		game.text_at(Vector2(16, 78), "已行 %d / 8  ·  %s  ·  拖动军图查看前路" % [state.visited.size(), "决战敌将9血"], 16, MUTED)
 	else:
-		game.text_at(Vector2(26, 92), subtitle, 23, INK)
-		game.text_at(Vector2(game.ui_size.x - (370 if not game.mobile_layout else 192), 91), "已行 %d / 8  ·  %s" % [state.visited.size(), "敌将2命" if state.weakened else "敌将3命"], 16, MUTED)
+		if game.mobile_layout:
+			game.text_at(Vector2(26, 76), "已行%d/8 · 生命%d · 永久牌%d张" % [state.visited.size(), game.lives, game.collection.size()], 16, INK)
+			game.text_at(Vector2(26, 99), "备战%s · 无收益剩%d场 · 决战敌将9血" % ["+2" if state.prepared else "无", state.reward_debt], 14, MUTED)
+		else:
+			game.text_at(Vector2(26, 92), subtitle, 23, INK)
+			game.text_at(Vector2(game.ui_size.x - 370, 91), "已行 %d / 8 · 决战敌将9血" % state.visited.size(), 16, MUTED)
 	if not game.mobile_layout:
 		game.text_at(Vector2(290, 45), "一子入山河，百战成归途", 18, MUTED)
 		game.text_at(Vector2(1050, 45), game.BUILD_VERSION + " · 朱印军符", 16, MUTED)
@@ -587,7 +684,7 @@ func draw_info():
 		var reachable = selected_node in legal()
 		var status = "可出发" if reachable else ("已行经" if selected_node in state.visited else "当前不可达")
 		var combat = node.kind in ["battle", "elite", "boss"]
-		game.text_at(Vector2(x, y), (game.ENCOUNTERS.title(node.encounter) if combat else TITLES[node.kind]) + " · " + status, 18, INK)
+		game.text_at(Vector2(x, y), (("关隘 · " if node.kind == "elite" else "") + game.ENCOUNTERS.title(node.encounter) if combat else event_title(node)) + " · " + status, 18, INK)
 		var detail = DETAILS[node.kind]
 		if combat and not node.encounter.rules.is_empty(): detail = game.ENCOUNTERS.summary(node.encounter) + "：" + game.ENCOUNTERS.details(node.encounter)
 		game.wrapped_text(detail, Rect2(x, y + 8, width, 48), 13 if combat else 16, MUTED)
@@ -600,15 +697,15 @@ func draw_info():
 		if reachable: button(confirm_rect(), "确认出发  ↑", true)
 	elif travel_target >= 0:
 		game.text_at(Vector2(x, y), "沿途行军中…", 22, INK)
-		game.wrapped_text("正在前往「%s」，抵达后进入。" % TITLES[state.nodes[travel_target].kind], Rect2(x, y + 13, width, 56), 16, MUTED)
+		game.wrapped_text("正在前往「%s」，抵达后进入。" % event_title(state.nodes[travel_target]), Rect2(x, y + 13, width, 56), 16, MUTED)
 		var progress = clampf(travel_elapsed / TRAVEL_SECONDS, 0, 1)
 		game.draw_rect(Rect2(x, info.end.y - 30, width, 4), Color("cbbb9c"))
 		game.draw_rect(Rect2(x, info.end.y - 30, width * progress, 4), RED)
 	else:
 		game.text_at(Vector2(x, y), "山河在前，择路而行", 22, INK)
-		game.text_at(Vector2(x, y + 29), "先选地标查看，再确认出发", 16, MUTED)
+		game.wrapped_text(state.last_result if not state.last_result.is_empty() else "先选地标查看，再确认出发", Rect2(x, y + 12, width, 58), 14, MUTED)
 		if side_layout():
-			game.wrapped_text("我方执红，黑印标记前路。通关盖下将军朱印，分路决定牌组。", Rect2(x, y + 65, width, 84), 18, MUTED)
+			game.wrapped_text("生命%d · 永久牌%d张 · 备战：%s · 兵书代价：接下来%d场无战后收益" % [game.lives, game.collection.size(), "下一战多抽2张" if state.prepared else "未整备", state.reward_debt], Rect2(x, y + 75, width, 110), 16, MUTED)
 			game.text_at(Vector2(x, y + 180), "墨线箭头 · 当前可达", 18, INK)
 			game.text_at(Vector2(x, y + 215), "将军朱印 · 已经走过", 18, RED)
 			game.text_at(Vector2(x, y + 250), "黑色军符 · 节点类别", 18, INK)
@@ -630,11 +727,16 @@ func draw():
 	game.draw_rect(Rect2(Vector2.ZERO, game.ui_size), PAPER)
 	if game.screen == "route_choice":
 		draw_header()
-		var kind = state.nodes[state.pending].kind
-		game.text_at(Vector2(24, 148), {"camp": "营地 · 升级或整备，只可选一次", "workshop": "工坊 · 永久删一张牌，或离开", "outpost": "关隘据点 · 破寨可削弱敌将防御", "event": "渡口偶遇 · 结果确定，二选一"}.get(kind, "选择"), 16, INK)
+		var node = state.nodes[state.pending]
+		var heading = event_title(node) + " · " + ("确认后生效，可取消" if choice_mode == "confirm" else "每个节点只选一次")
+		game.text_at(Vector2(24, 136), heading, 17, INK)
+		game.text_at(Vector2(24, 158), "生命%d · 永久牌%d张 · 无收益剩%d场%s" % [game.lives, game.collection.size(), state.reward_debt, " · 已备战+2" if state.prepared else ""], 14, MUTED)
 		for i in capacity():
 			var index = page * capacity() + i
-			if index < choices.size(): button(row_rect(i), choices[index].label)
+			if index < choices.size(): button(row_rect(i), choices[index].label, choices[index].action == "confirm")
+		if choice_mode == "confirm" and pending_choice.action == "exchange":
+			var offer = game.CARDS[node.offers[pending_choice.offer]]
+			game.wrapped_text("换入牌：%s · %d费 · %s · 交出与换入同时生效，永久牌张数不变。" % [offer[0], offer[1], offer[2]], Rect2(32, row_rect(2).position.y + 8, game.ui_size.x - 64, 140), 17, INK)
 		button(footer_rect(0), "上一页")
 		button(footer_rect(1), "下一页 %d" % (page + 1))
 		return

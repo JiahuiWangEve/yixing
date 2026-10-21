@@ -60,3 +60,7 @@ run rook-tactics --script "$root/tests/rook_tactics_checks.gd"
 run rook-fixtures --script "$root/tests/rook_visual_capture.gd"
 
 run general-cannon-evasion --script "$root/tests/general_cannon_evasion_checks.gd"
+
+run campaign-events --script "$root/tests/campaign_event_checks.gd"
+
+run event-web-fixtures --script "$root/tests/event_web_fixtures.gd"

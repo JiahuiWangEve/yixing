@@ -40,7 +40,7 @@ func activate(i: int):
 				2: game.screen = "debug_profile"
 				3: game.audio_system.toggle_mute()
 				4:
-					if not game.route.resume(): game.notice = "v0.8.0 旧局不续用，请开始新征途。"
+					if not game.route.resume(): game.notice = "此存档不可续用，请开始新征途。"
 		"skill_selection":
 			match i:
 				0: game.skill_system.choose("king")
@@ -84,7 +84,7 @@ func draw():
 	game.text_at(origin, titles.get(game.screen, "弈 行"), 32, game.THEME.HEADING)
 	if game.screen == "home":
 		game.text_at(origin + Vector2(0, 32), "山河棋路 · 三种开局 · 八步破关", 16, game.THEME.LIGHT)
-		if game.notice in ["暂无可继续的章节", "v0.8.0 旧局不续用，请开始新征途。"]: game.text_at(Vector2(24, game.ui_size.y - 48), game.notice, 16, game.THEME.HEADING)
+		if game.notice in ["暂无可继续的章节", "此存档不可续用，请开始新征途。"]: game.text_at(Vector2(24, game.ui_size.y - 48), game.notice, 16, game.THEME.HEADING)
 	elif game.screen == "skill_selection":
 		game.text_at(origin + Vector2(0, 28), "各有 8 张初始牌；移动抽牌，回合保留手牌", 16, game.THEME.LIGHT)
 		game.text_at(origin + Vector2(0, 48), "消耗：每张每关使用一次，下关恢复", 16, game.THEME.LIGHT)

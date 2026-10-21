@@ -5,7 +5,7 @@ import asyncio, json, os, re, shutil
 from pathlib import Path
 from playwright.async_api import async_playwright
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'verification/v0.12.0/browser'
+OUT = ROOT / 'verification/v0.13.0/browser'
 OUT.mkdir(parents=True, exist_ok=True)
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
 XS = [.46,.15,.50,.85,.22,.76,.53,.13,.48,.86,.24,.73,.15,.49,.84,.79]
@@ -95,7 +95,11 @@ async def main():
    await tap(*node(1)); await tap(*confirm,350); await shot('march')
    await page.wait_for_timeout(700); await state('route_choice',0,1); await shot('event')
    await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
-   await state('route_choice',0,1); await tap(uw/2,297,500); await state('map',1,-1)
+   await state('route_choice',0,1)
+   saved=await page.evaluate("localStorage.getItem('yixing.route_run.v0100')")
+   route=json.loads(saved.split('\nroute=',1)[1].split('\nbattle=',1)[0])
+   leave_index=3 if route['nodes'][1]['event_id']=='merchant' else 2
+   await tap(uw/2,199+leave_index*54,500); await state('map',1,-1)
    await shot('event-return'); await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
    await state('map',1,-1); await shot('map-resume')
    assert not errors,(w,errors)
