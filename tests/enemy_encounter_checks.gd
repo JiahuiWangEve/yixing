@@ -294,11 +294,17 @@ func check_modal_and_geometry():
 		var surface = Rect2(Vector2.ZERO, game.ui_size)
 		var panel_rect = game.encounter_panel_rect();var close_rect = game.encounter_close_rect()
 		check(surface.encloses(panel_rect) and panel_rect.encloses(close_rect), "rule modal/close fit viewport " + str(size))
-		if game.mobile_layout:
-			var button = game.encounter_rules_rect()
-			check(surface.encloses(button) and not button.intersects(game.debug_skip_rect()) and not button.intersects(game.END_TURN_RECT), "rules button avoids debug and end turn " + str(size))
-			game.handle_click(button.get_center());check(game.encounter_info_open, "rules button opens modal")
-		else: game.encounter_info_open = true
+		var inspected_before = game.history.capture()
+		for tag in game.board_info.tag_items():
+			check(surface.encloses(tag.anchor) and not tag.anchor.intersects(game.END_TURN_RECT), "compact mechanism tag fits viewport " + str(size))
+			var info = game.board_info.inspect_at(tag.anchor.get_center())
+			check(info.key == tag.key and not info.lines.is_empty(), "mechanism tag exposes full rule inspection")
+			var rule: String = tag.key.trim_prefix("mechanism:")
+			check(info.lines[0] == E.RULE_TEXT[rule], "tooltip uses the actual encounter rule")
+			game.handle_click(tag.anchor.get_center())
+			check(not game.encounter_info_open and game.history.capture() == inspected_before, "tag inspection and tap do not open modal or mutate battle")
+		# Keep compatibility safety checks for previously open modal state.
+		game.encounter_info_open = true
 		var before = game.history.capture();var entries = game.history.entries.duplicate(true)
 		press_key(KEY_SPACE);press_key(KEY_ENTER)
 		check(game.encounter_info_open and game.history.capture() == before and game.history.entries == entries, "keyboard cannot pass through rules modal " + str(size))
@@ -310,9 +316,7 @@ func check_modal_and_geometry():
 		check(not game.encounter_info_open and game.history.capture() == before, "close control is safe for touch " + str(size))
 		game.encounter_info_open = true;press_key(KEY_ESCAPE)
 		check(not game.encounter_info_open and game.history.capture() == before, "Escape safely closes rule modal")
-		var hp_size = 12 if game.mobile_layout else 14
-		var hp_width = game.FONT.get_string_size("9/9", HORIZONTAL_ALIGNMENT_LEFT, -1, hp_size).x + 6
-		check(hp_width <= game.CELL, "nine-HP numeric badge fits one board cell " + str(size))
+		check(game.board_info.hp_segments(game.enemies[0]).size() == 9, "nine-HP general has a segmented health bar " + str(size))
 		# No hidden-state card mutation through the modal's right-click path.
 		game.hand = ["sword"];game.hand_ids = [];game.sync_hand_ids();game.selected = 0
 		game.encounter_info_open = true;mouse_click(game.cell_pos(game.player), MOUSE_BUTTON_RIGHT)

@@ -44,9 +44,10 @@ func reload_step():
 	step("reload","resume without reroll")
 func enter(id: int):
 	game.route.focus_current()
-	var taps = [point(game.route.position(game.route.state.nodes[id])), point(game.route.confirm_rect().get_center())]
+	var target = game.route.position(game.route.state.nodes[id])
+	var taps = [point(target), point(target)]
 	check(game.route.map_rect().has_point(Vector2(taps[0][0],taps[0][1])), "next node visible")
-	game.route.enter(id);step("enter","enter node "+str(id),taps)
+	game.route.click(target);game.route.click(target);game.route.tick(game.route.TRAVEL_SECONDS + 0.01);step("enter","enter node "+str(id),taps)
 func victory():
 	game.debug_skip();step("tap","debug victory",[point(game.debug_skip_rect().get_center())])
 func reward_return():

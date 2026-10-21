@@ -80,9 +80,7 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           python3 tests/browser_release_smoke.py 2>&1 | tee build/release-smoke.log
-          python3 tests/browser_sound_settings_checks.py --smoke 2>&1 | tee build/sound-settings-smoke.log
-          python3 tests/browser_pass_checks.py 2>&1 | tee build/pass-smoke.log
-          python3 tests/browser_presentation_checks.py 2>&1 | tee build/presentation-smoke.log
+          python3 tests/browser_board_info_checks.py 2>&1 | tee build/board-info-smoke.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -93,6 +91,8 @@ jobs:
             build/export.log
             build/package-audit.log
             build/release-smoke.log
+            build/board-info-smoke.log
+            verification/v0.14.7/
             build/debug-undo-smoke.log
             build/sound-settings-smoke.log
             build/chapter-smoke.log
@@ -181,6 +181,10 @@ jobs:
           cat build/picker-browser.log
           if ! python3 tests/browser_pass_checks.py --full > build/pass-browser.log 2>&1; then failed=1; fi
           cat build/pass-browser.log
+          if ! python3 tests/browser_presentation_checks.py > build/presentation-browser.log 2>&1; then failed=1; fi
+          cat build/presentation-browser.log
+          if ! python3 tests/browser_board_info_checks.py --full > build/board-info-browser.log 2>&1; then failed=1; fi
+          cat build/board-info-browser.log
           exit "$failed"
       - name: Upload background regression evidence
         if: always()
@@ -189,6 +193,7 @@ jobs:
           name: yixing-regression-${{ github.sha }}
           path: |
             build/*browser.log
+            verification/v0.14.7/
             verification/v0.14.2/
             verification/v0.14.1/
             verification/sound-settings/

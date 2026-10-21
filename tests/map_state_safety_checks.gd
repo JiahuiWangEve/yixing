@@ -75,19 +75,19 @@ func check_pointer_events(size: Vector2):
 	check(route.pointer_id == 4 and is_equal_approx(route.scroll_y, scroll), "secondary touch cannot move or cancel primary capture")
 	touch(p, false, 4)
 	check(route.selected_node == 0 and route.state == initial, "primary touch still previews exactly once after secondary cancellation")
-	var confirm_pos = route.confirm_rect().get_center()
+	var confirm_pos = p
 	mouse(confirm_pos, true, MOUSE_BUTTON_LEFT, -1);mouse(confirm_pos, false, MOUSE_BUTTON_LEFT, -1)
-	check(route.travel_target == -1, "emulated mouse after real touch cannot confirm a preview")
+	check(route.travel_target == -1, "emulated mouse after real touch cannot depart from a selection")
 	touch(confirm_pos, true);touch(confirm_pos, false, 0, true)
-	check(route.travel_target == -1 and route.selected_node == 0, "canceled confirm preserves preview without traveling")
+	check(route.travel_target == -1 and route.selected_node == 0, "canceled second tap preserves selection without traveling")
 	key(KEY_ENTER, true, true);key(KEY_ENTER, false)
 	check(route.travel_target == -1 and route.state == initial, "Enter repeat and key release cannot start travel")
 	key(KEY_ESCAPE)
 	check(route.selected_node == -1 and route.state == initial, "Escape dismisses a preview without progress")
 	mouse(p, true);mouse(p, false)
 	check(route.selected_node == 0, "physical mouse still works after touch input")
-	tap(route.cancel_rect().get_center())
-	check(route.selected_node == -1 and route.state == initial, "cancel footer leaves persistent route unchanged")
+	tap(route.map_rect().position + Vector2(4, 4))
+	check(route.selected_node == -1 and route.state == initial, "blank map clears selection without changing persistent route")
 	# Cancellation must invalidate the pending release, not just the preview.
 	touch(p, true);key(KEY_ESCAPE);touch(p, false)
 	check(route.selected_node == -1 and route.pointer_id == -2, "Escape during a press prevents release from reopening preview")
@@ -123,7 +123,7 @@ func check_scroll_and_overlays():
 	check(route.scroll_y < scroll, "physical wheel inside map scrolls")
 	route.focus_current()
 	tap(route.deck_rect().get_center())
-	check(game.card_picker.active and game.card_picker.action == "view", "deck footer opens read-only card grid")
+	check(game.card_picker.active and game.card_picker.action == "view", "upper-right header opens read-only card grid")
 	var p = route.position(route.state.nodes[0])
 	scroll = route.scroll_y
 	tap(p);mouse(center, true, MOUSE_BUTTON_WHEEL_UP)
@@ -131,15 +131,75 @@ func check_scroll_and_overlays():
 	key(KEY_ESCAPE)
 	check(not game.card_picker.active, "Escape closes read-only card grid")
 
+func hover(pos: Vector2):
+	var event = InputEventMouseMotion.new()
+	event.position = pos;event.device = 0
+	game._gui_input(event)
+
+func check_information_gestures(size: Vector2):
+	fresh(size)
+	var initial = route.state.duplicate(true)
+	var p = route.position(route.state.nodes[0])
+	# Inspection must be pure, even before a node has been selected.
+	touch(p, true);game.information.tick(0.39)
+	check(not game.information.visible and route.selected_node == -1 and route.travel_target == -1, "touch information waits for 0.4-second hold")
+	game.information.tick(0.02)
+	check(game.information.visible and route.selected_node == -1 and route.state == initial, "long hold only opens node information")
+	check(Rect2(Vector2.ZERO, game.ui_size).encloses(game.information.area), "touch information stays inside viewport")
+	check(not game.information.area.intersects(route.hit_rect(route.state.nodes[0])), "touch information does not obscure inspected landmark")
+	touch(p, false)
+	check(not game.information.visible and route.selected_node == -1 and route.travel_target == -1 and route.pointer_id == -2, "unselected hold release closes information without selection or departure")
+	tap(p)
+	check(route.selected_node == 0 and route.travel_target == -1, "ordinary tap still selects after inspection")
+	touch(p, true);game.information.tick(0.41)
+	check(game.information.visible and route.selected_node == 0, "hold on selected node preserves selection")
+	touch(p, false)
+	check(not game.information.visible and route.selected_node == 0 and route.travel_target == -1 and route.state == initial, "selected hold release never counts as departure click")
+	# A canceled or dragged second press is not the second ordinary tap.
+	touch(p, true);game.information.tick(0.41);touch(p, false, 0, true)
+	check(not game.information.visible and route.selected_node == 0 and route.travel_target == -1, "canceled long hold never departs")
+	touch(p, true);game.information.tick(0.2);drag(p + Vector2(16, 0));game.information.tick(0.4);drag(p);touch(p, false)
+	check(not game.information.visible and route.selected_node == 0 and route.travel_target == -1, "moving beyond threshold cancels hold and drag-return never departs")
+	# Once the tooltip is visible, moving cannot become a new tap either.
+	touch(p, true);game.information.tick(0.41);drag(p + Vector2(16, 0));touch(p, false)
+	check(not game.information.visible and route.selected_node == 0 and route.travel_target == -1, "drag after visible hold never departs")
+	# Hover remains read-only and uses its independent shorter delay.
+	hover(p);game.information.tick(0.29)
+	check(not game.information.visible, "mouse hover waits for 0.3-second dwell")
+	game.information.tick(0.02)
+	check(game.information.visible and route.selected_node == 0 and route.state == initial, "mouse hover opens pure information without changing selected node")
+	hover(route.map_rect().position + Vector2(4, 4))
+	check(not game.information.visible and route.selected_node == 0, "leaving target dismisses hover information without clearing selection")
+	tap(p)
+	check(route.travel_target == 0 and route.state == initial, "next ordinary tap after hold and hover departs exactly once")
+	# A future event's identity is not disclosed by its route-nature tooltip.
+	fresh(size);route.scroll_y = 0
+	var node = route.state.nodes[10]
+	# Choose a generic event regardless of chapter seed and keep it in view.
+	for candidate in route.state.nodes:
+		if candidate.kind == "event": node = candidate;break
+	route.scroll_y = clampf(route.content_point(node).y - route.map_rect().get_center().y, 0, route.scroll_limit())
+	p = route.position(node)
+	node.event_id = "herbalist"
+	hover(p);game.information.tick(0.31)
+	check(game.information.visible, "future event remains inspectable without being reachable")
+	var generic = game.information.data.duplicate(true)
+	game.information.clear();node.event_id = "manual"
+	hover(p);game.information.tick(0.31)
+	check(game.information.data == generic, "event information depends on route nature, not hidden event identity")
+	check(route.selected_node == -1 and route.travel_target == -1 and route.state.pending == -1, "unreachable hover never selects or travels")
+	game.information.clear()
+
 func check_travel_and_reload():
 	fresh()
 	var before = route.state.duplicate(true)
-	tap(route.position(route.state.nodes[0]));key(KEY_KP_ENTER)
-	check(route.travel_target == 0 and route.pointer_id == -2 and route.state == before, "keypad Enter begins transient travel, not arrival")
+	var destination = route.position(route.state.nodes[0])
+	tap(destination);route.tick(30);tap(destination)
+	check(route.travel_target == 0 and route.pointer_id == -2 and route.state == before, "same-node second tap after an unlimited interval begins transient travel, not arrival")
 	var scroll = route.scroll_y
 	tap(route.home_rect().get_center());key(KEY_ESCAPE);key(KEY_ENTER)
 	mouse(route.map_rect().get_center(), true, MOUSE_BUTTON_WHEEL_UP)
-	check(game.screen == "map" and route.travel_target == 0 and is_equal_approx(route.scroll_y, scroll), "travel rejects home, cancel, repeated confirmation, and scroll")
+	check(game.screen == "map" and route.travel_target == 0 and is_equal_approx(route.scroll_y, scroll), "travel rejects home, Escape, repeated confirmation, and scroll")
 	route.tick(route.TRAVEL_SECONDS * 0.5)
 	route.save()
 	check(route.save_error == OK, "in-flight snapshot is persisted")
@@ -151,7 +211,7 @@ func check_travel_and_reload():
 	route.tick(0)
 	check(game.screen == "map" and route.state == before and route.travel_target == -1 and route.selected_node == -1, "relaunch discards transient march and preview")
 	check(route.pointer_id == -2 and route.map_rect().has_point(route.position(route.state.nodes[0])), "relaunch clears pointer and focuses current route")
-	tap(route.position(route.state.nodes[0]));key(KEY_ENTER)
+	destination = route.position(route.state.nodes[0]);tap(destination);tap(destination)
 	route.tick(route.TRAVEL_SECONDS - 0.01)
 	check(game.screen == "map" and route.state.pending == -1, "arrival does not commit before animation threshold")
 	route.tick(0.02)
@@ -297,6 +357,7 @@ func run():
 	create_game()
 	for size in [Vector2(1280, 940), Vector2(390, 844), Vector2(844, 390), Vector2(360, 640)]:
 		check_pointer_events(size)
+		check_information_gestures(size)
 	check_scroll_and_overlays()
 	check_travel_and_reload()
 	check_battle_phase_round_trips()

@@ -76,9 +76,26 @@ func check_generation():
 			if chapter_number == 2:
 				check(saved.nodes[0].encounter.id == "c2_heavy_pawns", "second chapter always introduces heavy pawns first")
 				check(game.ENCOUNTERS.title(saved.nodes[0].encounter) == "坚卒拦路", "second entrance uses the new battle title")
-				check("敌将6血" in route.node_detail(saved.nodes[2]), "second chapter elite preview says six HP")
 				check("坚城" in route.chapter_title(), "second map identifies the chapter")
-			else: check("敌将5血" in route.node_detail(saved.nodes[2]), "first chapter elite preview remains five HP")
+			route.scroll_y = clampf(route.content_point(saved.nodes[2]).y - route.map_rect().get_center().y, 0, route.scroll_limit())
+			var information = route.inspect_at(route.position(saved.nodes[2]))
+			check(not information.is_empty() and information.title == "关隘", "elite map information describes its route nature")
+			var visible_text = "\n".join(information.get("lines", []))
+			check("血" not in visible_text and game.ENCOUNTERS.title(saved.nodes[2].encounter) not in visible_text, "elite map information does not reveal HP or hidden encounter identity")
+
+func check_elite_health():
+	# Moving details out of map previews must not change combat difficulty.
+	for seed_number in [-4, 0, 17, 63]:
+		for chapter_number in [1, 2]:
+			fresh("king", seed_number);route.generate(seed_number, chapter_number)
+			route.state.current = 0;route.state.visited = [0]
+			route.enter(2)
+			check(game.screen == "game" and route.state.pending == 2, "elite fixture enters actual battle")
+			var generals = game.enemies.filter(func(enemy): return enemy.kind == "g")
+			check(generals.size() == 1, "elite encounter has exactly one general")
+			if generals.size() == 1:
+				var expected = 6 if chapter_number == 2 else 5
+				check(generals[0].hp == expected and generals[0].max_hp == expected, "chapter elite retains real %d-HP general" % expected)
 
 func check_transition():
 	for identity in ["king", "horse", "artillery"]:
@@ -251,6 +268,6 @@ func check_map_cache():
 func run():
 	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true);game.set_process(false)
 	route = game.route
-	check_generation();check_transition();check_pending_carry();check_final_boss();check_saves();check_uid_safety();check_map_cache()
+	check_generation();check_elite_health();check_transition();check_pending_carry();check_final_boss();check_saves();check_uid_safety();check_map_cache()
 	print("CHAPTER FLOW RESULT ", checks, " checks, ", failures, " failures")
 	game.free();quit(1 if failures else 0)

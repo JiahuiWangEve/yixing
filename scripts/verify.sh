@@ -86,3 +86,6 @@ run presentation-web-fixtures --script "$root/tests/presentation_web_fixtures.gd
 run debug-undo --script "$root/tests/debug_undo_checks.gd"
 
 run sound-settings --script "$root/tests/sound_settings_checks.gd"
+
+run board-info --script "$root/tests/board_info_checks.gd"
+run board-info-web-fixtures --script "$root/tests/board_info_web_fixtures.gd"

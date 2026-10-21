@@ -46,10 +46,11 @@ async def main():
                 await page.goto(URL);await boot(page)
                 assert not await page.evaluate('(key)=>localStorage.getItem(key)',SETTINGS_KEY)
                 await shot('home-default-off');await tap(menu(0));await tap(menu(0))
-                mx,my,mw,mh,ch,margin=(24,116,850,800,1240,42) if desktop else (14,112,452,uh-282,(uh-282)*2.4,28)
+                mw=min(uw-28,1000);mx,my,mh=(uw-mw)/2,112,uh-126
+                ch,margin=(1240,42) if desktop else (mh*2.4,28)
                 nx=mx+margin+.46*(mw-margin*2);ny=my+32+.94*(ch-80)
                 scroll=max(0,min(ch-mh,ny-my-mh*.73))
-                await tap((nx,ny-scroll-15));await tap((1075,868) if desktop else (uw-107,uh-48))
+                await tap((nx,ny-scroll-15));await tap((nx,ny-scroll-15))
                 await wait_turn(1);assert await budget()==3
                 off=await shot('battle-off-no-skip');await tap(skip);await page.wait_for_timeout(1100)
                 assert (await state())['phase']=='play';assert await budget()==3

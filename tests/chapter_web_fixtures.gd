@@ -57,8 +57,8 @@ func enter(id: int):
 	game.route.focus_current()
 	var target = game.route.position(game.route.state.nodes[id])
 	check(game.route.map_rect().has_point(target), "chosen map node is visible")
-	var taps = [point(target), point(game.route.confirm_rect().get_center())]
-	game.route.enter(id);step("enter", "enter-first-battle", taps)
+	var taps = [point(target), point(target)]
+	game.route.click(target);game.route.click(target);game.route.tick(game.route.TRAVEL_SECONDS + 0.01);step("enter", "enter-first-battle", taps)
 func text_height(value: String, width: float, font_size: int) -> float:
 	var line = "";var height = float(font_size)
 	for letter in value:

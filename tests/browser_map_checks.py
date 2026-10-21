@@ -20,20 +20,19 @@ async def main():
   viewports = [(1280,940),(390,844),(844,390),(360,640)] if os.environ.get('YIXING_FULL_REGRESSION') == '1' else [(1280,940),(390,844)]
   for w,h in viewports:
    context=await browser.new_context(viewport={'width':w,'height':h},has_touch=True)
-   page=await context.new_page();await install_debug_settings(page); errors=[]; assertions=[]; keyboard_assertions=[]
+   page=await context.new_page();await install_debug_settings(page); errors=[]; assertions=[]; keyboard_assertions=[]; map_assertions=[]
    page.on('pageerror',lambda e:errors.append(str(e)))
    page.on('console',lambda m: errors.append(m.text) if m.type=='error' and ('SCRIPT ERROR' in m.text or 'Parse Error' in m.text) else None)
    await page.goto(URL); await page.wait_for_timeout(4500)
    uw,uh=(1280,940) if w==1280 else ((960,540) if w>h else (480,max(660,480*h/w)))
    scale=min(w/uw,h/uh); ox=(w-uw*scale)/2; oy=(h-uh*scale)/2
    side=w==1280 or w>h
-   mx,my,mw,mh,ch,margin=(24,116,850,800,1240,42) if w==1280 else ((14,90,626,436,1160,28) if side else (14,112,452,uh-282,(uh-282)*2.4,28))
+   mw=min(uw-28,1000); mx=(uw-mw)/2; my=90 if side and w!=1280 else 112; mh=uh-my-14
+   ch,margin=(1240,42) if w==1280 else ((1160,28) if side else (mh*2.4,28))
    def content(i):return (mx+margin+XS[i]*(mw-margin*2),my+32+YS[i]*(ch-80))
    def focus(i):return max(0,min(ch-mh,content(i)[1]-my-mh*.73))
    def node(i,current=0):x,y=content(i);return (x,y-focus(current)-15)
-   info_x=mx+mw+20; info_w=uw-(mx+mw)-44
-   confirm=(info_x+info_w/2,my+mh-48) if side else (uw-107,uh-48)
-   cancel=(info_x+info_w/2,my+mh-121) if side else (87,uh-48)
+   blank=(mx+8,my+mh*.85) # Inside the map, left of every landmark hitbox.
    async def tap(x,y,delay=180):
     await page.touchscreen.tap(ox+x*scale,oy+y*scale); await page.wait_for_timeout(delay)
    async def state(screen,current,pending):
@@ -50,14 +49,68 @@ async def main():
     assert saved, 'No synchronous Web snapshot'
     assert got==(screen,current,pending),(w,got,(screen,current,pending))
     assertions.append(list(got))
-   async def shot(label):await page.screenshot(path=str(OUT/f'{label}-{w}.png'))
+   async def shot(label):return await page.screenshot(path=str(OUT/f'{label}-{w}.png'))
+   cdp=await context.new_cdp_session(page)
+   def touch_point(pos,id=0):
+    return {'x':ox+pos[0]*scale,'y':oy+pos[1]*scale,'id':id}
+   async def touch(kind,points):
+    await cdp.send('Input.dispatchTouchEvent',{'type':kind,'touchPoints':points})
+   async def remains_map(current=-1):
+    # A bad release can start a march before the save changes. Wait past its
+    # full 0.85 s duration rather than passing against an unchanged old save.
+    await page.wait_for_timeout(1100);await state('map',current,-1)
+   async def drag_map(distance):
+    start=(mx+mw*.48,my+mh*.28)
+    await touch('touchStart',[touch_point(start)])
+    for step in range(1,13):
+     await touch('touchMove',[touch_point((start[0],start[1]+distance*step/12))])
+     await page.wait_for_timeout(16)
+    await touch('touchEnd',[])
+    await page.wait_for_timeout(100)
    menu=(640,209) if w==1280 else ((265,169) if side else (240,max(150,uh*.25)+30))
    await tap(*menu); await tap(*menu,500)
-   await shot('map'); await tap(*node(0)); await state('map',-1,-1); await shot('preview')
-   await tap(*cancel); await page.keyboard.press('Enter'); await page.wait_for_timeout(950)
-   await state('map',-1,-1); await shot('cancel')
-   await tap(*node(0)); await tap(*confirm,120); await tap(*confirm,1000)
-   await state('game',-1,0); await shot('battle')
+   await state('map',-1,-1);await shot('map')
+   if w==1280:
+    # Real mouse hover opens information, but must not implicitly select.
+    plain=await page.screenshot();nx,ny=node(0)
+    await page.mouse.move(ox+nx*scale,oy+ny*scale);await page.wait_for_timeout(450)
+    assert await shot('hover-info')!=plain,'Hover must show route information'
+    await page.mouse.move(ox+uw*.5*scale,oy+80*scale);await page.wait_for_timeout(150)
+    map_assertions.append('Mouse hover displays information without selecting')
+   await tap(*node(0));await remains_map();await shot('selected')
+   await tap(*blank);await page.keyboard.press('Enter');await remains_map();await shot('blank-cleared')
+   await tap(*node(0));await remains_map()
+   map_assertions.append('First click selects; blank map clears selection and Enter cannot depart')
+   # Selecting another node replaces the old selection; unreachable nodes are
+   # still inspectable but even repeated clicks must never start a journey.
+   await tap(*node(1));await tap(*node(1));await remains_map()
+   await tap(*node(0));await remains_map()
+   map_assertions.append('Different node replaces selection; unreachable repeat cannot depart')
+   for gesture in ['hold','cancel','multitouch-hold']:
+    for already_selected in [False,True]:
+     await tap(*blank)
+     if already_selected:await tap(*node(0))
+     before_gesture=await page.screenshot()
+     await touch('touchStart',[touch_point(node(0))])
+     if gesture=='hold':
+      await page.wait_for_timeout(550)
+      assert await shot('hold-selected' if already_selected else 'hold-info')!=before_gesture,'Touch hold must show route information'
+     elif gesture=='multitouch-hold':
+      # Secondary contact must not steal the primary long-hold capture.
+      await touch('touchStart',[touch_point(node(0)),touch_point(blank,1)])
+      await page.wait_for_timeout(550)
+      assert await shot('multitouch-hold-selected' if already_selected else 'multitouch-hold-info')!=before_gesture,'Primary touch hold must still show information with a second finger present'
+     await touch('touchCancel' if gesture=='cancel' else 'touchEnd',[])
+     await remains_map()
+     if not already_selected:
+      # If the gesture secretly selected, this ordinary first click would depart.
+      await tap(*node(0));await remains_map()
+     map_assertions.append('%s on %s node does not select or depart'%(gesture,'selected' if already_selected else 'unselected'))
+   await tap(*blank);await tap(*node(0));await remains_map()
+   await page.wait_for_timeout(1200) # Selection is not a timed double-click window.
+   await tap(*node(0),120);await tap(*node(0),1000)
+   await state('game',-1,0);await shot('battle')
+   map_assertions.append('Same selected node departs after a long delay; duplicate travel input suppressed')
    if w == 1280:
     async def saved_turn():
      saved=await page.evaluate("localStorage.getItem('yixing.route_run.v0100')")
@@ -87,23 +140,16 @@ async def main():
    baseline=await page.screenshot()
    await page.wait_for_timeout(150)
    assert await page.screenshot()==baseline, 'Idle map should be visually stable'
-   cdp=await context.new_cdp_session(page)
-   dx=ox+(mx+mw*.48)*scale; dy=oy+(my+mh*.28)*scale
-   await cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':dx,'y':dy}]})
-   for step in range(1,13):
-    await cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':dx,'y':dy+step*10*scale}]})
-    await page.wait_for_timeout(16)
-   await cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
-   await page.wait_for_timeout(100)
-   await state('map',0,-1)
+   await drag_map(120);await remains_map(0)
    assert await page.screenshot()!=baseline, 'Touch drag must change map scroll position'
    await shot('touch-scrolled')
-   center=cancel if side else (uw-107,uh-48)
-   await tap(*center)
-   assert await page.screenshot()==baseline, 'Focus-current restores exact static map after drag'
+   await drag_map(-120);await remains_map(0)
+   assert await page.screenshot()==baseline, 'Equal opposite touch drag must restore the static map without a focus-current control'
+   await shot('touch-restored')
+   map_assertions.append('Drag scroll changes map and equal opposite drag restores it without selecting')
    frame_deltas=await page.evaluate("""() => new Promise(resolve => {let last=null, values=[]; function tick(now) {if(last!==null) values.push(now-last);last=now;if(values.length<60) requestAnimationFrame(tick);else resolve(values);}requestAnimationFrame(tick);})""")
    await cdp.detach()
-   await tap(*node(1)); await tap(*confirm,350); await shot('march')
+   await tap(*node(1)); await tap(*node(1),350); await shot('march')
    await page.wait_for_timeout(700); await state('route_choice',0,1); await shot('event')
    await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
    await state('route_choice',0,1)
@@ -114,7 +160,7 @@ async def main():
    await shot('event-return'); await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
    await state('map',1,-1); await shot('map-resume')
    assert not errors,(w,errors)
-   reports.append({'viewport':[w,h],'errors':errors,'state_assertions':assertions,'keyboard_assertions':keyboard_assertions,'map_performance':{'touch_scroll_checks':3,'idle_browser_raf_ms':frame_deltas},'note':'Actual Web export: touch preview/cancel/confirm, duplicate suppression, battle reload, debug reward return, curved march, event reload/resolve, map refresh.'})
+   reports.append({'viewport':[w,h],'errors':errors,'state_assertions':assertions,'keyboard_assertions':keyboard_assertions,'map_assertions':map_assertions,'map_performance':{'touch_scroll_checks':3,'idle_browser_raf_ms':frame_deltas},'note':'Actual Web export: centered map, first-click selection, delayed same-node departure, blank clearing, unreachable nodes, mouse hover and touch hold/cancel/multitouch safety, duplicate suppression, drag round-trip, battle reload, debug reward return, curved march, event reload/resolve, map refresh.'})
    await context.close()
   await browser.close()
  (OUT/'browser-flow.json').write_text(json.dumps(reports,indent=2))

@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.14.6"
+const BUILD_VERSION = "v0.14.7"
 const PASS_CARD_COST = 3
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
@@ -41,7 +41,9 @@ const NORMAL_UNDO_LIMIT = 3
 var normal_undos_remaining = NORMAL_UNDO_LIMIT
 var rewardui = REWARD_UI.new(self)
 var card_picker = preload("res://card_picker.gd").new(self)
+var information = preload("res://information_popup.gd").new(self)
 var presentation = preload("res://presentation.gd").new(self)
+var board_info = preload("res://board_info.gd").new(self)
 var player_skill = "king"
 var artillery_mode = "march"
 var deploy_draw_used = false
@@ -149,6 +151,7 @@ func sync_hand_ids():
 	while hand_ids.size() < hand.size(): hand_ids.append(next_card_uid);next_card_uid += 1
 func drag_card_uid() -> int: return gesture.uid if gesture.dragging else -1
 func cancel_gesture():
+	if information != null: information.clear()
 	if gesture != null: gesture.cancel()
 	if route != null: route.cancel_pointer()
 	active_touch = -1;touch_dragged = true
@@ -542,14 +545,18 @@ func start_stage():
 	plan_intents()
 	phase = "play";initial_threat = 2.0;notice = "向前一步，抽取你的第一张牌。"
 	log_line("第%d关 · %s" % [stage, ENCOUNTERS.title(encounter_state.config) if ENCOUNTERS.active(self) else CAMPAIGN.stage_name(stage)])
+	board_info.begin_battle()
 func log_line(s: String):
+	board_info.note_log(s)
 	logs.push_front(s)
 	if logs.size() > 7: logs.pop_back()
 func _process(delta):
+	board_info.tick(delta)
 	presentation.tick(delta)
 	if card_picker.active and not card_picker.valid_context(): card_picker.close()
 	update_window_layout()
 	route.tick(delta)
+	information.tick(delta)
 	tick += delta
 	if input_lock <= 0: initial_threat = maxf(0, initial_threat - delta)
 	input_lock = maxf(0, input_lock - delta)
@@ -683,7 +690,9 @@ func draw_card():
 	if id == "fatigue": notice = "疲惫：抽到立即扣1能量，最低0；不记欠费。"
 	if hand.size() > 6: phase = "discard";selected = -1;free_selected = false;notice = "选一张牌，再确认弃置。"
 func hand_rect(i: int) -> Rect2: return hand_visual_rect(i)
+func inspect_information(pos: Vector2) -> Dictionary: return board_info.inspect_at(pos)
 func _gui_input(event):
+	if information.input_event(event): return
 	if presentation.input_event(event): return
 	if card_picker.input_event(event): return
 	if screen in ["map", "route_choice"] and route.input_event(event): return
@@ -709,10 +718,11 @@ func handle_click(pos: Vector2):
 	if encounter_info_open:
 		if encounter_close_rect().has_point(pos) or not encounter_panel_rect().has_point(pos): encounter_info_open = false
 		return
-	if screen == "game" and mobile_layout and ENCOUNTERS.active(self) and phase in ["play", "discard"] and encounter_rules_rect().has_point(pos):
-		cancel_gesture();encounter_info_open = true;return
 	if screen in ["map", "route_choice"]: route.click(pos);return
 	if screen != "game": cancel_gesture();frontend.click(pos);return
+	if phase in ["play", "discard"]:
+		for tag in board_info.tag_items():
+			if tag.anchor.has_point(pos): return
 	if home_rect().has_point(pos): show_home();return
 	if UNDO_RECT.has_point(pos): undo_action();return
 	if RESTART_RECT.has_point(pos):
@@ -741,6 +751,8 @@ func handle_click(pos: Vector2):
 	elif free_selected and not full_hand_area().has_point(pos): cancel_selection()
 
 func _input(event):
+	if event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventKey:
+		if information.input_event(event): get_viewport().set_input_as_handled();return
 	if screen == "settings" and event is InputEventKey:
 		if event.pressed and not event.echo and event.keycode == KEY_ESCAPE: show_home()
 		get_viewport().set_input_as_handled();return
@@ -1044,19 +1056,11 @@ func context_hint() -> String:
 		return "攻击姿态：正交走1格；炮击1费2伤；转进牌切回行军。" if artillery_mode == "attack" else "行军姿态：正交走1～2格；展开抽3张（每回合首次）。"
 	if selected >= 0: return "点击高亮目标；再点选中牌取消。" if mobile_layout else "选择高亮目标；右键 / Esc 取消。"
 	if notice in ["能量不足。", "本回合已使用移动牌。", "牌库与弃牌堆已空。"]: return notice
-	var idx = R.occupied(hover, enemies)
-	if idx >= 0:
-		var e = enemies[idx]
-		if e.kind == "stake": return "机关炮架 · 持续本场战斗" if e.get("permanent", false) else "木桩 · 挡路与炮架 · 剩余%d回合" % int(e.get("ttl", 3))
-		var credit_label = ""
-		var credits = ENCOUNTERS.available_action_credits(self, e, true)
-		if credits > 0: credit_label = " · 加速%d次" % credits
-		return "%s · %d/%d血 · 倒计时%d%s%s" % [(ENCOUNTERS.enemy_tags(e) + piece_name(e.kind) if ENCOUNTERS.enemy_tags(e) != "" else ("急行卒" if e.kind == "q" else piece_name(e.kind))), e.hp, e.max_hp, ENCOUNTERS.effective_countdown(self, e), credit_label, " · 定身中" if e.stun > 0 else ""]
-	return ENCOUNTERS.status(self)
+	return ""
 func _draw():
 	if card_picker.active: card_picker.draw();return
 	if screen in ["map", "route_choice"]:
-		route.draw();presentation.draw();return
+		route.draw();information.draw();presentation.draw();return
 	if screen != "game":
 		frontend.draw()
 		return
@@ -1121,33 +1125,7 @@ func _draw():
 		draw_circle(v + Vector2(1, 3), 24, THEME.SHADOW);draw_circle(v, 23, THEME.PAPER.lerp(Color.WHITE, flash));draw_arc(v, 20, 0, TAU, 32, THEME.GRID, 2)
 		text_at(v + Vector2(-14, 9), piece_name(e.kind), 28, THEME.INK)
 		if mobile_layout: draw_set_transform(Vector2.ZERO, 0, Vector2.ONE);v = token_origin
-		var badge = Vector2(CELL * 0.36, - CELL * 0.36) if mobile_layout else Vector2(20, -20)
-		draw_circle(v + badge, 12 if mobile_layout else 10, THEME.SAFE);text_at(v + badge + Vector2(-5, 6), str(ENCOUNTERS.effective_countdown(self, e)), 18 if mobile_layout else 13, THEME.LIGHT)
-		var max_hp = e.get("max_hp", enemy_health(e.kind))
-		if max_hp > 3:
-			var hp_label = "%d/%d" % [e.hp, max_hp]
-			var hp_size = 12 if mobile_layout else 14
-			var hp_width = FONT.get_string_size(hp_label, HORIZONTAL_ALIGNMENT_LEFT, -1, hp_size).x
-			panel(Rect2(v + Vector2(-hp_width * 0.5 - 3, CELL * 0.34), Vector2(hp_width + 6, 17)), THEME.PAPER)
-			text_at(v + Vector2(-hp_width * 0.5, CELL * 0.34 + 13), hp_label, hp_size, RED)
-		elif max_hp > 1:
-			for h in max_hp: draw_circle(v + Vector2((h - (max_hp - 1) * 0.5) * 9, CELL * 0.46 if mobile_layout else 29), 3, RED if h < e.get("hp", max_hp) else THEME.BORDER)
-		if e.get("unyielding", false):
-			text_at(v + Vector2(-CELL * 0.48, CELL * 0.18), "复", 12, GOLD)
-		elif e.get("heavy", false):
-			text_at(v + Vector2(-CELL * 0.48, CELL * 0.18), "重", 12, GOLD)
-		if e.kind == "q" or e.get("signal", false):
-			var rule_badge = v + Vector2(-CELL * 0.36, -CELL * 0.36)
-			draw_circle(rule_badge, 10, RED)
-			text_at(rule_badge + Vector2(-6, 5), "疾" if e.kind == "q" else "旗", 12, THEME.LIGHT)
-		if ENCOUNTERS.available_action_credits(self, e, true) > 0:
-			text_at(v + Vector2(-CELL * 0.48, CELL * 0.24), "速%d" % ENCOUNTERS.available_action_credits(self, e, true), 13, RED)
-		elif e.get("march_mark", false) or e.get("bonus_pending", false): text_at(v + Vector2(-CELL * 0.48, CELL * 0.24), "+", 15, RED)
-		if e.stun > 0: text_at(v + Vector2(-21, 40), "定身", 14, THEME.SAFE)
-		var bleed_damage = 0
-		for bleed in pending_bleeds:
-			if bleed.enemy_uid == e.get("uid", -1): bleed_damage += bleed.amount
-		if bleed_damage > 0: text_at(v + Vector2(-18, -CELL * 0.48), "血%d" % bleed_damage, 13, RED)
+		board_info.draw_enemy_status(e, v)
 		draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
 	var pv = player_visual
 	if shield_charges > 0: draw_arc(pv, CELL * 0.47, 0, TAU, 32, THEME.SAFE, 3)
@@ -1163,17 +1141,12 @@ func _draw():
 	text_at((Vector2(200, 500) if compact_landscape else Vector2(150, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(550, 609), "能量 %d" % energy, 20, THEME.LIGHT)
 	var confirm = selected >= 0 and (phase == "discard" or (phase == "play" and hand[selected] in UNTARGETED))
 	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else (("跳过回合" if mobile_layout else "跳过回合 [空格]") if recovery_active() else ("结束回合" if mobile_layout else "结束回合 [空格]"))), 18, THEME.INK)
-	var statuses: Array[String] = []
-	if tuna_active or tuna_turns > 0: statuses.append(("吐纳 本回合+1" if tuna_active else "吐纳") + " 后续%d回合" % tuna_turns)
-	if shield_charges > 0: statuses.append("固守 1次")
-	if reload_ready: statuses.append("装填 下次炮击+1")
-	if player_skill == "horse": statuses.append("主动位移 %d次" % active_displacements)
-	if not statuses.is_empty():
-		var status = " · ".join(statuses)
-		text_at(Vector2(410, 410) if compact_landscape else (Vector2(24, minf(BOARD_RECT.end.y + 62, full_hand_area().position.y - 8)) if mobile_layout else Vector2(24, 602)), status, 14, THEME.HEADING)
+	board_info.draw_player_status()
+	board_info.draw_hud()
 	var hint = context_hint()
-	if not hint.is_empty() and input_lock <= 0: text_at((Vector2(410, 130) if compact_landscape else Vector2(24, 105)) if mobile_layout else Vector2(24, 618), hint, 14 if mobile_layout else 16, RED if phase == "discard" or R.threatened(player, enemies) else THEME.HEADING)
+	if not hint.is_empty() and input_lock <= 0 and board_info.should_show_context(): text_at((Vector2(410, 142) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 67)) if mobile_layout else Vector2(24, 618), hint, 14 if mobile_layout else 16, RED if phase == "discard" or R.threatened(player, enemies) else THEME.HEADING)
 	draw_effects()
+	board_info.draw_preview(gesture.target_cell() if gesture.dragging else (board_cell(mouse_pos) if active_touch >= 0 else hover))
 	if phase == "discard": draw_rect(full_hand_area().grow(2), RED, false, 3)
 	handui.draw()
 	gesture.draw()
@@ -1190,9 +1163,7 @@ func _draw():
 	panel(UNDO_RECT, THEME.BUTTON, GOLD if history.can_undo() else THEME.BORDER);text_at(UNDO_RECT.position + Vector2(8, 29), undo_label(), 14 if mobile_layout else 16)
 	panel(home_rect(), THEME.BUTTON);text_at(home_rect().position + Vector2(10, 29 if mobile_layout else 27), "首页" if mobile_layout else "返回首页", 18)
 
-	if mobile_layout and ENCOUNTERS.active(self) and phase in ["play", "discard"]:
-		panel(encounter_rules_rect(), THEME.BUTTON);text_at(encounter_rules_rect().position + Vector2(8, 29), "军阵", 16, THEME.INK)
-	if encounter_info_open: draw_encounter_panel()
+	information.draw()
 
 func draw_stake(position: Vector2, alpha: float = 1.0):
 	var radius = minf(20, CELL * 0.32)
@@ -1276,27 +1247,7 @@ func draw_effects():
 func draw_mobile_hand_controls(): pass
 
 func draw_encounter_signals():
-	for marker in ENCOUNTERS.markers(self):
-		var point = cell_pos(marker.pos)
-		var color = GOLD if marker.kind == "revival" else RED
-		draw_arc(point, CELL * 0.34, 0, TAU, 20, Color(color, 0.55), 1.5)
-		text_at(point + Vector2(-CELL * 0.38, CELL * 0.40), marker.label, 11, color)
-	var spawn: Vector2i = encounter_state.get("spawn_cell", Vector2i(-1, -1))
-	if R.inside(spawn):
-		draw_rect(Rect2(cell_pos(spawn) - Vector2.ONE * CELL * 0.42, Vector2.ONE * CELL * 0.84), Color(RED, 0.2))
-		text_at(cell_pos(spawn) + Vector2(-17, 5), "援马", 13, RED)
-	if ENCOUNTERS.has_rule(self, "palace_rotation"):
-		var guard_uid = ENCOUNTERS.selected_guard(self)
-		for enemy in enemies:
-			if enemy.uid == guard_uid: draw_arc(cell_pos(enemy.pos), CELL * 0.46, 0, TAU, 28, GOLD, 2)
-	if not mobile_layout:
-		var area = Rect2(24, 144, 350, 244)
-		panel(area, THEME.PAPER)
-		text_at(area.position + Vector2(16, 30), ENCOUNTERS.title(encounter_state.config), 24, THEME.INK)
-		var desc = ENCOUNTERS.details(encounter_state.config)
-		if desc.is_empty(): desc = "普通军阵：棋子按象棋规则行动。先攻击，再按倒计时移动。"
-		wrapped_text(desc, Rect2(area.position + Vector2(16, 43), Vector2(318, 150)), 15, THEME.INK)
-		wrapped_text(ENCOUNTERS.status(self), Rect2(area.position + Vector2(16, 195), Vector2(318, 40)), 15, RED)
+	board_info.draw_signals()
 
 func encounter_rules_rect() -> Rect2:
 	return Rect2(540, 440, 124, 44) if compact_landscape else Rect2(240, BOARD_RECT.end.y + 8, 56, 48)

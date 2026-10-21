@@ -58,22 +58,29 @@ async def main():
                     await tap(*menu)
                     await tap(*menu)
                     await state('map', -1, -1)
-                    mx,my,mw,mh,ch,margin = (24,116,850,800,1240,42) if desktop else (14,112,452,uh-282,(uh-282)*2.4,28)
+                    mw = min(uw-28, 1000)
+                    mx, my, mh = (uw-mw)/2, 112, uh-126
+                    ch, margin = (1240, 42) if desktop else (mh*2.4, 28)
                     nx = mx+margin+.46*(mw-margin*2)
                     ny = my+32+.94*(ch-80)
                     scroll = max(0, min(ch-mh, ny-my-mh*.73))
                     await tap(nx, ny-scroll-15)
                     # The independent header entry remains usable with a selected node.
                     saved_before = await page.evaluate('(key)=>localStorage.getItem(key)', KEY)
-                    await page.screenshot(path=str(OUT / f'map-selected-deck-entry-{w}.png'))
+                    selected_map = await page.screenshot(path=str(OUT / f'map-selected-deck-entry-{w}.png'))
                     await tap(uw-84, 34)
-                    await page.screenshot(path=str(OUT / f'map-readonly-deck-{w}.png'))
+                    deck = await page.screenshot(path=str(OUT / f'map-readonly-deck-{w}.png'))
+                    assert deck != selected_map, 'Header deck entry did not open the read-only picker'
                     await page.keyboard.press('Enter')
                     assert await page.evaluate('(key)=>localStorage.getItem(key)', KEY) == saved_before
                     await tap(88, uh-40)
-                    await page.screenshot(path=str(OUT / f'map-returned-selected-{w}.png'))
-                    # Confirming the same node proves closing did not discard selection.
-                    await tap(*( (1075,868) if desktop else (uw-107,uh-48) ))
+                    returned_map = await page.screenshot(path=str(OUT / f'map-returned-selected-{w}.png'))
+                    assert returned_map == selected_map, 'Closing the deck did not restore the selected map'
+                    assert await page.evaluate('(key)=>localStorage.getItem(key)', KEY) == saved_before
+                    # A second click on the same node proves closing retained selection.
+                    # This is deliberately later than a conventional double-click.
+                    await page.wait_for_timeout(1200)
+                    await tap(nx, ny-scroll-15)
                     await state('game', -1, 0)
                     await tap(*( (1098,102) if desktop else (410,84) ))
                     await page.wait_for_function("/\"phase\": \"reward\"/.test(localStorage.getItem('yixing.route_run.v0100')||'')", timeout=12000)
@@ -87,7 +94,7 @@ async def main():
                     # The saved snapshot survives reload even if Continue is broken.
                     # Prove the restored UI is live by entering the next event.
                     await tap(mx+margin+.15*(mw-margin*2), my+32+.82*(ch-80)-scroll-15)
-                    await tap(*((1075,868) if desktop else (uw-107,uh-48)))
+                    await tap(mx+margin+.15*(mw-margin*2), my+32+.82*(ch-80)-scroll-15)
                     await state('route_choice', 0, 1)
                     assert not errors, errors
                     await page.screenshot(path=str(OUT / f'event-after-resume-{w}.png'))
