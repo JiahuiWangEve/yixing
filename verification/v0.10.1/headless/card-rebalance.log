@@ -1,0 +1,228 @@
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS king exact four-card collection and empty opening hand
+PASS king route loot has two distinct identity cards and one common without retired cards
+PASS king weighted route generation stays seeded and deterministic
+PASS horse exact four-card collection and empty opening hand
+PASS horse route loot has two distinct identity cards and one common without retired cards
+PASS horse weighted route generation stays seeded and deterministic
+PASS artillery exact four-card collection and empty opening hand
+PASS artillery route loot has two distinct identity cards and one common without retired cards
+PASS artillery weighted route generation stays seeded and deterministic
+PASS straight has half-weight rarity, rather than equal weighting or exclusion
+PASS push is removed from the demo card registry
+PASS stun is removed from the demo card registry
+PASS swap is removed from the demo card registry
+PASS unused compatibility-only upgrades are absent
+PASS pierce internal id displays bleed and costs one
+PASS guard costs two and exhausts
+PASS suppress costs three and recycles
+PASS chain costs two; permanent stake costs one and exhausts
+PASS reload costs one and recycles
+PASS guard arms one shield and exhausts
+PASS shield blocks a real attack without recoil, life loss, or draw
+PASS shield is consumed by the blocked attack
+PASS undo enemy phase restores shield
+PASS undo guard restores exhausted card and energy
+PASS two attackers use one shield then cause one ordinary hit and recoil
+PASS unused shield expires at next player start
+PASS expired shield cannot absorb a later-turn hit
+PASS unaffordable guard is inert
+PASS bleed queues two damage without immediate damage
+PASS bleed records stable enemy identity and amount
+PASS bleed follows moving enemy and resolves after enemy movement
+PASS bleed queue drains at next player start
+PASS undo delayed resolution restores queue damage and movement
+PASS undo bleed restores card and clears scheduled damage
+PASS two bleeds on the same surviving enemy stack to four
+PASS replacement at same cell receives a different enemy uid
+PASS dead target bleed never transfers to replacement or stale array index
+PASS array removal before resolution does not retarget another bleed
+PASS bleeding general does not grant early victory
+PASS general attacks first, then delayed kill settles next-player-start victory
+PASS lethal enemy attack stops delayed victory from reviving a dead player
+PASS shield plus delayed general kill produces final victory at the correct boundary
+PASS new battle starts with zero active displacements
+PASS successful free movement counts once
+PASS rejected second free move does not count
+PASS two-cell paid movement counts once rather than by distance
+PASS rejected paid movement does not count
+PASS undo paid movement restores displacement count
+PASS undo free movement restores zero count
+PASS advance counts only an actual player displacement at hp=1
+PASS advance counts only an actual player displacement at hp=3
+PASS knight_assault counts only an actual player displacement at hp=1
+PASS knight_assault counts only an actual player displacement at hp=3
+PASS retreat_strike counts only an actual player displacement at hp=1
+PASS retreat_strike counts only an actual player displacement at hp=3
+PASS pushing an enemy does not count as player movement
+PASS stance changes and their draws do not count as movement
+PASS recording a stationary origin cannot increase movement count
+PASS forced recoil does not create active displacement in the new turn
+PASS next player turn resets active displacement count
+PASS undo turn restores prior-turn displacement count
+PASS stage transition clears movement count
+PASS chain accepts selected diagonal neighbor
+PASS chain hits only chosen target for 1 plus active moves=0
+PASS chain itself neither moves nor draws and costs two
+PASS undo chain restores selected damage and its state
+PASS chain accepts selected diagonal neighbor
+PASS chain hits only chosen target for 1 plus active moves=1
+PASS chain itself neither moves nor draws and costs two
+PASS undo chain restores selected damage and its state
+PASS chain accepts selected diagonal neighbor
+PASS chain hits only chosen target for 1 plus active moves=3
+PASS chain itself neither moves nor draws and costs two
+PASS undo chain restores selected damage and its state
+PASS chain rejects distance two, stake, and empty cell
+PASS invalid chain target spends nothing
+PASS sweep deals one to all eight neighbors but not distance two
+PASS diagonal-only enemy enables sweep
+PASS diagonal-only sweep is actually applied
+PASS stakes alone neither enable nor suffer sweep
+PASS shock accepts expanded target (1, 1)
+PASS shock damages and pushes outward one cell for (1, 1)
+PASS shock accepts expanded target (-1, -1)
+PASS shock damages and pushes outward one cell for (-1, -1)
+PASS shock accepts expanded target (2, 0)
+PASS shock damages and pushes outward one cell for (2, 0)
+PASS shock accepts expanded target (0, -2)
+PASS shock damages and pushes outward one cell for (0, -2)
+PASS occupied push destination prevents movement but not shock damage
+PASS board edge prevents push without cancelling damage
+PASS shock excludes non-orthogonal distance-two extension
+PASS shock selectable distance-two range ignores an intervening piece
+PASS suppress completes one draw and enters normal hand overflow
+PASS suppress increases only orthogonal adjacent movement timers by two
+PASS suppress neither damages nor stuns and spends three energy
+PASS undo suppress restores draw overflow timer and resources
+PASS suppressed attacker can still attack and its timer ticks normally
+PASS suppress remains a legal draw with no adjacent target
+PASS temporary stake has three phases; permanent stake exhausts and has no positive expiry
+PASS permanent and temporary stakes block movement and duplicate placement
+PASS both stake types survive first two enemy phases
+PASS third phase expires only ordinary stake
+PASS permanent stake remains after seven enemy phases
+PASS undo permanent stake restores exhausted card and removes piece
+PASS permanent stake rejects player cell, beyond-range and off-board placements
+PASS stage transition removes structures and restores consumed permanent-stake copy
+PASS march reload costs one and arms a single bonus
+PASS march next successful cannon shot gains exactly one damage
+PASS march cannon cost is unchanged by reload
+PASS march undo shot restores reload charge and damage
+PASS march undo reload restores card and energy
+PASS attack reload costs one and arms a single bonus
+PASS attack next successful cannon shot gains exactly one damage
+PASS attack cannon cost is unchanged by reload
+PASS attack undo shot restores reload charge and damage
+PASS attack undo reload restores card and energy
+PASS unaffordable cannon does not consume reload
+PASS invalid cannon target does not consume reload
+PASS cannon without a screen preserves reload
+PASS reload-powered kill draws exactly one card
+PASS undo and replay reload kill draws same physical card identity
+PASS multiple reload uses cannot stack damage
+PASS only first subsequent cannon is enhanced
+PASS unused reload expires at next turn
+PASS undo turn restores unspent reload
+PASS stage transition clears reload
+PASS ordinary attack neither spends reload nor receives its damage
+PASS king new effects save successfully
+PASS king new-scene save round trip restores all new state and RNG
+PASS king saved bleed identity cannot collide with next enemy
+PASS king enemy IDs continue after resume
+PASS king resumed effects resolve or expire at correct next-turn boundary
+PASS horse new effects save successfully
+PASS horse new-scene save round trip restores all new state and RNG
+PASS horse saved bleed identity cannot collide with next enemy
+PASS horse enemy IDs continue after resume
+PASS horse resumed effects resolve or expire at correct next-turn boundary
+PASS artillery new effects save successfully
+PASS artillery new-scene save round trip restores all new state and RNG
+PASS artillery saved bleed identity cannot collide with next enemy
+PASS artillery enemy IDs continue after resume
+PASS artillery resumed effects resolve or expire at correct next-turn boundary
+PASS current saves use version three
+PASS native and Web save namespaces isolate this demo revision
+PASS old demo save fixture exists only in its retired namespace
+PASS old v1 file is never loaded when current-format file is absent
+PASS ignored old save does not mutate current run
+PASS ignored old save is not rewritten or migrated
+PASS new-format save still resumes normally alongside an old file
+PASS normal new saving leaves retired namespace untouched
+PASS reject new-format missing required active_displacements
+PASS reject missing required active_displacements without live-state mutation
+PASS reject new-format missing required shield_charges
+PASS reject missing required shield_charges without live-state mutation
+PASS reject new-format missing required pending_bleeds
+PASS reject missing required pending_bleeds without live-state mutation
+PASS reject new-format missing required next_enemy_uid
+PASS reject missing required next_enemy_uid without live-state mutation
+PASS reject new-format missing required reload_ready
+PASS reject missing required reload_ready without live-state mutation
+PASS reject new-format invalid active_displacements value -1
+PASS reject invalid active_displacements value -1 without live-state mutation
+PASS reject new-format invalid shield_charges value 2
+PASS reject invalid shield_charges value 2 without live-state mutation
+PASS reject new-format invalid reload_ready value armed
+PASS reject invalid reload_ready value armed without live-state mutation
+PASS reject new-format invalid next_enemy_uid value 0
+PASS reject invalid next_enemy_uid value 0 without live-state mutation
+PASS reject new-format invalid pending_bleeds value [{ "enemy_uid": 0, "amount": 2 }]
+PASS reject invalid pending_bleeds value [{ "enemy_uid": 0, "amount": 2 }] without live-state mutation
+PASS reject new-format invalid pending_bleeds value [{ "enemy_uid": 1, "amount": -1 }]
+PASS reject invalid pending_bleeds value [{ "enemy_uid": 1, "amount": -1 }] without live-state mutation
+PASS reject new-format invalid pending_bleeds value ["not a bleed"]
+PASS reject invalid pending_bleeds value ["not a bleed"] without live-state mutation
+PASS reject new-format invalid collection value ["push"]
+PASS reject invalid collection value ["push"] without live-state mutation
+PASS reject new-format invalid hand value ["stun"]
+PASS reject invalid hand value ["stun"] without live-state mutation
+PASS reject new-format invalid deck value ["swap"]
+PASS reject invalid deck value ["swap"] without live-state mutation
+PASS reject new-format duplicate enemy IDs
+PASS reject duplicate enemy IDs without live-state mutation
+PASS reject new-format missing enemy identity
+PASS reject missing enemy identity without live-state mutation
+PASS reject new-format next enemy identity would collide
+PASS reject next enemy identity would collide without live-state mutation
+PASS reject new-format wrong save version 1
+PASS reject wrong save version 1 without live-state mutation
+PASS reject new-format wrong save version 99
+PASS reject wrong save version 99 without live-state mutation
+PASS valid current save still resumes after invalid fixtures
+PASS map return clears every battle-only buff and delayed effect
+PASS camp still upgrades only sword and spear, with no accidental generic plus cards
+PASS sweep focused description fits card at (1280.0, 940.0)
+PASS shock focused description fits card at (1280.0, 940.0)
+PASS pierce focused description fits card at (1280.0, 940.0)
+PASS guard focused description fits card at (1280.0, 940.0)
+PASS suppress focused description fits card at (1280.0, 940.0)
+PASS chain_assault focused description fits card at (1280.0, 940.0)
+PASS permanent_stake focused description fits card at (1280.0, 940.0)
+PASS reload focused description fits card at (1280.0, 940.0)
+PASS sweep focused description fits card at (390.0, 844.0)
+PASS shock focused description fits card at (390.0, 844.0)
+PASS pierce focused description fits card at (390.0, 844.0)
+PASS guard focused description fits card at (390.0, 844.0)
+PASS suppress focused description fits card at (390.0, 844.0)
+PASS chain_assault focused description fits card at (390.0, 844.0)
+PASS permanent_stake focused description fits card at (390.0, 844.0)
+PASS reload focused description fits card at (390.0, 844.0)
+PASS sweep focused description fits card at (844.0, 390.0)
+PASS shock focused description fits card at (844.0, 390.0)
+PASS pierce focused description fits card at (844.0, 390.0)
+PASS guard focused description fits card at (844.0, 390.0)
+PASS suppress focused description fits card at (844.0, 390.0)
+PASS chain_assault focused description fits card at (844.0, 390.0)
+PASS permanent_stake focused description fits card at (844.0, 390.0)
+PASS reload focused description fits card at (844.0, 390.0)
+PASS sweep focused description fits card at (360.0, 640.0)
+PASS shock focused description fits card at (360.0, 640.0)
+PASS pierce focused description fits card at (360.0, 640.0)
+PASS guard focused description fits card at (360.0, 640.0)
+PASS suppress focused description fits card at (360.0, 640.0)
+PASS chain_assault focused description fits card at (360.0, 640.0)
+PASS permanent_stake focused description fits card at (360.0, 640.0)
+PASS reload focused description fits card at (360.0, 640.0)
+CARD REBALANCE RESULT 225 checks, 0 failures

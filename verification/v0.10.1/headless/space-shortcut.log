@@ -1,0 +1,56 @@
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS Enter and keypad Enter no longer end a combat turn
+PASS Space release and auto-repeat are inert before the first press
+PASS one Space press ends exactly one active play turn
+PASS Space records one undoable end-turn action
+PASS Space runs the enemy phase exactly once
+PASS animation lock rejects rapid extra presses as well as held-key repeats
+PASS held Space cannot end another turn after animation lock expires
+PASS a fresh Space press after release can end the next turn once
+PASS Space is inert on home
+PASS Space is inert on skill_selection
+PASS Space is inert on debug_menu
+PASS Space is inert on tutorial_menu
+PASS Space is inert on tutorial_pause
+PASS Space is inert on tutorial_complete
+PASS Space is inert on route_choice
+PASS Space neither ends a turn nor confirms a card in reward
+PASS Space neither ends a turn nor confirms a card in discard
+PASS Space neither ends a turn nor confirms a card in dead
+PASS Space neither ends a turn nor confirms a card in win
+PASS Space respects input_lock
+PASS Space respects navigation_lock
+PASS Space cannot bypass a tutorial's current non-end-turn objective
+PASS Space cannot bypass a completed tutorial's transition gate
+PASS Space ends turn without playing selected sweep
+PASS sweep selection produces no extra play action
+PASS Space ends turn without playing selected life
+PASS life selection produces no extra play action
+PASS Space ends turn without playing selected breath
+PASS breath selection produces no extra play action
+PASS Space ends turn without playing selected deploy
+PASS deploy selection produces no extra play action
+PASS Space ends turn without playing selected pack
+PASS pack selection produces no extra play action
+PASS Space ends turn without playing selected tuna
+PASS tuna selection produces no extra play action
+PASS Space ends turn without playing selected suppress
+PASS suppress selection produces no extra play action
+PASS Space ends turn without playing selected guard
+PASS guard selection produces no extra play action
+PASS Space ends turn without playing selected reload
+PASS reload selection produces no extra play action
+PASS Space on an unselected map neither ends a turn nor starts travel
+PASS Space does not confirm a valid map selection
+PASS map Enter release and auto-repeat remain inert
+PASS map 4194309 still confirms valid selection into transient travel
+PASS keys during map travel cannot duplicate confirmation or end a turn
+PASS confirmed map travel enters battle once without ending its first turn
+PASS Space on an unselected map neither ends a turn nor starts travel
+PASS Space does not confirm a valid map selection
+PASS map Enter release and auto-repeat remain inert
+PASS map 4194310 still confirms valid selection into transient travel
+PASS keys during map travel cannot duplicate confirmation or end a turn
+PASS confirmed map travel enters battle once without ending its first turn
+SPACE SHORTCUT RESULT 53 checks, 0 failures

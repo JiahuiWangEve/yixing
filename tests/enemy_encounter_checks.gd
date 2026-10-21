@@ -236,7 +236,7 @@ func check_actual_modifiers():
 	game.damage_enemy(0, 0, 1);game.clear_effects()
 	guard.cd = 1;guard.period = 1;guard.intent = Vector2i(4, 1)
 	game.end_turn()
-	check(move_effects(guard.uid) == 2 and guard.normal_moves == 1 and not guard.bonus_pending, "rotation and retaliation together grant two total movements, not three")
+	check(move_effects(guard.uid) == 1 and guard.normal_moves == 1 and guard.action_credits == 1 and not guard.bonus_pending, "boss rotation and retaliation move once and retain one credit")
 	check(guard.pos.x >= 3 and guard.pos.x <= 5 and guard.pos.y <= 2, "both guard steps stay within palace")
 	fixture("palace_guard", "elite", ["palace_rotation"])
 	guard = game.enemies[index_of(E.selected_guard(game))];guard.cd = 2;guard.period = 2

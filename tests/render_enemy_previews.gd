@@ -1,5 +1,5 @@
 extends Node
-const OUT = "res://../verification/v0.10.0/native/"
+const OUT = "res://../verification/v0.10.1/native/"
 var screenshots = 0
 var checks = 0
 var failures = 0
@@ -40,6 +40,17 @@ func run():
 				await capture(viewport, game, "ready-rook-selected" + suffix)
 			check(not game.encounter_rules_rect().intersects(game.BOARD_RECT) if game.mobile_layout else true, "rules button outside board")
 			check(not game.encounter_rules_rect().intersects(game.END_TURN_RECT) if game.mobile_layout else true, "rules button outside end turn")
+			if id == "palace_final":
+				game.damage_enemy(0, 0, 1)
+				var guard_uid = game.ENCOUNTERS.selected_guard(game)
+				var guard: Dictionary = {}
+				for enemy in game.enemies:
+					if enemy.uid == guard_uid: guard = enemy
+				game.hover = guard.pos;game.notice = ""
+				await capture(viewport, game, "boss-dual-credits" + suffix)
+				game.end_turn();game.hover = guard.pos;game.notice = ""
+				await capture(viewport, game, "boss-credit-remainder" + suffix)
+				check(int(guard.get("action_credits", 0)) == 1, "dual boss credit leaves one after phase")
 			if id == "palace_final" and game.mobile_layout:
 				game.encounter_info_open = true;game.queue_redraw()
 				for frame in 3: await RenderingServer.frame_post_draw

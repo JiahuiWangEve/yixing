@@ -48,3 +48,5 @@ run font-subset --script "$root/tests/font_subset_checks.gd"
 run map-performance --script "$root/tests/map_performance_checks.gd"
 
 run enemy-encounters --script "$root/tests/enemy_encounter_checks.gd"
+
+run boss-action-credits --script "$root/tests/boss_action_credit_checks.gd"

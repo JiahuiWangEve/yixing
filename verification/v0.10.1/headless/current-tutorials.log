@@ -1,0 +1,169 @@
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS lesson 0 has fixed steps
+PASS lesson 0 step 0 ready
+PASS lesson 0 step 0 uses current cards only
+PASS lesson 0 step 0 move achieves observed success (skip)
+PASS lesson 0 step 1 ready
+PASS lesson 0 step 1 uses current cards only
+PASS lesson 0 step 1 end_turn achieves observed success (skip)
+PASS lesson 0 step 2 ready
+PASS lesson 0 step 2 uses current cards only
+PASS lesson 0 step 2 move achieves observed success (skip)
+PASS lesson 0 completes (skip)
+PASS lesson 0 final completion flag
+PASS lesson 0 sections can be skipped safely
+PASS lesson 1 has fixed steps
+PASS lesson 1 step 0 ready
+PASS lesson 1 step 0 uses current cards only
+PASS lesson 1 step 0 select achieves observed success (skip)
+PASS lesson 1 step 1 ready
+PASS lesson 1 step 1 uses current cards only
+PASS lesson 1 step 1 cancel achieves observed success (skip)
+PASS lesson 1 step 2 ready
+PASS lesson 1 step 2 uses current cards only
+PASS lesson 1 step 2 play achieves observed success (skip)
+PASS lesson 1 step 3 ready
+PASS lesson 1 step 3 uses current cards only
+PASS lesson 1 step 3 end_turn achieves observed success (skip)
+PASS lesson 1 step 4 ready
+PASS lesson 1 step 4 uses current cards only
+PASS elephant lesson starts with current three-HP elephant
+PASS elephant lesson supplies exactly three swords and three energy
+PASS elephant survives sword 1 with correct remaining HP
+PASS lesson 1 step 4 play achieves observed success (skip)
+PASS lesson 1 step 5 ready
+PASS lesson 1 step 5 uses current cards only
+PASS elephant survives sword 2 with correct remaining HP
+PASS lesson 1 step 5 play achieves observed success (skip)
+PASS lesson 1 step 6 ready
+PASS lesson 1 step 6 uses current cards only
+PASS third tutorial sword actually kills elephant
+PASS three sword hits spend all three energy and retain horse
+PASS lesson 1 step 6 play achieves observed success (skip)
+PASS lesson 1 step 7 ready
+PASS lesson 1 step 7 uses current cards only
+PASS elephant lesson end turn restores energy and retains horse
+PASS lesson 1 step 7 end_turn achieves observed success (skip)
+PASS lesson 1 completes (skip)
+PASS lesson 1 final completion flag
+PASS lesson 1 sections can be skipped safely
+PASS lesson 2 has fixed steps
+PASS lesson 2 step 0 ready
+PASS lesson 2 step 0 uses current cards only
+PASS lesson 2 step 0 move achieves observed success (skip)
+PASS lesson 2 step 1 ready
+PASS lesson 2 step 1 uses current cards only
+PASS lesson 2 step 1 play achieves observed success (skip)
+PASS lesson 2 step 2 ready
+PASS lesson 2 step 2 uses current cards only
+PASS lesson 2 step 2 play achieves observed success (skip)
+PASS lesson 2 step 3 ready
+PASS lesson 2 step 3 uses current cards only
+PASS lesson 2 step 3 end_turn achieves observed success (skip)
+PASS lesson 2 step 4 ready
+PASS lesson 2 step 4 uses current cards only
+PASS lesson 2 step 4 move achieves observed success (skip)
+PASS lesson 2 step 5 ready
+PASS lesson 2 step 5 uses current cards only
+PASS lesson 2 step 5 discard achieves observed success (skip)
+PASS lesson 2 completes (skip)
+PASS lesson 2 final completion flag
+PASS lesson 2 sections can be skipped safely
+PASS lesson 3 has fixed steps
+PASS lesson 3 step 0 ready
+PASS lesson 3 step 0 uses current cards only
+PASS lesson 3 step 0 move achieves observed success (skip)
+PASS lesson 3 step 1 ready
+PASS lesson 3 step 1 uses current cards only
+PASS lesson 3 step 1 end_turn achieves observed success (skip)
+PASS lesson 3 step 2 ready
+PASS lesson 3 step 2 uses current cards only
+PASS lesson 3 step 2 end_turn achieves observed success (skip)
+PASS lesson 3 step 3 ready
+PASS lesson 3 step 3 uses current cards only
+PASS lesson 3 step 3 move achieves observed success (skip)
+PASS lesson 3 step 4 ready
+PASS lesson 3 step 4 uses current cards only
+PASS lesson 3 step 4 end_turn achieves observed success (skip)
+PASS lesson 3 step 5 ready
+PASS lesson 3 step 5 uses current cards only
+PASS free threat practice has safe legal move
+PASS lesson 3 step 5 end_turn achieves observed success (skip)
+PASS lesson 3 completes (skip)
+PASS lesson 3 final completion flag
+PASS lesson 3 sections can be skipped safely
+PASS lesson 4 has fixed steps
+PASS lesson 4 step 0 ready
+PASS lesson 4 step 0 uses current cards only
+PASS lesson 4 step 0 play achieves observed success (add)
+PASS lesson 4 step 1 ready
+PASS lesson 4 step 1 uses current cards only
+PASS lesson 4 step 1 play achieves observed success (add)
+PASS lesson 4 step 2 ready
+PASS lesson 4 step 2 uses current cards only
+PASS lesson 4 step 2 play achieves observed success (add)
+PASS lesson 4 step 3 ready
+PASS lesson 4 step 3 uses current cards only
+PASS lesson 4 step 3 reward achieves observed success (add)
+PASS lesson 4 step 4 ready
+PASS lesson 4 step 4 uses current cards only
+PASS lesson 4 step 4 end_turn achieves observed success (add)
+PASS lesson 4 step 5 ready
+PASS lesson 4 step 5 uses current cards only
+PASS lesson 4 step 5 end_turn achieves observed success (add)
+PASS lesson 4 step 6 ready
+PASS lesson 4 step 6 uses current cards only
+PASS lesson 4 step 6 end_turn achieves observed success (add)
+PASS lesson 4 completes (add)
+PASS lesson 4 final completion flag
+PASS lesson 4 has fixed steps
+PASS lesson 4 step 0 ready
+PASS lesson 4 step 0 uses current cards only
+PASS lesson 4 step 0 play achieves observed success (remove)
+PASS lesson 4 step 1 ready
+PASS lesson 4 step 1 uses current cards only
+PASS lesson 4 step 1 play achieves observed success (remove)
+PASS lesson 4 step 2 ready
+PASS lesson 4 step 2 uses current cards only
+PASS lesson 4 step 2 play achieves observed success (remove)
+PASS lesson 4 step 3 ready
+PASS lesson 4 step 3 uses current cards only
+PASS lesson 4 step 3 reward achieves observed success (remove)
+PASS lesson 4 step 4 ready
+PASS lesson 4 step 4 uses current cards only
+PASS lesson 4 step 4 end_turn achieves observed success (remove)
+PASS lesson 4 step 5 ready
+PASS lesson 4 step 5 uses current cards only
+PASS lesson 4 step 5 end_turn achieves observed success (remove)
+PASS lesson 4 step 6 ready
+PASS lesson 4 step 6 uses current cards only
+PASS lesson 4 step 6 end_turn achieves observed success (remove)
+PASS lesson 4 completes (remove)
+PASS lesson 4 final completion flag
+PASS lesson 4 has fixed steps
+PASS lesson 4 step 0 ready
+PASS lesson 4 step 0 uses current cards only
+PASS lesson 4 step 0 play achieves observed success (skip)
+PASS lesson 4 step 1 ready
+PASS lesson 4 step 1 uses current cards only
+PASS lesson 4 step 1 play achieves observed success (skip)
+PASS lesson 4 step 2 ready
+PASS lesson 4 step 2 uses current cards only
+PASS lesson 4 step 2 play achieves observed success (skip)
+PASS lesson 4 step 3 ready
+PASS lesson 4 step 3 uses current cards only
+PASS lesson 4 step 3 reward achieves observed success (skip)
+PASS lesson 4 step 4 ready
+PASS lesson 4 step 4 uses current cards only
+PASS lesson 4 step 4 end_turn achieves observed success (skip)
+PASS lesson 4 step 5 ready
+PASS lesson 4 step 5 uses current cards only
+PASS lesson 4 step 5 end_turn achieves observed success (skip)
+PASS lesson 4 step 6 ready
+PASS lesson 4 step 6 uses current cards only
+PASS lesson 4 step 6 end_turn achieves observed success (skip)
+PASS lesson 4 completes (skip)
+PASS lesson 4 final completion flag
+PASS lesson 4 sections can be skipped safely
+TUTORIAL RESULT 166 passed, 0 failed

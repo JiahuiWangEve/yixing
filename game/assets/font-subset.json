@@ -354,6 +354,7 @@
     25318,
     25321,
     25345,
+    25351,
     25353,
     25377,
     25442,
@@ -574,6 +575,7 @@
     36879,
     36884,
     36890,
+    36895,
     36896,
     36935,
     36947,
@@ -662,7 +664,7 @@
     "game/tutorial.gd",
     "game/undo_history.gd"
   ],
-  "subset_sha256": "fe23d701a6dbf8d7de672296d9409c501d3bc6a4b172d8bba76ecc37e5465fae",
-  "subset_bytes": 274064,
+  "subset_sha256": "b0a0815525d5d33824ea1415100214dee76ed959ff5e00574552dcdeadd4184b",
+  "subset_bytes": 275296,
   "license": "FONT_LICENSE.txt"
 }

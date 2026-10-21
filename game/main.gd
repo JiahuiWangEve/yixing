@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.10.0"
+const BUILD_VERSION = "v0.10.1"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -721,6 +721,7 @@ func play_card(i: int, p: Vector2i):
 			for enemy in enemies:
 				if enemy.kind != "stake" and absi(enemy.pos.x - player.x) + absi(enemy.pos.y - player.y) == 1:
 					enemy.cd += 2;enemy.intent = Vector2i(-1, -1)
+					if ENCOUNTERS.uses_action_credits(self): enemy.action_credit_delay = int(enemy.get("action_credit_delay", 0)) + 2
 		"guard":
 			shield_charges = 1
 			effect("guard", cell_pos(player), cell_pos(player), 0.35)
@@ -786,13 +787,18 @@ func end_turn():
 			timeline += 0.34
 			player = destination;break
 
-	# Lock rotating guard before any movement. The phase never inserts a new attack.
-	var rotating_guard = ENCOUNTERS.selected_guard(self) if ENCOUNTERS.has_rule(self, "palace_rotation") else -1
+	# Lock rotation and grant final-battle credits once, before any movement.
+	var credit_mode = ENCOUNTERS.uses_action_credits(self)
+	ENCOUNTERS.prepare_phase(self)
+	var rotating_guard = ENCOUNTERS.selected_guard(self) if ENCOUNTERS.has_rule(self, "palace_rotation") and not credit_mode else -1
 	for i in enemies.size():
 		var e = enemies[i]
 		if e.kind == "stake" or e.stun > 0: continue
 		e.cd -= 1
-		if e.cd <= 0:
+		var credit_delayed = credit_mode and int(e.get("action_credit_delay", 0)) > 0
+		if credit_delayed: e.action_credit_delay -= 1
+		var credit_ready = credit_mode and int(e.get("action_credits", 0)) > 0 and not credit_delayed
+		if e.cd <= 0 or credit_ready:
 			if e == attacker or e in blocked_attackers:
 				e.cd = e.period;continue
 			var options = R.moves(e, enemies, player)
@@ -803,9 +809,10 @@ func end_turn():
 				move_piece(e, cell_pos(origin), cell_pos(target), timeline, e.kind == "h")
 				timeline += 0.28;e.pos = target
 				ENCOUNTERS.after_normal_move(self, e, origin)
+				if credit_ready: e.action_credits -= 1
 				var pending = e.get("bonus_pending", false) and int(e.get("bonus_after_phase", 0)) <= int(encounter_state.get("phases", 0))
 				var double_move = ENCOUNTERS.has_rule(self, "double_step") and e.get("march_mark", false) and int(e.get("normal_moves", 0)) % 2 == 0
-				if pending or double_move or (rotating_guard >= 0 and e.get("uid", -1) == rotating_guard):
+				if not credit_mode and (pending or double_move or (rotating_guard >= 0 and e.get("uid", -1) == rotating_guard)):
 					# Multiple rules grant at most one extra legal move; no recursive triggers.
 					if pending: e.bonus_pending = false
 					var extra_options = R.moves(e, enemies, player)
@@ -879,7 +886,10 @@ func context_hint() -> String:
 	if idx >= 0:
 		var e = enemies[idx]
 		if e.kind == "stake": return "机关炮架 · 持续本场战斗" if e.get("permanent", false) else "木桩 · 挡路与炮架 · 剩余%d回合" % int(e.get("ttl", 3))
-		return "%s · %d/%d血 · 倒计时%d%s" % [("急行卒" if e.kind == "q" else piece_name(e.kind)), e.hp, e.max_hp, e.cd, " · 定身中" if e.stun > 0 else ""]
+		var credit_label = ""
+		var credits = ENCOUNTERS.available_action_credits(self, e, true)
+		if credits > 0: credit_label = " · 加速%d次" % credits
+		return "%s · %d/%d血 · 倒计时%d%s%s" % [("急行卒" if e.kind == "q" else piece_name(e.kind)), e.hp, e.max_hp, ENCOUNTERS.effective_countdown(self, e), credit_label, " · 定身中" if e.stun > 0 else ""]
 	return ENCOUNTERS.status(self)
 func _draw():
 	if screen in ["map", "route_choice"]:
@@ -939,7 +949,7 @@ func _draw():
 			if fx.kind == "spawn" and fx.piece == e and fx.age < fx.delay + 0.3: hidden_spawn = true
 		if hidden_spawn: continue
 		var v: Vector2 = e.get("visual", cell_pos(e.pos))
-		if input_lock <= 0 and e.cd <= 1 and e.stun == 0: v.x += sin(tick * 23) * 1.8
+		if input_lock <= 0 and ENCOUNTERS.effective_countdown(self, e) <= 1 and e.stun == 0: v.x += sin(tick * 23) * 1.8
 		var flash = 0.0
 		for fx in effects:
 			if fx.kind == "hit" and fx.get("piece", {}) == e and fx.age >= fx.delay:
@@ -950,7 +960,7 @@ func _draw():
 		text_at(v + Vector2(-14, 9), piece_name(e.kind), 28, THEME.INK)
 		if mobile_layout: draw_set_transform(Vector2.ZERO, 0, Vector2.ONE);v = token_origin
 		var badge = Vector2(CELL * 0.36, - CELL * 0.36) if mobile_layout else Vector2(20, -20)
-		draw_circle(v + badge, 12 if mobile_layout else 10, THEME.SAFE);text_at(v + badge + Vector2(-5, 6), str(e.cd), 18 if mobile_layout else 13, THEME.LIGHT)
+		draw_circle(v + badge, 12 if mobile_layout else 10, THEME.SAFE);text_at(v + badge + Vector2(-5, 6), str(ENCOUNTERS.effective_countdown(self, e)), 18 if mobile_layout else 13, THEME.LIGHT)
 		var max_hp = e.get("max_hp", enemy_health(e.kind))
 		if max_hp > 3:
 			var hp_label = "%d/%d" % [e.hp, max_hp]
@@ -964,7 +974,9 @@ func _draw():
 			var rule_badge = v + Vector2(-CELL * 0.36, -CELL * 0.36)
 			draw_circle(rule_badge, 10, RED)
 			text_at(rule_badge + Vector2(-6, 5), "疾" if e.kind == "q" else "旗", 12, THEME.LIGHT)
-		if e.get("march_mark", false) or e.get("bonus_pending", false): text_at(v + Vector2(-CELL * 0.48, CELL * 0.24), "+", 15, RED)
+		if ENCOUNTERS.available_action_credits(self, e, true) > 0:
+			text_at(v + Vector2(-CELL * 0.48, CELL * 0.24), "速%d" % ENCOUNTERS.available_action_credits(self, e, true), 13, RED)
+		elif e.get("march_mark", false) or e.get("bonus_pending", false): text_at(v + Vector2(-CELL * 0.48, CELL * 0.24), "+", 15, RED)
 		if e.stun > 0: text_at(v + Vector2(-21, 40), "定身", 14, THEME.SAFE)
 		var bleed_damage = 0
 		for bleed in pending_bleeds:
@@ -1125,7 +1137,7 @@ func draw_encounter_panel():
 	text_at(area.position + Vector2(16, 34), ENCOUNTERS.title(encounter_state.config), 24, THEME.INK)
 	var desc = ENCOUNTERS.details(encounter_state.config)
 	if desc.is_empty(): desc = "普通军阵：先攻击，再按倒计时移动。士限九宫，象不过河，急行卒仍按卒的方向走。"
-	desc += "\n所有加步均不额外攻击；多种加步同时触发时，最多额外一步。"
+	if not ENCOUNTERS.uses_action_credits(self): desc += "\n所有加步均不额外攻击；多种加步同时触发时，最多额外一步。"
 	wrapped_text(desc, Rect2(area.position + Vector2(16, 53), Vector2(area.size.x - 32, area.size.y - 148)), 18, THEME.INK)
 	panel(encounter_close_rect(), THEME.PAPER_SELECTED)
 	text_at(encounter_close_rect().position + Vector2(16, 32), "关闭 · 返回棋盘", 18, THEME.INK)
