@@ -59,34 +59,65 @@ func enter(id: int):
 	check(game.route.map_rect().has_point(target), "chosen map node is visible")
 	var taps = [point(target), point(target)]
 	game.route.click(target);game.route.click(target);game.route.tick(game.route.TRAVEL_SECONDS + 0.01);step("enter", "enter-first-battle", taps)
-func text_height(value: String, width: float, font_size: int) -> float:
-	var line = "";var height = float(font_size)
-	for letter in value:
-		if letter == "\n": line = "";height += font_size + 3;continue
-		if not line.is_empty() and game.FONT.get_string_size(line + letter, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > width:
-			line = "";height += font_size + 3
-		line += letter
-	return height
-func rules_text_checks():
+func rectangle(value: Rect2) -> Array:
+	return [value.position.x, value.position.y, value.size.x, value.size.y]
+func inspection_state() -> Dictionary:
+	return {"battle": game.history.capture(), "route": game.route.state.duplicate(true), "selected": game.selected, "undo": game.history.entries.duplicate(true)}
+func inspect_tag(tag: Dictionary, record_steps: bool):
+	# Fixtures advance instantly; settle the normal presentation timer before input.
+	game.presentation.tick(2.1)
+	game.information.clear()
+	var before = inspection_state()
+	var pos: Vector2 = tag.anchor.get_center()
+	var source = "touch" if game.mobile_layout else "mouse"
+	var event
+	if source == "touch":
+		event = InputEventScreenTouch.new();event.index = 4;event.position = pos;event.pressed = true
+		game._input(event)
+	else:
+		event = InputEventMouseMotion.new();event.position = pos;event.device = 0;game._gui_input(event)
+	game.information.tick(0.41 if source == "touch" else 0.31)
+	var popup = game.information
+	check(popup.visible and popup.data.get("key") == tag.key, "actual tag input opens matching shared information popup")
+	check(inspection_state() == before, "opening a mechanism tag preserves full battle, route, selection, RNG and undo state")
+	check(popup.data.get("title") == tag.title and popup.data.get("lines") == tag.lines, "popup exposes every current mechanism rule without truncating content")
+	check(Rect2(Vector2.ZERO, game.ui_size).encloses(popup.area), "actual mechanism popup fits viewport")
+	check(not popup.area.intersects(tag.anchor), "mechanism popup leaves inspected tag visible")
+	check(popup.font_size >= 12 and not popup.rows.is_empty(), "mechanism popup has readable nonempty text")
+	check("".join(popup.rows) == "".join(tag.lines).replace("\n", ""), "wrapped popup rows preserve complete mechanism text")
+	var title_width = game.FONT.get_string_size(tag.title, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	check(title_width <= popup.area.size.x - 28, "full mechanism title fits actual popup")
+	var rows = []
+	for index in popup.rows.size():
+		var width = game.FONT.get_string_size(popup.rows[index], HORIZONTAL_ALIGNMENT_LEFT, -1, popup.font_size).x
+		var baseline = 50 + index * (popup.font_size + 4)
+		var top = baseline - game.FONT.get_ascent(popup.font_size)
+		var bottom = baseline + game.FONT.get_descent(popup.font_size)
+		check(width <= popup.area.size.x - 28 and top >= 0 and bottom <= popup.area.size.y, "complete mechanism row fits popup width and vertical bounds")
+		rows.append({"text": popup.rows[index], "width": width, "top": top, "bottom": bottom})
+	var action = {"kind": "inspect", "label": "mechanism-open-" + tag.key.trim_prefix("mechanism:"), "taps": [], "source": source, "target": point(pos), "popup": rectangle(popup.area), "title": tag.title, "lines": tag.lines.duplicate(), "rows": rows, "font_size": popup.font_size, "expected": summary()}
+	if record_steps: steps.append(action)
+	if source == "touch":
+		event.pressed = false;game._input(event)
+	else:
+		event.position = game.ui_size - Vector2(4, 4);game._gui_input(event)
+	check(not popup.visible, "release or pointer exit closes mechanism popup")
+	check(inspection_state() == before, "inspection release cannot play cards, end turns, alter RNG or add undo entries")
+	if record_steps:
+		var closing = action.duplicate(true);closing.kind = "close_inspect";closing.label = "mechanism-close-" + tag.key.trim_prefix("mechanism:")
+		closing.target = point(game.ui_size - Vector2(4, 4));steps.append(closing)
+func rules_layout_checks():
+	# Exercise the actual shared component for every authored chapter-two battle,
+	# instead of measuring text in the obsolete, hidden encounter modal.
 	for id in game.ENCOUNTERS.CHAPTER_TWO.TEMPLATES:
-		var template = game.ENCOUNTERS.CHAPTER_TWO.TEMPLATES[id]
-		var config = {"id": id, "tier": template.tier, "rules": [], "chapter": 2}
-		var desc = game.ENCOUNTERS.details(config)
-		var width = 318.0;var height = 150.0;var font_size = 15
-		if game.mobile_layout:
-			var area = game.encounter_panel_rect()
-			width = area.size.x - 32;height = area.size.y - 148;font_size = 18
-		var required = text_height(desc, width, font_size)
-		print("CHAPTER RULE METRIC ", id, " ", game.ui_size, " needs=", required, " available=", height)
-		check(required <= height, "full " + id + " rules fit " + str(game.ui_size) + " without clipping")
-func rules_panel():
-	if not game.mobile_layout: return
-	var area = game.encounter_panel_rect()
-	var desc = game.ENCOUNTERS.details(game.encounter_state.config)
-	check(text_height(desc, area.size.x - 32, 18) <= area.size.y - 148, "complete chapter rules fit the mobile panel without clipping")
-	# Opening/closing is transient, deliberately excluded from persisted saves.
-	steps.append({"kind": "panel", "label": "rules-open", "taps": [point(game.encounter_rules_rect().get_center())], "expected": summary()})
-	steps.append({"kind": "close_panel", "label": "rules-close", "taps": [point(game.encounter_close_rect().get_center())], "expected": summary()})
+		prepare(2, id)
+		var tags = game.board_info.tag_items()
+		check(not tags.is_empty(), "authored chapter battle exposes mechanism tags: " + id)
+		for tag in tags: inspect_tag(tag, false)
+func mechanism_panels():
+	var tags = game.board_info.tag_items()
+	check(not tags.is_empty(), "chapter replay includes every active mechanism tag")
+	for tag in tags: inspect_tag(tag, true)
 func clear_input():
 	game.clear_effects();game.input_lock = 0;game.navigation_lock = 0;game.initial_threat = 0
 	game.selected = -1;game.free_selected = false;game.handui.reset();game.plan_intents()
@@ -144,20 +175,21 @@ func transition(size: Vector2):
 	reward_return()
 	check(game.route.state.chapter == 2 and game.screen == "map" and game.route.state.current == -1 and game.route.state.pending == -1, "first boss advances to fresh chapter two map")
 	check(game.collection == initial_collection and game.lives == initial_lives, "chapter transition preserves deck and current lives without healing")
-	reload_step();enter(0)
+	reload_step();enter(0);mechanism_panels()
 	check(game.encounter_state.config.id == "c2_heavy_pawns", "chapter two begins with authored heavy-pawn encounter")
 	check(game.collection == initial_collection and game.lives == initial_lives, "first battle retains chapter-transition progress")
 	report.steps = steps.duplicate(true);reports.append(report)
 func final_boss(size: Vector2):
 	prepare(2, "c2_inner_city")
 	var report = save_fixture("final_boss", size)
+	mechanism_panels()
 	victory("chapter-two-boss-win")
 	check(game.phase == "win" and game.route.state.done and game.route.state.chapter == 2, "second boss is the final victory")
 	report.steps = steps.duplicate(true);reports.append(report)
 func chapter_map(size: Vector2):
 	prepare(2)
 	var report = save_fixture("chapter_map", size)
-	enter(0);rules_panel();reload_step();end_turn("heavy-pawns-first-turn")
+	enter(0);mechanism_panels();reload_step();end_turn("heavy-pawns-first-turn")
 	check(game.turn == 2 and game.encounter_state.config.id == "c2_heavy_pawns", "second chapter first battle is playable after Continue")
 	report.steps = steps.duplicate(true);reports.append(report)
 func revival(size: Vector2):
@@ -169,7 +201,7 @@ func revival(size: Vector2):
 	game.player = Vector2i(3, 1);game.hand = ["sword_plus"];game.hand_ids = [];game.deck = [];game.discard = []
 	var advisor_uid = game.enemies[1].uid
 	var report = save_fixture("revival", size)
-	rules_panel()
+	mechanism_panels()
 	var taps = [point(game.handui.exposed_point(0)), point(game.cell_pos(Vector2i(3, 0)))]
 	check(game.card_legal("sword_plus", Vector2i(3, 0)), "revival fixture uses a legal real card attack")
 	game.play_card(0, Vector2i(3, 0));step("combat", "advisor-defeated-ghost-visible", taps)
@@ -195,7 +227,7 @@ func reinforcement(size: Vector2):
 	check(game.phase == "play" and game.encounter_state.phases == 3, "boss reinforcement fixture is still playable")
 	end_turn("next-turn-reinforcement-marker")
 	check(game.encounter_state.waves[0].status == "announced", "wave preview is announced exactly one phase early")
-	rules_panel();reload_step();end_turn("reinforcement-arrives")
+	mechanism_panels();reload_step();end_turn("reinforcement-arrives")
 	check(game.encounter_state.waves[0].status == "arrived", "announced boss reinforcement really arrives")
 	var spawned_uid = game.encounter_state.waves[0].uid
 	var spawned = {}
@@ -217,7 +249,7 @@ func run():
 	DirAccess.make_dir_recursive_absolute(OUT + "fixtures")
 	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true);FileAccess.open(OUT+"fixtures/settings.cfg",FileAccess.WRITE).store_string(FileAccess.get_file_as_string(game.settings.SAVE));game.set_process(false)
 	for size in [Vector2(1280, 940), Vector2(390, 844), Vector2(360, 640), Vector2(844, 390)]:
-		game.configure_layout(size);rules_text_checks()
+		game.configure_layout(size);rules_layout_checks()
 		if int(size.x) in [1280, 390]: transition(size);final_boss(size)
 		if size.x != 1280: chapter_map(size);revival(size);reinforcement(size)
 		if size.x == 390: general_guard(size)

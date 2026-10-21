@@ -62,8 +62,11 @@ async def main():
    async def drag_map(distance):
     start=(mx+mw*.48,my+mh*.28)
     await touch('touchStart',[touch_point(start)])
-    for step in range(1,13):
-     await touch('touchMove',[touch_point((start[0],start[1]+distance*step/12))])
+    # Cross the 12-logical-pixel gesture deadzone in the first event.
+    # Ten-pixel initial moves can be coalesced differently by the Web input
+    # frame, so symmetric physical paths need not have equal scroll deltas.
+    for step in range(2,11):
+     await touch('touchMove',[touch_point((start[0],start[1]+distance*step/10))])
      await page.wait_for_timeout(16)
     await touch('touchEnd',[])
     await page.wait_for_timeout(100)
@@ -144,8 +147,8 @@ async def main():
    assert await page.screenshot()!=baseline, 'Touch drag must change map scroll position'
    await shot('touch-scrolled')
    await drag_map(-120);await remains_map(0)
-   assert await page.screenshot()==baseline, 'Equal opposite touch drag must restore the static map without a focus-current control'
-   await shot('touch-restored')
+   restored=await shot('touch-restored')
+   assert restored==baseline, 'Equal opposite touch drag must restore the static map without a focus-current control'
    map_assertions.append('Drag scroll changes map and equal opposite drag restores it without selecting')
    frame_deltas=await page.evaluate("""() => new Promise(resolve => {let last=null, values=[]; function tick(now) {if(last!==null) values.push(now-last);last=now;if(values.length<60) requestAnimationFrame(tick);else resolve(values);}requestAnimationFrame(tick);})""")
    await cdp.detach()

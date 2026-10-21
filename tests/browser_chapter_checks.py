@@ -2,7 +2,7 @@ from browser_settings import install_debug_settings
 """Replay chapter two through the exported Web UI, using ordinary saved games.
 
 Generate tests/chapter_web_fixtures.gd before export. JavaScript only writes the
-initial save and reads subsequent saves; gameplay uses touchscreen input. The
+initial save and reads subsequent saves; gameplay uses touch or mouse input. The
 --smoke mode is a two-viewport release gate, not the full rendered regression.
 """
 import argparse
@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -54,10 +55,25 @@ def parse_save(text):
     return result
 
 
-def image_difference(before, after):
+def inspection_save(text):
+    # Rendering alone updates these visual fields. Keep all gameplay fields,
+    # including RNG, card IDs, delayed effects, wave/ghost state and undo budget.
+    route = variant_json(text.split('\nroute=', 1)[1].split('\nbattle=', 1)[0])
+    battle = variant_json(text.split('\nbattle=', 1)[1].rsplit('\nscreen=', 1)[0])
+    battle.pop('initial_threat', None)
+    for enemy in battle['enemies']:
+        enemy.pop('visual', None)
+    return {'route': route, 'battle': battle,
+            'screen': re.search(r'^screen="(\w+)"', text, re.M).group(1),
+            'undo_budget': re.findall(r'^normal_undos_remaining=(\d+)', text, re.M)}
+
+
+def image_difference(before, after, box=None):
     a = Image.open(io.BytesIO(before)).convert('RGB')
     b = Image.open(io.BytesIO(after)).convert('RGB')
     assert a.size == b.size
+    if box is not None:
+        a, b = a.crop(box), b.crop(box)
     return sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / 3
 
 
@@ -85,18 +101,44 @@ async def main(smoke=False, validate_only=False):
         fixture = OUT / 'fixtures' / replay['fixture']
         assert parse_save(fixture.read_text()) == replay['initial'], ('Fixture decode mismatch', fixture.name)
         for step in replay['steps']:
-            assert step['kind'] in {'tap', 'enter', 'combat', 'reload', 'panel', 'close_panel'}
+            assert step['kind'] in {'tap', 'enter', 'combat', 'reload', 'inspect', 'close_inspect'}
             assert step['expected']['chapter'] in {1, 2}
     selected = [r for r in replays if not smoke or r['name'] in SMOKE_NAMES]
     assert len(selected) == (4 if smoke else len(expected)), 'Wrong selected chapter coverage'
     for replay in replays:
         uw, uh = replay['logical_size']
-        for point in [replay['resume']] + [pos for step in replay['steps'] for pos in step['taps']]:
+        previous = replay['initial']
+        pending_inspection = None
+        for step in replay['steps']:
+            if step['kind'] in {'inspect', 'close_inspect'}:
+                assert step['expected'] == previous, (replay['fixture'], 'Inspection changes expected gameplay')
+                assert step['source'] == ('mouse' if int(replay['viewport'][0]) == 1280 else 'touch')
+                x, y, width, height = step['popup']
+                assert 0 <= x and 0 <= y and width > 0 and height > 0 and x+width <= uw and y+height <= uh
+                assert step['title'] and step['lines'] and step['rows'] and step['font_size'] >= 12
+                assert ''.join(row['text'] for row in step['rows']) == ''.join(step['lines']).replace('\n', '')
+                for row in step['rows']:
+                    assert 0 <= row['width'] <= width-28 and 0 <= row['top'] < row['bottom'] <= height
+                if step['kind'] == 'inspect':
+                    assert pending_inspection is None, 'Inspection missing release'
+                    pending_inspection = step
+                else:
+                    assert pending_inspection is not None and step['popup'] == pending_inspection['popup']
+                    pending_inspection = None
+            else:
+                assert pending_inspection is None, 'Gameplay continues with inspection still held'
+            previous = step['expected']
+        assert pending_inspection is None, 'Final inspection was not released'
+        points = [replay['resume']] + [pos for step in replay['steps'] for pos in step['taps']]
+        points += [step['target'] for step in replay['steps'] if 'target' in step]
+        for point in points:
             assert len(point) == 2 and 0 <= point[0] < uw and 0 <= point[1] < uh, (
                 replay['fixture'], 'Input coordinate outside logical viewport', point)
     if validate_only:
         print(json.dumps({'validated_fixtures': len(replays), 'selected_replays': len(selected),
                           'selected_state_assertions': sum(len(r['steps']) + 1 for r in selected),
+                          'inspection_open_close_pairs': sum(step['kind'] == 'inspect' for r in selected for step in r['steps']),
+                          'inspection_sources': sorted({step['source'] for r in selected for step in r['steps'] if 'source' in step}),
                           'rendered': False,
                           'manifest_sha256': hashlib.sha256((OUT / 'replays.json').read_bytes()).hexdigest()}))
         return
@@ -120,6 +162,9 @@ async def main(smoke=False, validate_only=False):
                 stem = replay['name'] + '-' + str(w)
                 screenshots = []
                 panel_before = None
+                inspection_before = None
+                inspection_metrics = []
+                cdp = await context.new_cdp_session(page)
                 saved_steps = []
 
                 async def tap(pos):
@@ -132,8 +177,38 @@ async def main(smoke=False, validate_only=False):
                     await tap(replay['resume'])
                     await page.wait_for_timeout(350)
 
+                async def saved_text():
+                    return await page.evaluate('(key)=>localStorage.getItem(key)', KEY)
+
                 async def snapshot():
-                    return parse_save(await page.evaluate('(key)=>localStorage.getItem(key)', KEY))
+                    return parse_save(await saved_text())
+
+                def popup_box(rect, inset=4):
+                    x, y, width, height = rect
+                    return (math.floor(ox + (x+inset)*scale), math.floor(oy + (y+inset)*scale),
+                            math.ceil(ox + (x+width-inset)*scale), math.ceil(oy + (y+height-inset)*scale))
+
+                def check_popup(before, after, step):
+                    box = popup_box(step['popup'])
+                    difference = image_difference(before, after, box)
+                    image = Image.open(io.BytesIO(after)).convert('RGB')
+                    panel = image.crop(box)
+                    paper = sum(max(abs(c-t) for c, t in zip(rgb, (242, 229, 204))) <= 14
+                                for rgb in panel.getdata()) / (panel.width*panel.height)
+                    assert difference > 7 and paper > .58, (stem, step['label'], 'Shared popup not visibly open', difference, paper, box)
+                    # Inspect every actual wrapped row, not a whole-screen change
+                    # caused by unrelated animation or the obsolete rules modal.
+                    x, y, _, _ = step['popup']
+                    ink_counts = []
+                    for row in step['rows']:
+                        if not row['text'].strip():
+                            continue
+                        band = image.crop(popup_box([x+14, y+row['top'], row['width'], row['bottom']-row['top']], 0))
+                        ink = sum(r < 150 and g < 130 and b < 110 for r, g, b in band.getdata())
+                        assert ink > max(2, len(row['text'])*scale*.4), (stem, step['label'], 'Popup row is missing or unreadable', row, ink)
+                        ink_counts.append(ink)
+                    return {'label': step['label'], 'popup': step['popup'], 'difference': round(difference, 3),
+                            'paper_fraction': round(paper, 3), 'row_ink_pixels': ink_counts}
 
                 async def await_saved_state(expected, label):
                     # A successful UI transition can precede its synchronous save
@@ -177,9 +252,29 @@ async def main(smoke=False, validate_only=False):
                             await page.reload()
                             await boot(page)
                             await resume()
+                        elif step['kind'] == 'inspect':
+                            # Let entry/turn effects settle before taking a visual
+                            # baseline. This does not weaken any saved-state check.
+                            if number == 0 or replay['steps'][number-1]['kind'] != 'close_inspect':
+                                await page.wait_for_timeout(2200)
+                            panel_before = await page.screenshot()
+                            inspection_before = inspection_save(await saved_text())
+                            x, y = ox+step['target'][0]*scale, oy+step['target'][1]*scale
+                            if step['source'] == 'mouse':
+                                await page.mouse.move(x, y)
+                            else:
+                                await cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x, 'y': y, 'id': 4}]})
+                            await page.wait_for_timeout(650)
+                        elif step['kind'] == 'close_inspect':
+                            assert panel_before is not None and inspection_before is not None
+                            if step['source'] == 'mouse':
+                                await page.mouse.move(ox+step['target'][0]*scale, oy+step['target'][1]*scale)
+                            else:
+                                await cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+                            # Wait through autosave and any accidental end-turn or
+                            # card action, so a stale save cannot hide release leaks.
+                            await page.wait_for_timeout(1600)
                         else:
-                            if step['kind'] == 'panel':
-                                panel_before = await page.screenshot()
                             for pos in step['taps']:
                                 await tap(pos)
                             # Preserve the existing animation/input-lock settle
@@ -190,20 +285,26 @@ async def main(smoke=False, validate_only=False):
                         observed = await await_saved_state(step['expected'], step['label'])
                         assert observed == step['expected'], (stem, number, step['label'], observed, step['expected'])
                         capture = await screenshot(str(number) + '-' + step['label'])
-                        if step['kind'] == 'panel':
-                            assert image_difference(panel_before, capture) > 5, (stem, 'Rules panel did not visibly open')
-                        if step['kind'] == 'close_panel':
-                            assert panel_before is not None
-                            assert image_difference(panel_before, capture) < 5, (stem, 'Rules panel did not visibly close')
+                        if step['kind'] in {'inspect', 'close_inspect'}:
+                            assert inspection_save(await saved_text()) == inspection_before, (stem, step['label'], 'Inspection changed cards, turn, RNG, effects or route')
+                        if step['kind'] == 'inspect':
+                            inspection_metrics.append(check_popup(panel_before, capture, step))
+                        if step['kind'] == 'close_inspect':
+                            difference = image_difference(panel_before, capture, popup_box(step['popup']))
+                            assert difference < 5, (stem, step['label'], 'Shared popup did not close after release/exit', difference)
+                            inspection_metrics[-1]['closed_difference'] = round(difference, 3)
+                            panel_before = None;inspection_before = None
                     assert not errors, (stem, errors)
                     reports.append({'fixture': replay['fixture'], 'viewport': [w, h],
                                     'state_assertions': len(replay['steps']) + 1,
-                                    'errors': errors, 'screenshots': screenshots, 'saved_steps': saved_steps, 'final': await snapshot()})
+                                    'errors': errors, 'screenshots': screenshots, 'saved_steps': saved_steps,
+                                    'inspection_metrics': inspection_metrics, 'final': await snapshot()})
                     print('PASS chapter', stem, len(replay['steps']) + 1, 'state checks', flush=True)
                 except Exception:
                     await page.screenshot(path=str(output / f'{stem}-failure.png'))
                     raise
                 finally:
+                    await cdp.detach()
                     await context.close()
         finally:
             await browser.close()
