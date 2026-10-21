@@ -122,7 +122,7 @@ func check_scroll_and_overlays():
 	mouse(center, true, MOUSE_BUTTON_WHEEL_UP)
 	check(route.scroll_y < scroll, "physical wheel inside map scrolls")
 	route.focus_current()
-	tap(route.footer_rect(0).get_center())
+	tap(route.deck_rect().get_center())
 	check(game.card_picker.active and game.card_picker.action == "view", "deck footer opens read-only card grid")
 	var p = route.position(route.state.nodes[0])
 	scroll = route.scroll_y

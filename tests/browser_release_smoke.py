@@ -63,6 +63,16 @@ async def main():
                     ny = my+32+.94*(ch-80)
                     scroll = max(0, min(ch-mh, ny-my-mh*.73))
                     await tap(nx, ny-scroll-15)
+                    # The independent header entry remains usable with a selected node.
+                    saved_before = await page.evaluate('(key)=>localStorage.getItem(key)', KEY)
+                    await page.screenshot(path=str(OUT / f'map-selected-deck-entry-{w}.png'))
+                    await tap(uw-84, 34)
+                    await page.screenshot(path=str(OUT / f'map-readonly-deck-{w}.png'))
+                    await page.keyboard.press('Enter')
+                    assert await page.evaluate('(key)=>localStorage.getItem(key)', KEY) == saved_before
+                    await tap(88, uh-40)
+                    await page.screenshot(path=str(OUT / f'map-returned-selected-{w}.png'))
+                    # Confirming the same node proves closing did not discard selection.
                     await tap(*( (1075,868) if desktop else (uw-107,uh-48) ))
                     await state('game', -1, 0)
                     await tap(*( (1098,102) if desktop else (410,84) ))

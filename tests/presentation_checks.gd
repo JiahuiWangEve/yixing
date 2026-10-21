@@ -37,7 +37,7 @@ func run():
 	game.route.resolve(0)
 	check(game.presentation.kind == "upgrade" and game.presentation.old_id == old and game.presentation.new_id == game.route.UPGRADES.upgraded_id(old), "animation captures actual physical card old/new")
 	check(game.presentation.card_index == index and game.screen == "map", "random transaction committed once before presentation")
-	before = game.collection.duplicate();game.handle_click(game.route.footer_rect(0).get_center())
+	before = game.collection.duplicate();game.handle_click(game.route.deck_rect().get_center())
 	check(game.collection == before and not game.card_picker.active, "upgrade modal blocks underlying map")
 	game.presentation.tick(0.5);check(game.presentation.active(), "old to new transition has readable duration")
 	game.presentation.tick(0.55);check(game.presentation.active(), "new face begins after old hold and flip")
@@ -50,7 +50,7 @@ func run():
 	# Read-only deck browsing preserves physical copies and map camera exactly.
 	game.route.selected_node = -1;game.route.scroll_y = 123
 	var camera = game.route.scroll_y;before = game.collection.duplicate()
-	game.route.click(game.route.footer_rect(0).get_center())
+	game.route.click(game.route.deck_rect().get_center())
 	check(game.card_picker.active and game.card_picker.action == "view", "existing map entry opens reused grid")
 	game.card_picker.selected = 0;game.card_picker.confirm()
 	check(game.card_picker.active and game.collection == before, "read-only grid cannot transact")

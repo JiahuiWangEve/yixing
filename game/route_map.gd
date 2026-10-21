@@ -576,6 +576,7 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 func position(node: Dictionary) -> Vector2:
 	return content_point(node) - Vector2(0, scroll_y)
 func home_rect() -> Rect2: return Rect2(24, 12, 100, 44)
+func deck_rect() -> Rect2: return Rect2(game.ui_size.x - 144, 12, 120, 44)
 func button(rect: Rect2, label: String, primary: bool = false):
 	game.panel(rect, INK if primary else PAPER_LIGHT, INK if primary else Color("aaa89c"))
 	var text_size = 18 if rect.size.y >= 58 else 16
@@ -596,11 +597,11 @@ func click(pos: Vector2):
 	if travel_target >= 0: return
 	if home_rect().has_point(pos): game.show_home();return
 	if game.screen == "map":
+		if deck_rect().has_point(pos):
+			game.card_picker.open("view", "全部永久牌组", range(game.collection.size()), Callable(), Callable());return
 		if selected_node >= 0:
 			if confirm_rect().has_point(pos): confirm();return
 			if cancel_rect().has_point(pos): selected_node = -1;return
-		elif footer_rect(0).has_point(pos):
-			game.card_picker.open("view", "全部永久牌组", range(game.collection.size()), Callable(), Callable());return
 		elif center_rect().has_point(pos): focus_current();return
 		if not deck_view and map_rect().has_point(pos):
 			for id in range(state.nodes.size()):
@@ -762,6 +763,9 @@ func draw_map():
 		game.draw_rect(Rect2(track.position + Vector2(0, (track.size.y - thumb_h) * scroll_y / scroll_limit()), Vector2(3, thumb_h)), MUTED)
 func draw_header():
 	button(home_rect(), "‹ 首页")
+	if game.screen == "map":
+		button(deck_rect(), "查看牌组")
+		if travel_target >= 0: game.draw_rect(deck_rect(), Color(PAPER, 0.55))
 	var title_x = 146.0 if game.compact_landscape else 150.0
 	var subtitle = chapter_title()
 	game.text_at(Vector2(title_x, 47), subtitle if game.mobile_layout and not game.compact_landscape else "弈 行", 20 if game.mobile_layout and not game.compact_landscape else 33, INK)
@@ -777,7 +781,7 @@ func draw_header():
 			game.text_at(Vector2(game.ui_size.x - 370, 91), "已行 %d / 8 · 决战敌将9血" % state.visited.size(), 16, MUTED)
 	if not game.mobile_layout:
 		game.text_at(Vector2(290, 45), "一子入山河，百战成归途", 18, MUTED)
-		game.text_at(Vector2(1050, 45), game.BUILD_VERSION + " · 朱印军符", 16, MUTED)
+		game.text_at(Vector2(850, 45), game.BUILD_VERSION + " · 朱印军符", 16, MUTED)
 func node_detail(node: Dictionary) -> String:
 	var detail = DETAILS[node.kind]
 	if node.kind == "elite" and chapter() == 2: detail = "关隘精英守军；敌将6血，战胜后选择战利品。"
@@ -824,7 +828,6 @@ func draw_info():
 			game.text_at(Vector2(x, y + 250), "黑色军符 · 节点类别", 18, INK)
 			if info.size.y > 600:
 				game.wrapped_text("滚轮或拖动查看军图；点击「回到当前」定位棋子。", Rect2(x, y + 320, width, 80), 17, MUTED)
-		button(footer_rect(0), "收起牌组" if deck_view else "查看牌组")
 		button(center_rect(), "回到当前")
 func draw_deck():
 	var area = map_rect().grow(-12)
