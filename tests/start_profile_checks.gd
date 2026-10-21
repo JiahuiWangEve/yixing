@@ -1,16 +1,16 @@
 extends SceneTree
 # Behavior-level checks for the three start profiles. Run with an isolated user://.
 const R = preload("res://rules.gd")
-const COMMON = ["sword", "spear", "diagonal", "push", "stun", "breath"]
+const COMMON = ["sword", "spear", "diagonal", "breath"]
 const DEDICATED = {
-	"king": ["life", "sweep", "pierce", "shock", "tuna"],
-	"horse": ["straight", "swap", "pursuit", "advance", "retreat_strike", "knight_assault"],
-	"artillery": ["stake", "cannon_shot", "deploy", "pack"]
+	"king": ["life", "sweep", "pierce", "shock", "tuna", "suppress", "guard", "horse"],
+	"horse": ["straight", "pursuit", "advance", "retreat_strike", "knight_assault", "chain_assault"],
+	"artillery": ["stake", "cannon_shot", "deploy", "pack", "permanent_stake", "reload"]
 }
 const INITIAL = {
-	"king": ["sword", "sword", "sword", "spear", "spear", "horse", "life", "stun"],
-	"horse": ["sword", "sword", "sword", "spear", "spear", "straight", "pursuit", "stun"],
-	"artillery": ["sword", "spear", "straight", "stake", "cannon_shot", "cannon_shot", "deploy", "pack"]
+	"king": ["sword", "sword", "spear", "life"],
+	"horse": ["sword", "sword", "spear", "advance"],
+	"artillery": ["sword", "stake", "cannon_shot", "deploy"]
 }
 var game
 var passed = 0
@@ -72,7 +72,7 @@ func check_profiles_and_rewards():
 		game.player_skill = identity
 		game.new_run()
 		check(game.lives == (2 if identity == "king" else 1), identity + " initial health")
-		check(same_cards(game.collection, INITIAL[identity]) and same_cards(game.deck, INITIAL[identity]), identity + " exact eight-card starting deck")
+		check(same_cards(game.collection, INITIAL[identity]) and same_cards(game.deck, INITIAL[identity]), identity + " exact four-card starting deck")
 		check(game.hand.is_empty() and game.discard.is_empty() and game.energy == 3, identity + " retains empty opening hand and three energy")
 		var all_legal = COMMON + DEDICATED[identity]
 		check(same_cards(game.reward_pool(), all_legal), identity + " available pool contains only common and own cards")
@@ -107,7 +107,7 @@ func check_profiles_and_rewards():
 		var removed_card = game.collection[0]
 		var previous_count = game.collection.count(removed_card)
 		game.delete_reward(0)
-		check(game.stage == 3 and game.collection.size() == 7 and game.collection.count(removed_card) == previous_count - 1 and same_cards(game.deck, game.collection), identity + " removing reward deletes one permanent copy")
+		check(game.stage == 3 and game.collection.size() == 3 and game.collection.count(removed_card) == previous_count - 1 and same_cards(game.deck, game.collection), identity + " removing reward deletes one permanent copy")
 	reset("artillery")
 	game.artillery_mode = "attack"
 	check(same_cards(game.reward_pool(), COMMON + DEDICATED.artillery), "artillery rewards depend on identity rather than stance")
@@ -242,7 +242,7 @@ func check_deployment():
 
 func check_consumption():
 	reset()
-	check(game.is_consumable("life") and game.is_consumable("breath") and game.is_consumable("deploy") and game.is_consumable("tuna") and not game.is_consumable("sword"), "consumption property covers four cards only")
+	check(game.is_consumable("life") and game.is_consumable("breath") and game.is_consumable("deploy") and game.is_consumable("tuna") and game.is_consumable("guard") and game.is_consumable("permanent_stake") and not game.is_consumable("sword"), "consumption property includes guard and permanent stake")
 	game.lives = 1
 	set_hand(["life", "life"])
 	game.energy = 6

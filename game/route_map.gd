@@ -11,8 +11,8 @@ const RED = Color("9d4736")
 const HISTORY = Color("3f665e")
 # Pixel-exact regions of the supplied transparent two-row atlas. No redraws.
 const ART_REGIONS = [Rect2(0, 48, 444, 465), Rect2(444, 48, 446, 465), Rect2(890, 80, 443, 433), Rect2(1333, 48, 441, 465), Rect2(0, 522, 444, 365), Rect2(444, 522, 446, 365), Rect2(890, 522, 443, 365), Rect2(1333, 522, 441, 365)]
-const SAVE = "user://route_run.cfg"
-const WEB_SAVE_KEY = "yixing.route_run.v1"
+const SAVE = "user://route_run_v080.cfg"
+const WEB_SAVE_KEY = "yixing.route_run.v080"
 const LABELS = {"battle": "战", "elite": "精", "camp": "营", "workshop": "坊", "event": "事", "outpost": "寨", "boss": "帅"}
 var game
 var state: Dictionary = {}
@@ -145,11 +145,7 @@ func generate(seed_number: int):
 	var types = [["battle"], ["event", "elite", "workshop"], ["battle", "outpost"], ["camp"], ["battle", "workshop", "elite"], ["event", "battle"], ["camp", "battle", "workshop"], ["boss"]]
 	for row in rows.size():
 		for col in rows[row].size():
-			var dedicated: Array = game.PROFILES.DATA[game.player_skill].rewards.duplicate()
-			var common: Array = game.PROFILES.COMMON.duplicate()
-			var loot = []
-			for i in 2: loot.append(dedicated.pop_at(random.randi_range(0, dedicated.size() - 1)))
-			loot.append(common[random.randi_range(0, common.size() - 1)])
+			var loot = game.PROFILES.draw_rewards(game.player_skill, random)
 			state.nodes.append({"id": state.nodes.size(), "row": row, "lane": rows[row][col], "kind": types[row][col], "next": [], "loot": loot, "layout": clampi(row + random.randi_range(0, 1), 1, 5)})
 	for node in state.nodes:
 		for target in state.nodes:
@@ -206,13 +202,14 @@ func complete():
 	state.current = state.pending;state.visited.append(state.pending);state.pending = -1
 	game.history.clear();game.cancel_gesture();game.clear_effects();game.rewardui.reset()
 	game.hand = [];game.hand_ids = [];game.deck = [];game.discard = [];game.enemies = [];game.energy = 0;game.tuna_turns = 0;game.tuna_active = false
+	game.clear_battle_card_effects()
 	game.selected = -1;game.free_selected = false;game.handui.reset();game.reinforcement_pending = 0
 	game.phase = "play";game.screen = "map";choices = [];page = 0;reset_view()
 	save()
 func save():
 	if not active(): return
 	var config = ConfigFile.new()
-	config.set_value("run", "version", 1)
+	config.set_value("run", "version", 2)
 	config.set_value("run", "route", state)
 	config.set_value("run", "battle", game.history.capture())
 	config.set_value("run", "screen", game.screen if game.screen in ["game", "map", "route_choice"] else "map")
@@ -230,7 +227,7 @@ func resume() -> bool:
 		var snapshot = JavaScriptBridge.eval("(function(){try{return localStorage.getItem('" + WEB_SAVE_KEY + "')||'';}catch(e){return '';}})()")
 		if snapshot is String and not snapshot.is_empty(): loaded = config.parse(snapshot) == OK
 	if not loaded: loaded = config.load(SAVE) == OK
-	if not loaded or config.get_value("run", "version", 0) != 1: return false
+	if not loaded or config.get_value("run", "version", 0) != 2: return false
 	var saved = config.get_value("run", "route", {})
 	var battle = config.get_value("run", "battle", {})
 	var saved_screen = config.get_value("run", "screen", "map")
@@ -245,7 +242,7 @@ func resume() -> bool:
 	choices = options() if game.screen == "route_choice" else []
 	return true
 func valid_snapshot(saved, battle, saved_screen) -> bool:
-	# Validate the entire envelope before touching live state. Older v1 runs remain valid.
+	# Validate the entire current-version envelope before touching live state.
 	if not saved is Dictionary or not battle is Dictionary: return false
 	if saved_screen not in ["map", "game", "route_choice"]: return false
 	for key in ["seed", "nodes", "current", "visited", "pending", "prepared", "weakened", "done"]:
@@ -295,8 +292,15 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 	for key in ["collection", "deck", "discard", "hand", "rewards"]:
 		for card in battle[key]:
 			if card not in game.CARDS: return false
+	if battle.active_displacements < 0 or battle.shield_charges not in [0, 1] or battle.next_enemy_uid < 1: return false
+	var ids = {}
 	for enemy in battle.enemies:
 		if not enemy is Dictionary or not enemy.has("kind") or not enemy.has("pos") or not enemy.pos is Vector2i: return false
+		if not enemy.get("uid") is int or enemy.uid < 1 or ids.has(enemy.uid) or enemy.uid >= battle.next_enemy_uid: return false
+		ids[enemy.uid] = true
+	for bleed in battle.pending_bleeds:
+		if not bleed is Dictionary or not bleed.get("enemy_uid") is int or not bleed.get("amount") is int: return false
+		if bleed.enemy_uid < 1 or bleed.amount < 1: return false
 	return true
 func position(node: Dictionary) -> Vector2:
 	return content_point(node) - Vector2(0, scroll_y)

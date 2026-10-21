@@ -1,13 +1,13 @@
-# 弈行 v0.7.0 · 手绘山河
+# 弈行 v0.8.0 · 四张起牌与卡牌重平衡
 
-当前源码分支为 `gpt`，发布产物为 `gh-pages`。本版把原始手绘山河底图与八种军事地标接入真实16节点地图：点选只预览，确认才出发；棋子沿真实曲线道路行军，拖动不误触，返回地图定位当前位置。桌面／横屏使用固定侧栏，手机竖屏保留固定底部操作区。保留 v0.6.0 的全部战斗与章节规则，本版不改牌组系统。
+当前源码分支为 `gpt`，发布产物为 `gh-pages`。本版在已发布 v0.7.0 手绘地图之上，分别调整将／马／炮车四张永久起始牌组、奖励池与指定卡牌效果。新增镇四方、固守、连袭、机关炮架、装填，贯刺改为延迟伤害的流血；按Demo阶段要求取消旧局兼容，退役卡定义删除，新版正常保存与续局。没有改变敌子数值或加入新敌人／美术。
 
-详见 [v0.7.0 验证与限制](docs/VALIDATION_v0.7.0.md)、[原图来源与校验](game/assets/map/README.md)。现有发布工作流增加四尺寸真实 Web 流程检查，检查成功后才更新 `gh-pages`。
+详见 [开局与卡牌规则](docs/START_PROFILES.md)、[v0.8.0 验证与限制](docs/VALIDATION_v0.8.0.md)、[v0.7.0 地图验证](docs/VALIDATION_v0.7.0.md)。精确源码提交必须通过完整回归与四尺寸真实 Web 检查，才更新 `gh-pages`。
 
 
 # 弈行
 
-当前开发版本：**v0.5.0**。GPT 持续开发分支为 [`gpt`](https://github.com/JiahuiWangEve/yixing/tree/gpt)，网页导出分支为 [`gh-pages`](https://github.com/JiahuiWangEve/yixing/tree/gh-pages)。
+历史三开局版本：**v0.5.0**。GPT 持续开发分支为 [`gpt`](https://github.com/JiahuiWangEve/yixing/tree/gpt)，网页导出分支为 [`gh-pages`](https://github.com/JiahuiWangEve/yixing/tree/gh-pages)。
 
 本版加入三种开局与专属牌组／奖励池：将2命、马1命、炮车1命。炮车可切换行军与攻击姿态，展开时每回合首次抽3张牌；新增统一“消耗”标签和将专属奖励“吐纳”。完整规则与初始牌组见 [docs/START_PROFILES.md](docs/START_PROFILES.md)。
 
@@ -34,7 +34,7 @@ bash scripts/verify.sh
 
 ## Codex 云端环境
 
-在 Codex 环境设置中选择仓库 `JiahuiWangEve/yixing`，先选择本 PR 分支测试，合并后使用 `main`。将手动设置脚本设为：
+在 Codex 环境设置中选择仓库 `JiahuiWangEve/yixing`，后续源码任务固定选择 `gpt` 分支，网页产物使用 `gh-pages`。将手动设置脚本设为：
 
 ```bash
 bash scripts/setup.sh

@@ -180,6 +180,8 @@ func check_battle_phase_round_trips():
 		route.save();game.show_home()
 		check(route.resume() and game.history.capture() == expected, "active battle restores full hand/deck, piece, skill, and RNG state")
 		check(game.player_skill == identity and route.state.pending == 0, "battle profile and pending route survive return from home")
+		# Four-card starters cannot naturally overflow without extra copies.
+		game.deck.append_array(["sword", "sword", "sword", "sword", "sword", "sword", "sword"])
 		while game.hand.size() < 7: game.draw_card()
 		check(game.phase == "discard", "overfull-hand fixture enters discard phase")
 		expected = game.history.capture();route.save()

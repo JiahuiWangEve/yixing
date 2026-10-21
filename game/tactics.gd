@@ -1,6 +1,6 @@
 extends RefCounted
 const R = preload("res://rules.gd")
-const IDS = ["stake", "pierce", "pursuit", "shock", "breath", "swap", "advance", "retreat_strike", "knight_assault"]
+const IDS = ["stake", "permanent_stake", "pierce", "pursuit", "shock", "breath", "advance", "retreat_strike", "knight_assault", "chain_assault"]
 static func enemy_target(game, p: Vector2i) -> bool:
 	var i = R.occupied(p, game.enemies)
 	return i >= 0 and game.enemies[i].kind != "stake"
@@ -8,8 +8,10 @@ static func legal(game, id: String, p: Vector2i) -> bool:
 	if not R.inside(p): return false
 	var distance = absi(p.x - game.player.x) + absi(p.y - game.player.y)
 	match id:
-		"stake": return distance > 0 and distance <= 2 and R.occupied(p, game.enemies) < 0
-		"pierce", "pursuit", "shock": return distance == 1 and enemy_target(game, p)
+		"stake", "permanent_stake": return distance > 0 and distance <= 2 and R.occupied(p, game.enemies) < 0
+		"pierce", "pursuit": return distance == 1 and enemy_target(game, p)
+		"shock": return distance > 0 and distance <= 2 and enemy_target(game, p)
+		"chain_assault": return distance > 0 and absi(p.x - game.player.x) <= 1 and absi(p.y - game.player.y) <= 1 and enemy_target(game, p)
 		"advance": return distance == 1 and enemy_target(game, p)
 		"retreat_strike":
 			var dest = game.player - (p - game.player)
@@ -20,16 +22,7 @@ static func legal(game, id: String, p: Vector2i) -> bool:
 			var leg = game.player + Vector2i(signi(d.x) if absi(d.x) == 2 else 0, signi(d.y) if absi(d.y) == 2 else 0)
 			return R.occupied(leg, game.enemies) < 0
 		"breath": return true
-		"swap":
-			var i = R.occupied(p, game.enemies)
-			return distance == 1 and enemy_target(game, p) and game.enemies[i].kind != "g" and not game.card_move_used
 	return false
-static func swap_danger(game, target: Vector2i) -> bool:
-	var board = game.enemies.duplicate(true)
-	var i = R.occupied(target, board)
-	if i < 0: return false
-	board[i].pos = game.player
-	return R.threatened(target, board)
 static func attack_danger(game, id: String, target: Vector2i) -> bool:
 	var board = game.enemies.duplicate(true)
 	var i = R.occupied(target, board)
@@ -53,12 +46,18 @@ static func apply(game, id: String, p: Vector2i, index: int):
 			if killed and id != "retreat_strike":
 				game.player = p
 				game.move_piece({}, game.cell_pos(origin), game.cell_pos(p), 0.2, id == "knight_assault")
-		"stake":
-			game.enemies.append({"kind": "stake", "pos": p, "visual": game.cell_pos(p), "cd": 0, "period": 0, "stun": 0, "ttl": 3})
+			if game.player != origin: game.record_active_displacement(origin)
+		"stake", "permanent_stake":
+			game.add_enemy("stake", p, 0)
+			if id == "permanent_stake": game.enemies.back()["permanent"] = true
+			else: game.enemies.back()["ttl"] = 3
 			game.effect("stake_place", game.cell_pos(p), game.cell_pos(p), 0.3)
 		"pierce":
 			game.effect("spear", game.cell_pos(game.player), game.cell_pos(p), 0.3)
-			game.damage_enemy(index, 0.12, 2)
+			game.queue_bleed(index, 2)
+		"chain_assault":
+			game.effect("sword", game.cell_pos(game.player), game.cell_pos(p), 0.3)
+			game.damage_enemy(index, 0.12, 1 + int(game.active_displacements))
 		"pursuit":
 			game.effect("sword", game.cell_pos(game.player), game.cell_pos(p), 0.3)
 			if game.damage_enemy(index): game.draw_card()
@@ -75,17 +74,10 @@ static func apply(game, id: String, p: Vector2i, index: int):
 		"breath":
 			game.energy += 1
 			game.effect("breath", game.cell_pos(game.player), game.cell_pos(game.player), 0.35)
-		"swap":
-			var victim: Dictionary = game.enemies[index]
-			var origin: Vector2i = game.player
-			victim.pos = origin;game.player = p;game.card_move_used = true
-			game.move_piece({}, game.cell_pos(origin), game.cell_pos(p), 0, true)
-			game.move_piece(victim, game.cell_pos(p), game.cell_pos(origin), 0.1, true)
-			game.draw_card()
 static func expire_stakes(game, timeline: float):
 	for i in range(game.enemies.size() - 1, -1, -1):
 		var piece: Dictionary = game.enemies[i]
-		if piece.kind != "stake": continue
+		if piece.kind != "stake" or bool(piece.get("permanent", false)): continue
 		piece.ttl = int(piece.get("ttl", 3)) - 1
 		if piece.ttl <= 0:
 			game.effect("stake_expire", game.cell_pos(piece.pos), game.cell_pos(piece.pos), 0.18, timeline)

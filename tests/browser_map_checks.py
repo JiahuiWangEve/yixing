@@ -5,7 +5,7 @@ import asyncio, json, os, re, shutil
 from pathlib import Path
 from playwright.async_api import async_playwright
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'verification/v0.7.0/browser'
+OUT = ROOT / 'verification/v0.8.0/browser'
 OUT.mkdir(parents=True, exist_ok=True)
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
 XS = [.46,.15,.50,.85,.22,.76,.53,.13,.48,.86,.24,.73,.15,.49,.84,.79]
@@ -34,7 +34,7 @@ async def main():
    async def tap(x,y,delay=180):
     await page.touchscreen.tap(ox+x*scale,oy+y*scale); await page.wait_for_timeout(delay)
    async def state(screen,current,pending):
-    saved=await page.evaluate("localStorage.getItem('yixing.route_run.v1')")
+    saved=await page.evaluate("localStorage.getItem('yixing.route_run.v080')")
     assert saved, 'No synchronous Web snapshot'
     got=(re.search(r'^screen="(\w+)"',saved,re.M).group(1),int(re.search(r'"current": (-?\d+)',saved).group(1)),int(re.search(r'"pending": (-?\d+)',saved).group(1)))
     if got != (screen,current,pending): await page.screenshot(path=str(OUT/f'failure-{w}.png'))

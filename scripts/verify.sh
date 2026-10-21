@@ -32,3 +32,7 @@ run routes --script "$root/tests/route_checks.gd"
 run map-interaction --script "$root/tests/map_interaction_checks.gd"
 
 run map-state-safety --script "$root/tests/map_state_safety_checks.gd"
+
+run card-rebalance --script "$root/tests/card_rebalance_checks.gd"
+
+run current-tutorials --script "$root/tests/current_tutorial_checks.gd"

@@ -1,0 +1,498 @@
+{
+  "incomplete_previews": 0,
+  "screenshots": 52,
+  "viewports": [
+    {
+      "hand_screens": 3,
+      "logical_size": [
+        1280.0,
+        940.0
+      ],
+      "previews": [
+        {
+          "available_lines": 9,
+          "card": "sweep",
+          "card_size": [
+            198.360000610352,
+            228.0
+          ],
+          "complete": true,
+          "font_size": 18,
+          "text_lines": 3
+        },
+        {
+          "available_lines": 9,
+          "card": "shock",
+          "card_size": [
+            198.360000610352,
+            228.0
+          ],
+          "complete": true,
+          "font_size": 18,
+          "text_lines": 3
+        },
+        {
+          "available_lines": 9,
+          "card": "pierce",
+          "card_size": [
+            198.360000610352,
+            228.0
+          ],
+          "complete": true,
+          "font_size": 18,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 9,
+          "card": "guard",
+          "card_size": [
+            198.360000610352,
+            228.0
+          ],
+          "complete": true,
+          "font_size": 18,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 9,
+          "card": "suppress",
+          "card_size": [
+            198.360000610352,
+            228.0
+          ],
+          "complete": true,
+          "font_size": 18,
+          "text_lines": 7
+        },
+        {
+          "available_lines": 9,
+          "card": "chain_assault",
+          "card_size": [
+            198.360000610352,
+            228.0
+          ],
+          "complete": true,
+          "font_size": 18,
+          "text_lines": 7
+        },
+        {
+          "available_lines": 9,
+          "card": "permanent_stake",
+          "card_size": [
+            198.360000610352,
+            228.0
+          ],
+          "complete": true,
+          "font_size": 18,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 9,
+          "card": "reload",
+          "card_size": [
+            198.360000610352,
+            228.0
+          ],
+          "complete": true,
+          "font_size": 18,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 9,
+          "card": "cannon_shot_march",
+          "card_size": [
+            198.360000610352,
+            228.0
+          ],
+          "complete": true,
+          "font_size": 18,
+          "text_lines": 3
+        },
+        {
+          "available_lines": 9,
+          "card": "cannon_shot_attack",
+          "card_size": [
+            198.360000610352,
+            228.0
+          ],
+          "complete": true,
+          "font_size": 18,
+          "text_lines": 3
+        }
+      ],
+      "viewport": [
+        1280,
+        940
+      ]
+    },
+    {
+      "hand_screens": 3,
+      "logical_size": [
+        480.0,
+        1038.76928710938
+      ],
+      "previews": [
+        {
+          "available_lines": 13,
+          "card": "sweep",
+          "card_size": [
+            121.150421142578,
+            251.107192993164
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 4
+        },
+        {
+          "available_lines": 13,
+          "card": "shock",
+          "card_size": [
+            121.150421142578,
+            251.107192993164
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 4
+        },
+        {
+          "available_lines": 13,
+          "card": "pierce",
+          "card_size": [
+            121.150421142578,
+            251.107192993164
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 11
+        },
+        {
+          "available_lines": 13,
+          "card": "guard",
+          "card_size": [
+            121.150421142578,
+            251.107192993164
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 10
+        },
+        {
+          "available_lines": 13,
+          "card": "suppress",
+          "card_size": [
+            121.150421142578,
+            251.107192993164
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 10
+        },
+        {
+          "available_lines": 13,
+          "card": "chain_assault",
+          "card_size": [
+            121.150421142578,
+            251.107192993164
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 10
+        },
+        {
+          "available_lines": 13,
+          "card": "permanent_stake",
+          "card_size": [
+            121.150421142578,
+            251.107192993164
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 12
+        },
+        {
+          "available_lines": 13,
+          "card": "reload",
+          "card_size": [
+            121.150421142578,
+            251.107192993164
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 10
+        },
+        {
+          "available_lines": 13,
+          "card": "cannon_shot_march",
+          "card_size": [
+            121.150421142578,
+            251.107192993164
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 4
+        },
+        {
+          "available_lines": 13,
+          "card": "cannon_shot_attack",
+          "card_size": [
+            121.150421142578,
+            251.107192993164
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 4
+        }
+      ],
+      "viewport": [
+        390,
+        844
+      ]
+    },
+    {
+      "hand_screens": 3,
+      "logical_size": [
+        960.0,
+        540.0
+      ],
+      "previews": [
+        {
+          "available_lines": 9,
+          "card": "sweep",
+          "card_size": [
+            152.057571411133,
+            188.876693725586
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 3
+        },
+        {
+          "available_lines": 9,
+          "card": "shock",
+          "card_size": [
+            152.057571411133,
+            188.876693725586
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 3
+        },
+        {
+          "available_lines": 9,
+          "card": "pierce",
+          "card_size": [
+            152.057571411133,
+            188.876693725586
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 9,
+          "card": "guard",
+          "card_size": [
+            152.057571411133,
+            188.876693725586
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 9,
+          "card": "suppress",
+          "card_size": [
+            152.057571411133,
+            188.876693725586
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 7
+        },
+        {
+          "available_lines": 9,
+          "card": "chain_assault",
+          "card_size": [
+            152.057571411133,
+            188.876693725586
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 7
+        },
+        {
+          "available_lines": 9,
+          "card": "permanent_stake",
+          "card_size": [
+            152.057571411133,
+            188.876693725586
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 9,
+          "card": "reload",
+          "card_size": [
+            152.057571411133,
+            188.876693725586
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 9,
+          "card": "cannon_shot_march",
+          "card_size": [
+            152.057571411133,
+            188.876693725586
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 3
+        },
+        {
+          "available_lines": 9,
+          "card": "cannon_shot_attack",
+          "card_size": [
+            152.057571411133,
+            188.876693725586
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 3
+        }
+      ],
+      "viewport": [
+        844,
+        390
+      ]
+    },
+    {
+      "hand_screens": 3,
+      "logical_size": [
+        480.0,
+        853.333312988281
+      ],
+      "previews": [
+        {
+          "available_lines": 8,
+          "card": "sweep",
+          "card_size": [
+            126.096755981445,
+            170.234893798828
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 4
+        },
+        {
+          "available_lines": 8,
+          "card": "shock",
+          "card_size": [
+            126.096755981445,
+            170.234893798828
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 4
+        },
+        {
+          "available_lines": 9,
+          "card": "pierce",
+          "card_size": [
+            126.096755981445,
+            170.234893798828
+          ],
+          "complete": true,
+          "font_size": 12,
+          "text_lines": 9
+        },
+        {
+          "available_lines": 9,
+          "card": "guard",
+          "card_size": [
+            126.096755981445,
+            170.234893798828
+          ],
+          "complete": true,
+          "font_size": 12,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 9,
+          "card": "suppress",
+          "card_size": [
+            126.096755981445,
+            170.234893798828
+          ],
+          "complete": true,
+          "font_size": 12,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 9,
+          "card": "chain_assault",
+          "card_size": [
+            126.096755981445,
+            170.234893798828
+          ],
+          "complete": true,
+          "font_size": 12,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 9,
+          "card": "permanent_stake",
+          "card_size": [
+            126.096755981445,
+            170.234893798828
+          ],
+          "complete": true,
+          "font_size": 12,
+          "text_lines": 9
+        },
+        {
+          "available_lines": 9,
+          "card": "reload",
+          "card_size": [
+            126.096755981445,
+            170.234893798828
+          ],
+          "complete": true,
+          "font_size": 12,
+          "text_lines": 8
+        },
+        {
+          "available_lines": 8,
+          "card": "cannon_shot_march",
+          "card_size": [
+            126.096755981445,
+            170.234893798828
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 4
+        },
+        {
+          "available_lines": 8,
+          "card": "cannon_shot_attack",
+          "card_size": [
+            126.096755981445,
+            170.234893798828
+          ],
+          "complete": true,
+          "font_size": 14,
+          "text_lines": 4
+        }
+      ],
+      "viewport": [
+        360,
+        640
+      ]
+    }
+  ]
+}

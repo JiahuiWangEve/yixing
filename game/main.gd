@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.7.0"
+const BUILD_VERSION = "v0.8.0"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -10,9 +10,9 @@ const GESTURE = preload("res://card_input.gd")
 const SKILLS = preload("res://player_skills.gd")
 const FREE_MOVE = preload("res://free_move_card.gd")
 const HISTORY = preload("res://undo_history.gd")
-const UNTARGETED = ["sweep", "life", "breath", "deploy", "pack", "tuna"]
+const UNTARGETED = ["sweep", "life", "breath", "deploy", "pack", "tuna", "suppress", "guard", "reload"]
 # One use per physical copy per stage; discarded unused copies still recycle.
-const CONSUMABLES = ["life", "breath", "deploy", "tuna"]
+const CONSUMABLES = ["life", "breath", "deploy", "tuna", "guard", "permanent_stake"]
 const TACTICS = preload("res://tactics.gd")
 const CAMPAIGN = preload("res://campaign.gd")
 const ENEMY_AI = preload("res://enemy_ai.gd")
@@ -40,6 +40,12 @@ var deploy_draw_used = false
 # Pending future starts, separate from the bonus on the current turn.
 var tuna_turns = 0
 var tuna_active = false
+# Battle/turn effect state belongs to undo snapshots and route saves.
+var active_displacements = 0
+var shield_charges = 0
+var pending_bleeds: Array = []
+var next_enemy_uid = 1
+var reload_ready = false
 var free_card_uid = 0
 var free_selected = false
 var skill_system = SKILLS.new(self)
@@ -164,20 +170,23 @@ const RED = THEME.DANGER
 const CARDS = {
 	"sword_plus": ["短剑·淬锋", 1, "对正交相邻敌子造成2点伤害（营地升级）", "攻"],
 	"spear_plus": ["长枪·淬锋", 2, "直线两格内造成2点伤害，不穿透（营地升级）", "攻"],
-	"sword": ["短剑", 1, "对正交相邻敌子造成1点伤害", "攻"], 
-	"diagonal": ["斜斩", 1, "对斜角相邻敌子造成1点伤害", "攻"], 
-	"spear": ["长枪", 2, "直线两格内造成1点伤害，不穿透", "攻"], 
-	"horse": ["踏马", 1, "按马步移动，遵守蹩马腿；抽1张", "移"], 
-	"cannon": ["投石", 2, "直线隔恰好一子，造成1点伤害", "攻"], 
-	"sweep": ["横扫", 2, "对正交相邻的所有敌子各造成1点伤害", "攻"], 
-	"push": ["退敌", 1, "将相邻敌子推远一格，需空位", "术"], 
-	"straight": ["疾行", 1, "直线移动至多两格，不穿透；抽1张", "移"], 
-	"stun": ["定身符", 1, "两格内敌子下次敌方阶段无法移动或攻击", "术"], 
-	"life": ["续命", 2, "生命+1（上限5，本关消耗）；受击存活时转移安全格", "术", "生命+1（上限5，本关消耗）。受击后若仍有生命，转移到最近的安全空位；同距随机，没有安全空位则失败。转移不抽牌。"], 
-	"stake": ["架炮", 1, "两格内空位放木桩，挡路作炮架；持续3回合", "术"], 
-	"pierce": ["贯刺", 2, "对正交相邻敌子造成2点伤害", "攻"], 
-	"pursuit": ["追斩", 1, "相邻敌子1点伤害；仅击杀时抽1张", "攻"], 
-	"shock": ["震退", 1, "相邻敌子1点伤害；存活且后格空则推1格", "攻"], 
+	"sword": ["短剑", 1, "对正交相邻敌子造成1点伤害", "攻"],
+	"diagonal": ["斜斩", 1, "对斜角相邻敌子造成1点伤害", "攻"],
+	"spear": ["长枪", 2, "直线两格内造成1点伤害，不穿透", "攻"],
+	"horse": ["踏马", 1, "按马步移动，遵守蹩马腿；抽1张", "移"],
+	"cannon": ["投石", 2, "直线隔恰好一子，造成1点伤害", "攻"],
+	"sweep": ["横扫", 2, "对自身周围3×3内所有敌子各造成1点伤害", "攻"],
+	"straight": ["疾行", 1, "直线移动至多两格，不穿透；抽1张", "移"],
+	"life": ["续命", 2, "生命+1（上限5，本关消耗）；受击存活时转移安全格", "术", "生命+1（上限5，本关消耗）。受击后若仍有生命，转移到最近的安全空位；同距随机，没有安全空位则失败。转移不抽牌。"],
+	"stake": ["架炮", 1, "两格内空位放木桩，挡路作炮架；持续3回合", "术"],
+	"pierce": ["流血", 1, "正交相邻敌子，下个玩家回合开始时受到2点伤害", "攻", "对一个正交相邻敌子施加延迟2伤。先完整结算敌方阶段，再于下个玩家回合开始生效。跟随同一敌子，不跟随格子；多次施加伤害相加，目标提前死亡则失效。"],
+	"suppress": ["镇四方", 3, "抽1张；正交相邻所有敌子移动倒计时+2", "术", "先抽1张，再使正交相邻所有敌子的移动倒计时+2。不造成伤害，不影响敌方攻击；不消耗。手牌超限时效果仍完整结算后再弃牌。"],
+	"guard": ["固守", 2, "抵挡下次受击，至下个玩家回合开始；消耗", "术", "下个玩家回合开始前抵挡1次实际受击，不掉命、不转移。未触发也到期失效；重复使用只刷新1次。"],
+	"chain_assault": ["连袭", 2, "周围3×3内选一个敌子，造成1+本回合主动位移次数伤害", "攻", "在自身周围3×3内选择一个敌子，造成1+本回合此前成功主动位移次数的伤害。免费移动、移动牌与攻击附带位移均计入，每次行动计1次，不按格数；受击转移、失败移动与姿态切换不计。"],
+	"permanent_stake": ["机关炮架", 1, "两格内空位放永久木桩，持续本场战斗；消耗", "术", "与架炮相同，曼哈顿距离两格内的空位放木桩，挡路并作炮架。不会按回合消失，战斗结束清除；本关消耗。"],
+	"reload": ["装填", 1, "本回合下次炮击伤害+1；若击杀，抽1张", "术", "只强化本回合下一张成功打出的炮击，不强化其他攻击。无效目标不消耗装填；击杀时抽1张。未使用则回合结束失效，重复使用刷新1次，不叠加。"],
+	"pursuit": ["追斩", 1, "相邻敌子1点伤害；仅击杀时抽1张", "攻"],
+	"shock": ["震退", 1, "周围3×3或正交2格选一敌子，1伤并推1格", "攻"],
 	"breath": ["调息", 0, "当前能量+1；本关消耗", "术"],
 	"cannon_shot": ["炮击", 2, "直线隔恰好一子；行军2费1伤，攻击1费2伤", "攻"],
 	"advance": ["进击", 1, "正交相邻敌子1伤；击杀后进入其位置，不抽牌", "攻"],
@@ -186,7 +195,7 @@ const CARDS = {
 	"deploy": ["展开", 1, "行军→攻击；本回合首次展开抽3张；消耗", "术", "仅炮车行军姿态可用。进入攻击姿态；每回合首次进入时抽3张，超出6张需弃牌。使用后本关移除，下关恢复。"],
 	"pack": ["转进", 0, "攻击→行军；不抽牌，保留免费移动额度", "术"],
 	"tuna": ["吐纳", 3, "下回合起连续3回合能量+1；消耗", "术", "使用当回合不返还能量。接下来3个玩家回合各以4能量开始；再次使用延长3回合，不叠加增量。过关清除。消耗：使用后本关移除，下关恢复。"],
-	"swap": ["换位", 1, "与相邻非将敌子互换；用移动牌次数，抽1张", "移"]}
+}
 var rng = RandomNumberGenerator.new()
 var seed_value = 20261019
 var player = Vector2i(4, 9)
@@ -250,6 +259,33 @@ func hand_visual_rect(i: int) -> Rect2:
 	sync_hand_ids();handui.sync();return handui.bounds(i)
 func hand_draw_order() -> Array: return handui.draw_order()
 func hand_hit_index(pos: Vector2) -> int: return handui.hit_index(pos)
+
+func in_neighbor_square(p: Vector2i) -> bool:
+	var d = p - player
+	return d != Vector2i.ZERO and absi(d.x) <= 1 and absi(d.y) <= 1
+func record_active_displacement(origin: Vector2i):
+	if player != origin: active_displacements += 1
+func clear_battle_card_effects():
+	active_displacements = 0;shield_charges = 0;pending_bleeds = [];reload_ready = false
+func queue_bleed(index: int, amount: int):
+	if index < 0 or index >= enemies.size() or enemies[index].kind == "stake": return
+	pending_bleeds.append({"enemy_uid": enemies[index].uid, "amount": amount})
+func general_alive() -> bool:
+	for enemy in enemies:
+		if enemy.kind == "g": return true
+	return false
+func resolve_bleeds():
+	# Detach queue first: killed targets never retarget a new occupant or reinforcement.
+	var queued = pending_bleeds.duplicate(true)
+	pending_bleeds.clear()
+	for bleed in queued:
+		for i in enemies.size():
+			if enemies[i].get("uid", -1) == bleed.enemy_uid:
+				damage_enemy(i, 0.0, bleed.amount)
+				break
+		if not general_alive():
+			settle_victory()
+			return
 
 func damage_enemy(idx: int, impact_delay: float = 0.12, amount: int = 1) -> bool:
 	if idx < 0 or idx >= enemies.size() or enemies[idx].kind == "stake": return false
@@ -325,13 +361,10 @@ func reward_pool() -> Array:
 func roll_rewards():
 	rewardui.reset()
 	if tutorial.active:
-		rewards = ["cannon", "sweep", "push", "straight", "stun", "life"]
+		rewards = ["cannon", "sweep", "shock", "straight", "guard", "life"]
 		shuffle(rewards);rewards = rewards.slice(0, 3)
 		return
-	var dedicated: Array = PROFILES.DATA[player_skill].rewards.duplicate()
-	var common: Array = PROFILES.COMMON.duplicate()
-	shuffle(dedicated);shuffle(common)
-	rewards = dedicated.slice(0, 2) + common.slice(0, 1)
+	rewards = PROFILES.draw_rewards(player_skill, rng)
 	shuffle(rewards)
 func is_consumable(id: String) -> bool: return id in CONSUMABLES
 func tutorial_allows(action: String, data: Dictionary = {}) -> bool:
@@ -384,20 +417,23 @@ func basic_move(target: Vector2i):
 	if screen != "game" or phase != "play" or not basic_legal(target): return
 	if not tutorial_allows("move", {"target": target}): return
 	history.record("move")
-	move_piece({}, cell_pos(player), cell_pos(target), 0, player_skill == "horse");player = target;basic_used = true;free_selected = false;selected = -1;notice = "基础移动完成，抽1张牌。";draw_card()
+	var origin = player
+	move_piece({}, cell_pos(player), cell_pos(target), 0, player_skill == "horse");player = target;record_active_displacement(origin);basic_used = true;free_selected = false;selected = -1;notice = "基础移动完成，抽1张牌。";draw_card()
 	tutorial_after("move", {"target": target})
 func shuffle(a: Array):
 	for i in range(a.size() - 1, 0, -1):
 		var j = rng.randi_range(0, i)
 		var tmp = a[i];a[i] = a[j];a[j] = tmp
 func add_enemy(kind: String, p: Vector2i, cd: int):
-	enemies.append({"kind": kind, "pos": p, "cd": cd, "period": cd, "stun": 0, "hp": enemy_health(kind), "max_hp": enemy_health(kind), "visual": cell_pos(p)})
+	enemies.append({"uid": next_enemy_uid, "kind": kind, "pos": p, "cd": cd, "period": cd, "stun": 0, "hp": enemy_health(kind), "max_hp": enemy_health(kind), "visual": cell_pos(p)})
+	next_enemy_uid += 1
 func start_stage():
 	rewardui.reset()
 	history.clear();cancel_gesture();hand_ids = []
 	navigation_lock = 0.0
 	reinforcement_turns = 0;reinforcement_pending = 0;hand_page = 0;hand_drawer = false
 	artillery_mode = "march";deploy_draw_used = false;tuna_turns = 0;tuna_active = false
+	clear_battle_card_effects();next_enemy_uid = 1
 	clear_effects()
 	player = Vector2i(4, 9);player_visual = cell_pos(player);enemies = [];turn = 1;energy = 3;basic_used = false;card_move_used = false;selected = -1
 	refresh_free_card()
@@ -448,7 +484,7 @@ func board_cell(pos: Vector2) -> Vector2i:
 	if R.inside(p) and pos.distance_to(cell_pos(p)) < 28: return p
 	return Vector2i(-1, -1)
 func movement_danger(id: String, p: Vector2i) -> bool:
-	return TACTICS.swap_danger(self, p) if id == "swap" else R.threatened(p, enemies)
+	return R.threatened(p, enemies)
 func placement_danger(p: Vector2i) -> bool:
 	var board = enemies.duplicate(true)
 	board.append({"kind": "stake", "pos": p, "stun": 0})
@@ -469,10 +505,14 @@ func card_data(id: String) -> Array:
 	var data: Array = CARDS[id].duplicate()
 	data[1] = card_cost(id)
 	if id == "cannon_shot":
-		data[2] = ("攻击姿态：1费2伤" if artillery_mode == "attack" else "行军姿态：2费1伤") + "；直线隔恰好一子"
+		var amount = (2 if artillery_mode == "attack" else 1) + (1 if reload_ready else 0)
+		data[2] = "%s：%d费%d伤；直线隔恰好一子%s" % ["攻击姿态" if artillery_mode == "attack" else "行军姿态", data[1], amount, "；装填击杀抽1张" if reload_ready else ""]
+	if id == "chain_assault":
+		data[2] = "周围3×3选一个敌子；当前%d伤（1+已主动位移%d次）" % [1 + active_displacements, active_displacements]
+		data[4] = "当前%d伤（1+主动位移%d次）。周围3×3选一个敌子。免费、移动牌与攻击附带的成功位移，每次行动计1次；受击转移、失败与切姿态不计。" % [1 + active_displacements, active_displacements]
 	return data
 func target_danger(id: String, p: Vector2i) -> bool:
-	if id == "stake": return placement_danger(p)
+	if id in ["stake", "permanent_stake"]: return placement_danger(p)
 	if id in ["advance", "retreat_strike", "knight_assault"]: return TACTICS.attack_danger(self, id, p)
 	return CARDS[id][3] == "移" and movement_danger(id, p)
 func can_commit_card(index: int, p: Vector2i) -> bool:
@@ -483,7 +523,7 @@ func can_commit_card(index: int, p: Vector2i) -> bool:
 	if id == "breath": return true
 	if id == "sweep":
 		for e in enemies:
-			if e.kind != "stake" and absi(e.pos.x - player.x) + absi(e.pos.y - player.y) == 1: return true
+			if e.kind != "stake" and in_neighbor_square(e.pos): return true
 		return false
 	return card_legal(id, p)
 func card_legal(id: String, p: Vector2i) -> bool:
@@ -497,17 +537,13 @@ func card_legal(id: String, p: Vector2i) -> bool:
 	match id:
 		"deploy": return player_skill == "artillery" and artillery_mode == "march"
 		"pack": return player_skill == "artillery" and artillery_mode == "attack"
-		"tuna": return player_skill == "king"
+		"tuna", "suppress", "guard": return player_skill == "king"
+		"reload": return player_skill == "artillery"
 		"cannon_shot": return player_skill == "artillery" and idx >= 0 and R.blockers(player, p, enemies) == 1
 		"sword": return idx >= 0 and dist == 1
 		"diagonal": return idx >= 0 and absi(d.x) == 1 and absi(d.y) == 1
 		"spear": return idx >= 0 and dist <= 2 and R.blockers(player, p, enemies) == 0
 		"cannon": return idx >= 0 and R.blockers(player, p, enemies) == 1
-		"stun": return idx >= 0 and dist <= 2
-		"push":
-			if idx < 0 or dist != 1 or (d.x != 0 and d.y != 0): return false
-			var dest = p + Vector2i(signi(d.x), signi(d.y))
-			return R.inside(dest) and R.occupied(dest, enemies) < 0 and dest != player
 		"horse":
 			if idx >= 0 or card_move_used: return false
 			if not ((abs(d.x) == 2 and abs(d.y) == 1) or (abs(d.x) == 1 and abs(d.y) == 2)): return false
@@ -614,7 +650,7 @@ func play_card(i: int, p: Vector2i):
 	if id == "sweep":
 		var found = false
 		for e in enemies:
-			if e.kind != "stake" and abs(e.pos.x - player.x) + abs(e.pos.y - player.y) == 1: found = true
+			if e.kind != "stake" and in_neighbor_square(e.pos): found = true
 		if not found: notice = "周围没有可横扫的敌子。";return
 	history.record("play");free_selected = false;sync_hand_views()
 	effect("card_use", hand_visual_rect(i).position, hand_visual_rect(i).position - Vector2(0, 60), 0.34, 0, {"card": id, "size": hand_rect(i).size})
@@ -628,7 +664,11 @@ func play_card(i: int, p: Vector2i):
 		"sword", "spear", "sword_plus", "spear_plus", "cannon", "diagonal", "cannon_shot":
 			var animation = "cannon" if id == "cannon_shot" else ("sword" if id == "diagonal" else id.trim_suffix("_plus"))
 			effect(animation, cell_pos(player), cell_pos(p), 0.3)
-			damage_enemy(idx, 0.3 if animation == "cannon" else 0.12, 2 if id.ends_with("_plus") or (id == "cannon_shot" and artillery_mode == "attack") else 1)
+			var loaded = id == "cannon_shot" and reload_ready
+			var amount = (2 if id.ends_with("_plus") or (id == "cannon_shot" and artillery_mode == "attack") else 1) + (1 if loaded else 0)
+			if loaded: reload_ready = false
+			var killed = damage_enemy(idx, 0.3 if animation == "cannon" else 0.12, amount)
+			if loaded and killed: draw_card()
 		"deploy":
 			artillery_mode = "attack";refresh_free_card()
 			if not deploy_draw_used:
@@ -643,28 +683,29 @@ func play_card(i: int, p: Vector2i):
 			effect("tuna", cell_pos(player), cell_pos(player), 0.35)
 			log_line("吐纳：未来%d回合能量+1。" % tuna_turns)
 		"horse", "straight":
+			var origin = player
 			move_piece({}, cell_pos(player), cell_pos(p), 0, id == "horse")
-			player = p;card_move_used = true;draw_card()
-		"stun":
-			enemies[idx].stun = 1;effect("stun", cell_pos(p), cell_pos(p), 0.42)
-		"push":
-			var e = enemies[idx]; var old = cell_pos(e.pos)
-			e.pos += Vector2i(signi(p.x - player.x), signi(p.y - player.y))
-			effect("push", cell_pos(player), old, 0.2);move_piece(e, old, cell_pos(e.pos), 0.1)
+			player = p;record_active_displacement(origin);card_move_used = true;draw_card()
+		"suppress":
+			draw_card()
+			for enemy in enemies:
+				if enemy.kind != "stake" and absi(enemy.pos.x - player.x) + absi(enemy.pos.y - player.y) == 1:
+					enemy.cd += 2;enemy.intent = Vector2i(-1, -1)
+		"guard":
+			shield_charges = 1
+			effect("guard", cell_pos(player), cell_pos(player), 0.35)
+		"reload": reload_ready = true
 		"life": lives += 1;effect("life", cell_pos(player), cell_pos(player), 0.4)
 		"sweep":
 			for j in range(enemies.size() - 1, -1, -1):
-				if enemies[j].kind != "stake" and abs(enemies[j].pos.x - player.x) + abs(enemies[j].pos.y - player.y) == 1:
+				if enemies[j].kind != "stake" and in_neighbor_square(enemies[j].pos):
 					effect("sword", cell_pos(player), cell_pos(enemies[j].pos), 0.3)
 					damage_enemy(j)
-	var general = false
-	for e in enemies:
-		if e.kind == "g": general = true
-	if not general: settle_victory()
+	if not general_alive(): settle_victory()
 	tutorial_after("play", {"index": i, "target": p, "card": id})
 func settle_victory():
 	if screen != "game" or phase not in ["play", "discard"]: return
-	cancel_gesture();clear_effects();rewardui.reset()
+	cancel_gesture();clear_effects();rewardui.reset();clear_battle_card_effects()
 	if route.active(): history.clear()
 	selected = -1;free_selected = false;reinforcement_pending = 0;input_lock = 0;navigation_lock = 0
 	if stage == CAMPAIGN.LAST_STAGE:
@@ -694,20 +735,26 @@ func plan_intents():
 func end_turn():
 	if screen != "game" or phase != "play" or not tutorial_allows("end_turn"): return
 	history.record("end_turn");cancel_gesture()
-	selected = -1;free_selected = false
+	selected = -1;free_selected = false;reload_ready = false
 	input_lock = 0.3
 
 	var timeline = 0.0
 	var hit = false
 	var attacker: Dictionary = {}
+	var blocked_attackers: Array = []
 	for e in enemies:
 		if R.attacks(e, player, enemies):
+			if shield_charges > 0:
+				shield_charges = 0;blocked_attackers.append(e)
+				effect("guard", cell_pos(e.pos), cell_pos(player), 0.26)
+				log_line("固守抵挡一次受击。")
+				continue
 			effect("player_hit", cell_pos(e.pos), cell_pos(player), 0.26)
 			timeline = 0.26
 			lives -= 1;hit = true;attacker = e;log_line("被%s击中，失去一命。" % piece_name(e.kind))
-			if lives <= 0: phase = "dead";notice = "命数耗尽。";return
+			if lives <= 0: phase = "dead";clear_battle_card_effects();notice = "命数耗尽。";return
 			var safe = R.safe_recoil(player, enemies)
-			if safe.is_empty(): phase = "dead";notice = "无安全位置可撤退。";return
+			if safe.is_empty(): phase = "dead";clear_battle_card_effects();notice = "无安全位置可撤退。";return
 			var destination = safe[rng.randi_range(0, safe.size() - 1)]
 			effect("recoil", cell_pos(player), cell_pos(destination), 0.34, timeline)
 			timeline += 0.34
@@ -719,7 +766,7 @@ func end_turn():
 		e.cd -= 1
 		if e.cd <= 0:
 			var target: Vector2i = e.get("intent", Vector2i(-1, -1))
-			if e != attacker and target in R.moves(e, enemies, player):
+			if e != attacker and e not in blocked_attackers and target in R.moves(e, enemies, player):
 				move_piece(e, cell_pos(e.pos), cell_pos(target), timeline, e.kind == "h")
 				timeline += 0.28
 				e.pos = target
@@ -728,8 +775,11 @@ func end_turn():
 		if e.stun > 0: e.stun -= 1
 	resolve_reinforcements(timeline)
 	TACTICS.expire_stakes(self, maxf(timeline, input_lock))
-	plan_intents()
 	turn += 1;history.trim()
+	shield_charges = 0;active_displacements = 0
+	resolve_bleeds()
+	if phase not in ["play", "discard"]: return
+	plan_intents()
 	tuna_active = tuna_turns > 0
 	if tuna_active: tuna_turns -= 1
 	energy = 4 if tuna_active else 3
@@ -784,7 +834,7 @@ func context_hint() -> String:
 	var idx = R.occupied(hover, enemies)
 	if idx >= 0:
 		var e = enemies[idx]
-		if e.kind == "stake": return "木桩 · 挡路与炮架 · 剩余%d回合" % int(e.get("ttl", 3))
+		if e.kind == "stake": return "机关炮架 · 持续本场战斗" if e.get("permanent", false) else "木桩 · 挡路与炮架 · 剩余%d回合" % int(e.get("ttl", 3))
 		return "%s · 移动倒计时 %d%s" % [piece_name(e.kind), e.cd, " · 定身中" if e.stun > 0 else ""]
 	return ""
 func _draw():
@@ -845,7 +895,7 @@ func _draw():
 			draw_arc(cell_pos(intent), 16, 0, TAU, 20, THEME.GRID, 2)
 	for e in enemies:
 		if e.kind == "stake":
-			draw_stake(cell_pos(e.pos));text_at(cell_pos(e.pos) + Vector2(-4, 26), str(e.get("ttl", 3)), 13, THEME.INK);continue
+			draw_stake(cell_pos(e.pos));text_at(cell_pos(e.pos) + Vector2(-4, 26), ("∞" if e.get("permanent", false) else str(e.get("ttl", 3))), 13, THEME.INK);continue
 		var hidden_spawn = false
 		for fx in effects:
 			if fx.kind == "spawn" and fx.piece == e and fx.age < fx.delay + 0.3: hidden_spawn = true
@@ -867,8 +917,13 @@ func _draw():
 		if max_hp > 1:
 			for h in max_hp: draw_circle(v + Vector2((h - (max_hp - 1) * 0.5) * 9, CELL * 0.46 if mobile_layout else 29), 3, RED if h < e.get("hp", max_hp) else THEME.BORDER)
 		if e.stun > 0: text_at(v + Vector2(-21, 40), "定身", 14, THEME.SAFE)
+		var bleed_damage = 0
+		for bleed in pending_bleeds:
+			if bleed.enemy_uid == e.get("uid", -1): bleed_damage += bleed.amount
+		if bleed_damage > 0: text_at(v + Vector2(-18, -CELL * 0.48), "血%d" % bleed_damage, 13, RED)
 		draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
 	var pv = player_visual
+	if shield_charges > 0: draw_arc(pv, CELL * 0.47, 0, TAU, 32, THEME.SAFE, 3)
 	if input_lock <= 0 and R.threatened(player, enemies): pv.x += sin(tick * 29) * 2;draw_arc(pv, 29, 0, TAU, 32, RED, 3)
 	var player_flash = 0.0
 	for fx in effects:
@@ -881,9 +936,13 @@ func _draw():
 	text_at((Vector2(200, 500) if compact_landscape else Vector2(150, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(550, 609), "能量 %d" % energy, 20, THEME.LIGHT)
 	var confirm = selected >= 0 and (phase == "discard" or (phase == "play" and hand[selected] in UNTARGETED))
 	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else ("结束回合" if mobile_layout else "结束回合 [Enter]")), 18, THEME.INK)
-	if tuna_active or tuna_turns > 0:
-		var status = "吐纳 · 本回合+1" if tuna_active else "吐纳"
-		status += " · 后续%d回合" % tuna_turns
+	var statuses: Array[String] = []
+	if tuna_active or tuna_turns > 0: statuses.append(("吐纳 本回合+1" if tuna_active else "吐纳") + " 后续%d回合" % tuna_turns)
+	if shield_charges > 0: statuses.append("固守 1次")
+	if reload_ready: statuses.append("装填 下次炮击+1")
+	if player_skill == "horse": statuses.append("主动位移 %d次" % active_displacements)
+	if not statuses.is_empty():
+		var status = " · ".join(statuses)
 		text_at(Vector2(410, 410) if compact_landscape else (Vector2(24, minf(BOARD_RECT.end.y + 62, full_hand_area().position.y - 8)) if mobile_layout else Vector2(24, 602)), status, 14, THEME.HEADING)
 	var hint = context_hint()
 	if not hint.is_empty() and input_lock <= 0: text_at((Vector2(410, 130) if compact_landscape else Vector2(24, 105)) if mobile_layout else Vector2(24, 618), hint, 14 if mobile_layout else 16, RED if phase == "discard" or R.threatened(player, enemies) else THEME.HEADING)
@@ -930,6 +989,9 @@ func draw_effects():
 			"stance", "tuna":
 				draw_arc(b, 25 + t * 12, 0, TAU, 24, Color(THEME.SAFE, fade), 3)
 				text_at(b + Vector2(-24, -32 - t * 15), "转进" if fx.kind == "stance" else "蓄气", 18, Color(THEME.SAFE, fade))
+			"guard":
+				draw_arc(b, 25 + t * 12, 0, TAU, 24, Color(THEME.SAFE, fade), 4)
+				text_at(b + Vector2(-24, -32 - t * 15), "固守", 18, Color(THEME.SAFE, fade))
 			"breath":
 				draw_arc(b, 25 + t * 12, 0, TAU, 24, Color(THEME.SAFE, fade), 3)
 				text_at(b + Vector2(-24, -32 - t * 20), "+1气", 20, Color(THEME.SAFE, fade))
