@@ -41,6 +41,7 @@ def validate():
         points = [replay['resume']]
         for step in replay['steps']:
             assert step['kind'] in {'action', 'blocked', 'reload'}
+            assert isinstance(step['wait_ms'], int) and step['wait_ms'] >= 100
             for action in step['inputs']:
                 actions.add(action['action'])
                 assert action['action'] in {'tap', 'drag', 'key'}
@@ -107,7 +108,7 @@ async def main(validate_only=False):
                     path = output / f'{stem}-{label}.png';data = await page.screenshot(path=str(path))
                     assert_rendered(data, [w, h]);screenshots.append({'file': path.name, 'sha256': hashlib.sha256(data).hexdigest()})
                 async def resume():
-                    await tap(replay['resume']);await page.wait_for_timeout(180)
+                    await tap(replay['resume']);await page.wait_for_timeout(350)
                 try:
                     # This one-time flag is scoped to the fresh browser context.
                     # The reload test keeps the current save, never the fixture.
@@ -126,7 +127,10 @@ async def main(validate_only=False):
                                 elif action['action'] == 'drag': await drag(action['from'], action['to'])
                                 else: await page.keyboard.press(action['key'])
                                 await page.wait_for_timeout(100)
-                            if step['kind'] == 'blocked': await page.wait_for_timeout(250)
+                            # Native driver records the real fx/input lock before
+                            # clearing effects, plus a 100 ms presentation margin.
+                            # Save equality alone cannot replace this boundary.
+                            await page.wait_for_timeout(max(step['wait_ms'], 250 if step['kind'] == 'blocked' else 0))
                         await expect(step['expected'], step['label'])
                         await screenshot(str(number) + '-' + step['label'])
                     assert not errors, (stem, errors)

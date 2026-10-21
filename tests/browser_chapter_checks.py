@@ -119,6 +119,7 @@ async def main(smoke=False, validate_only=False):
                 stem = replay['name'] + '-' + str(w)
                 screenshots = []
                 panel_before = None
+                saved_steps = []
 
                 async def tap(pos):
                     x, y = ox + pos[0] * scale, oy + pos[1] * scale
@@ -132,6 +133,24 @@ async def main(smoke=False, validate_only=False):
 
                 async def snapshot():
                     return parse_save(await page.evaluate('(key)=>localStorage.getItem(key)', KEY))
+
+                async def await_saved_state(expected, label):
+                    # A successful UI transition can precede its synchronous save
+                    # on a busy CI main thread. The previous fixed 1050 ms read
+                    # caught the old map save even though its failure screenshot
+                    # already showed the correctly entered chapter-two battle.
+                    # Never resend input: wait for the complete original expected
+                    # state, and retain the strict assertion on timeout.
+                    loop = asyncio.get_running_loop()
+                    started = loop.time()
+                    deadline = started + 12
+                    while True:
+                        observed = await snapshot()
+                        if observed == expected:
+                            saved_steps.append({'label': label, 'save_wait_ms': round((loop.time() - started) * 1000, 1)})
+                            return observed
+                        assert loop.time() < deadline, (stem, label, observed, expected)
+                        await page.wait_for_timeout(80)
 
                 async def screenshot(label):
                     path = output / f'{stem}-{label}.png'
@@ -150,7 +169,7 @@ async def main(smoke=False, validate_only=False):
                     await page.reload()
                     await boot(page)
                     await resume()
-                    assert await snapshot() == replay['initial'], (stem, 'initial', await snapshot(), replay['initial'])
+                    await await_saved_state(replay['initial'], 'initial')
                     await screenshot('initial')
                     for number, step in enumerate(replay['steps']):
                         if step['kind'] == 'reload':
@@ -162,9 +181,12 @@ async def main(smoke=False, validate_only=False):
                                 panel_before = await page.screenshot()
                             for pos in step['taps']:
                                 await tap(pos)
+                            # Preserve the existing animation/input-lock settle
+                            # window. Save equality alone is not an animation or
+                            # input-readiness signal, especially after Continue.
                             await page.wait_for_timeout(step.get('wait_ms', 1800 if step['kind'] == 'combat' else
                                                                   1050 if step['kind'] == 'enter' else 350))
-                        observed = await snapshot()
+                        observed = await await_saved_state(step['expected'], step['label'])
                         assert observed == step['expected'], (stem, number, step['label'], observed, step['expected'])
                         capture = await screenshot(str(number) + '-' + step['label'])
                         if step['kind'] == 'panel':
@@ -175,7 +197,7 @@ async def main(smoke=False, validate_only=False):
                     assert not errors, (stem, errors)
                     reports.append({'fixture': replay['fixture'], 'viewport': [w, h],
                                     'state_assertions': len(replay['steps']) + 1,
-                                    'errors': errors, 'screenshots': screenshots, 'final': await snapshot()})
+                                    'errors': errors, 'screenshots': screenshots, 'saved_steps': saved_steps, 'final': await snapshot()})
                     print('PASS chapter', stem, len(replay['steps']) + 1, 'state checks', flush=True)
                 except Exception:
                     await page.screenshot(path=str(output / f'{stem}-failure.png'))

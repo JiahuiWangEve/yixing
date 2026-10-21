@@ -38,7 +38,10 @@ func settle():
 	game.clear_effects();game.input_lock = 0;game.navigation_lock = 0;game.initial_threat = 0
 	game.handui.reset();game.route.save()
 func step(kind: String, label: String, inputs: Array):
-	settle();steps.append({"kind": kind, "label": label, "inputs": inputs, "expected": summary()})
+	# Record actual production animation/navigation lock before clearing native
+	# effects. Web input needs this boundary as well as the persisted state.
+	var wait_ms = ceili(maxf(game.input_lock, game.navigation_lock) * 1000.0) + 100
+	settle();steps.append({"kind": kind, "label": label, "inputs": inputs, "wait_ms": wait_ms, "expected": summary()})
 func taps(positions: Array) -> Array:
 	var result = []
 	for position in positions: result.append({"action": "tap", "point": point(position)})
