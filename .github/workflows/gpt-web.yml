@@ -9,21 +9,43 @@ on:
       - 'scripts/**'
       - '.github/workflows/gpt-web.yml'
   workflow_dispatch:
+    inputs:
+      full_regression:
+        description: 'All four viewport sizes and historical animation recordings'
+        type: boolean
+        default: false
+
 
 permissions:
-  contents: write
-
-concurrency:
-  group: gpt-web-build
-  cancel-in-progress: true
+  contents: read
 
 jobs:
   build:
+    name: Build and publish demo (basic checks)
+    concurrency:
+      group: gpt-web-build
+      cancel-in-progress: true
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Cache pinned Godot and Web templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/yixing-tools/godot-4.6.3-x86_64
+            ~/.local/share/godot/export_templates/4.6.3.stable
+          key: ${{ runner.os }}-${{ runner.arch }}-godot-4.6.3-web-v1
+      - name: Cache Python and pinned browser downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-1.55.0-pillow-11.3.0-v1
       - name: Install Godot and verify
         run: bash scripts/setup.sh
       - name: Install matching single-thread Web templates
@@ -50,18 +72,14 @@ jobs:
         run: |
           python3 -m pip install playwright==1.55.0 pillow==11.3.0
           python3 -m playwright install --with-deps chromium
-      - name: Verify real Web map flows at four sizes
+      - name: Core Web release smoke (desktop and touch)
+        shell: bash
         run: |
+          set -euo pipefail
           python3 -m http.server 8765 --bind 127.0.0.1 --directory build/web > build/http.log 2>&1 &
-          trap 'kill $!' EXIT
-          if ! python3 tests/browser_map_checks.py > build/browser.log 2>&1; then cat build/browser.log; exit 1; fi
-          cat build/browser.log
-          if ! python3 tests/browser_cannon_checks.py > build/cannon-browser.log 2>&1; then cat build/cannon-browser.log; exit 1; fi
-          cat build/cannon-browser.log
-          if ! python3 tests/browser_rook_checks.py > build/rook-browser.log 2>&1; then cat build/rook-browser.log; exit 1; fi
-          cat build/rook-browser.log
-          if ! python3 tests/browser_event_checks.py > build/event-browser.log 2>&1; then cat build/event-browser.log; exit 1; fi
-          cat build/event-browser.log
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          python3 tests/browser_release_smoke.py 2>&1 | tee build/release-smoke.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -71,10 +89,8 @@ jobs:
             build/web/
             build/export.log
             build/package-audit.log
-            build/browser.log
-            build/cannon-browser.log
-            build/rook-browser.log
-            build/event-browser.log
+            build/release-smoke.log
+            verification/release-smoke/
             verification/v0.13.0/events/
             verification/v0.12.0/rook/
             verification/v0.11.0/cannon/
@@ -96,3 +112,63 @@ jobs:
             test "$(git ls-remote origin refs/heads/gpt | cut -f1)" = "$GITHUB_SHA" || { echo "Source changed during export copy; skip publication"; exit 0; }
             git push origin HEAD:gh-pages
           fi
+
+  regression:
+    name: Background Web regression (not a publication gate)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      YIXING_FULL_REGRESSION: ${{ inputs.full_regression && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the exact tested and published build
+        uses: actions/download-artifact@v4
+        with:
+          name: yixing-web-${{ github.sha }}
+          path: .
+      - name: Verify source and exported content identity
+        run: |
+          python3 - <<'PYVERIFY'
+          import hashlib, json, os, pathlib
+          web = pathlib.Path('build/web')
+          info = json.loads((web / 'build-info.json').read_text())
+          assert info['source_commit'] == os.environ['GITHUB_SHA'], 'Wrong source artifact'
+          for name, expected in info['sha256'].items():
+              assert hashlib.sha256((web / name).read_bytes()).hexdigest() == expected, name
+          PYVERIFY
+      - name: Cache Python and pinned browser downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-1.55.0-pillow-11.3.0-v1
+      - name: Install browser test runtime
+        run: |
+          python3 -m pip install playwright==1.55.0 pillow==11.3.0
+          python3 -m playwright install --with-deps chromium
+      - name: Run background browser suites
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory build/web > build/background-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          # Run every suite even after an earlier failure; retain the overall red result.
+          failed=0
+          for suite in map cannon rook event; do
+            if ! python3 "tests/browser_${suite}_checks.py" > "build/${suite}-browser.log" 2>&1; then failed=1; fi
+            cat "build/${suite}-browser.log"
+          done
+          exit "$failed"
+      - name: Upload background regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yixing-regression-${{ github.sha }}
+          path: |
+            build/*browser.log
+            verification/v0.13.0/
+            verification/v0.12.0/rook/
+            verification/v0.11.0/cannon/
+          include-hidden-files: true

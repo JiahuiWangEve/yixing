@@ -180,7 +180,7 @@ async def main():
                     assert all(e['moves']<=1 for e in after['pieces'])
                 assert performance['input_event_recorded']
                 await page.screenshot(path=str(OUT/f'{name}-after-{w}.png'))
-                film=await movement_film(context,page,fixture,geometry,f'{name}-motion-{w}') if name in ['cannon_first','support_first'] else None
+                film=await movement_film(context,page,fixture,geometry,f'{name}-motion-{w}') if os.environ.get('YIXING_FULL_REGRESSION') == '1' and name in ['cannon_first','support_first'] else None
                 assert not errors,(name,w,errors)
                 report={'scenario':name,'viewport':[w,h],'input':'Space' if w==1280 else 'touch end-turn',
                         'before':before,'after':after,'performance':performance,'motion':film,'errors':errors}

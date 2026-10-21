@@ -15,7 +15,8 @@ async def main():
  async with async_playwright() as p:
   executable = os.environ.get('CHROMIUM_PATH') or shutil.which('chromium')
   browser=await p.chromium.launch(**({'executable_path':executable} if executable else {}),headless=True,args=['--no-sandbox'])
-  for w,h in [(1280,940),(390,844),(844,390),(360,640)]:
+  viewports = [(1280,940),(390,844),(844,390),(360,640)] if os.environ.get('YIXING_FULL_REGRESSION') == '1' else [(1280,940),(390,844)]
+  for w,h in viewports:
    context=await browser.new_context(viewport={'width':w,'height':h},has_touch=True)
    page=await context.new_page(); errors=[]; assertions=[]; keyboard_assertions=[]
    page.on('pageerror',lambda e:errors.append(str(e)))

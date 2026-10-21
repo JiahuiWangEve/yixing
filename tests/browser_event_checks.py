@@ -34,6 +34,20 @@ async def main():
     # Fail before browser startup if the production Variant envelope is decoded incorrectly.
     for replay in replays:
         assert parse((OUT/'fixtures'/replay['fixture']).read_text()) == replay['initial'], replay['fixture']
+    # Fail closed if a missing fixture or viewport would silently shrink coverage.
+    names = {'herb_heal', 'herb_breath', 'herb_full', 'merchant', 'manual_focus',
+             'manual_homework', 'manual_mnemonic', 'manual_ineligible', 'camp_prepare',
+             'camp_remove', 'workshop', 'fatigue_zero', 'fatigue_one'}
+    full_widths = {1280, 390, 844, 360}
+    full_matrix = {(name, width) for name in names for width in full_widths}
+    actual_matrix = {(replay['name'], int(replay['viewport'][0])) for replay in replays}
+    assert actual_matrix == full_matrix and len(replays) == len(full_matrix), 'Incomplete/duplicate event fixture matrix'
+    # Validate every fixture envelope above, even when duplicate viewports are omitted.
+    widths = full_widths if os.environ.get('YIXING_FULL_REGRESSION') == '1' else {1280, 390}
+    replays = [replay for replay in replays if int(replay['viewport'][0]) in widths]
+    expected_matrix = {(name, width) for name in names for width in widths}
+    assert {(r['name'], int(r['viewport'][0])) for r in replays} == expected_matrix
+    assert len(replays) == len(expected_matrix), 'Wrong selected event coverage'
     async with async_playwright() as p:
         executable=os.environ.get('CHROMIUM_PATH') or shutil.which('chromium')
         browser=await p.chromium.launch(**({'executable_path':executable} if executable else {}),headless=True,args=['--no-sandbox'])

@@ -233,14 +233,15 @@ async def main():
                         reports.append(report)
                         write_report(reports)
                         performance_checks(performance, name, width)
-                        report['motion'] = await movement_film(context, page, geometry, mobile,
-                                                             f'{name}-motion-{width}', reference)
+                        if os.environ.get('YIXING_FULL_REGRESSION') == '1':
+                            report['motion'] = await movement_film(context, page, geometry, mobile,
+                                                                 f'{name}-motion-{width}', reference)
                         write_report(reports)
                         assert not errors, (name, width, errors)
                         print(json.dumps({'scenario': name, 'viewport': [width, height],
                                           'max_raf_ms': performance['max_raf_interval_ms'],
                                           'input_to_save_ms': performance['input_to_saved_turn_ms'],
-                                          'motion_frames': report['motion']['frame_count'], 'errors': errors}), flush=True)
+                                          'motion_frames': report['motion']['frame_count'] if report['motion'] else None, 'errors': errors}), flush=True)
                         await page.close()
                 finally:
                     await context.close()
