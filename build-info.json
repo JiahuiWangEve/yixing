@@ -1,11 +1,11 @@
 {
-  "version": "v0.11.0",
+  "version": "v0.12.0",
   "source_branch": "gpt",
-  "source_commit": "8e9bb8e3dee62bc1aeff66f6e214cbd8a6d909df",
+  "source_commit": "406fee2507debbbd5548bf1ff64fdb90a93fb49e",
   "godot": "4.6.3",
   "thread_support": false,
   "sha256": {
-    "index.pck": "7873511125be8259956a1acea71440b5c06b3af6f93a777255f7650814b4c66f",
+    "index.pck": "4d57b74824501ab2e302f4072f686dfb1ce10c529aae62e027bd3bd53ec6770b",
     "index.wasm": "26b61ce95247012ab3dca3ff51e96d1cdbff44ee91a8c20a83e150afca83f1b6"
   }
 }
