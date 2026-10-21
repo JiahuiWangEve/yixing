@@ -12,35 +12,48 @@ static func cannon_line_score(cannon: Dictionary, board: Array, player: Vector2i
 	var cursor: Vector2i = cannon.pos + direction
 	while cursor != player:
 		var i = R.occupied(cursor, board)
-		if i >= 0 and board[i].kind == "p": score += 3.0
+		if i >= 0 and board[i].kind in ["p", "q"]: score += 3.0
 		cursor += direction
 	return score
+
 static func candidate_score(piece: Dictionary, target: Vector2i, enemies: Array, player: Vector2i) -> float:
 	var board = enemies.duplicate(true)
 	var index = R.occupied(piece.pos, board)
-	if index < 0: return - INF
+	if index < 0: return -INF
 	board[index].pos = target
 	var moved: Dictionary = board[index]
-	var score = - float((target - player).length_squared()) * 0.025
-	if piece.kind == "c": score += cannon_line_score(moved, board, player)
-	elif piece.kind == "p":
+	var score = -float((target - player).length_squared()) * 0.025
+	if R.attacks(moved, player, board): score += 4.0
+	if piece.kind == "c":
+		score += cannon_line_score(moved, board, player)
+		# A cannon follows advanced pawn screens, but only along legal R.moves.
+		var advanced = false
+		for ally in board:
+			if ally.kind in ["p", "q"] and ally.pos.y >= 5:
+				advanced = true
+				if target.x == ally.pos.x and target.y < ally.pos.y: score += 2.0
+		if advanced and target.y >= 5: score += 2.5
+	elif piece.kind in ["p", "q", "h", "r"]:
 		for ally in board:
 			if ally.kind == "c" and ally.get("stun", 0) == 0: score += cannon_line_score(ally, board, player)
-		if R.attacks(moved, player, board): score += 4.0
+			if piece.kind in ["p", "q"] and ally.kind == "r" and ally.pos.x == target.x and ally.pos.y < target.y:
+				# Adjacent files keep the rook's firing line free instead of blindly blocking it.
+				score -= 1.0
+			if piece.kind == "r" and ally.kind in ["p", "q"] and abs(target.x - ally.pos.x) == 1: score += 0.9
+	elif piece.kind in ["a", "e"]:
+		for ally in board:
+			if ally.kind != "g": continue
+			score -= float((target - ally.pos).length_squared()) * 0.35
+			# Prefer squares covering legal approaches to the general.
+			for direction in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+				if R.attacks(moved, ally.pos + direction, board): score += 1.1
 	return score
+
 static func choose(piece: Dictionary, options: Array, enemies: Array, player: Vector2i, rng: RandomNumberGenerator) -> Vector2i:
 	if options.is_empty(): return Vector2i(-1, -1)
-	var cooperative = piece.kind == "c"
-	if piece.kind == "p":
-		for ally in enemies:
-			if ally.kind == "c" and ally.get("stun", 0) == 0: cooperative = true
-	if not cooperative:
-		var ordered = options.duplicate()
-		ordered.sort_custom( func(a, b): return (a - player).length_squared() < (b - player).length_squared())
-		return ordered[rng.randi_range(0, mini(3, ordered.size()) - 1)]
 	var best: Vector2i = options[0]
-	var best_score = - INF
+	var best_score = -INF
 	for target in options:
-		var score = candidate_score(piece, target, enemies, player) + rng.randf_range(0.0, 0.7)
+		var score = candidate_score(piece, target, enemies, player) + rng.randf_range(0.0, 0.35)
 		if score > best_score: best_score = score;best = target
 	return best

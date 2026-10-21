@@ -33,6 +33,10 @@ func run_checks():
 					for card in pile:
 						valid = valid and card not in RETIRED and game.CARDS.has(card)
 				check(valid, "lesson %d step %d uses current cards only" % [lesson, step])
+				if lesson == 1 and step == 4:
+					var elephant = RULES.occupied(Vector2i(5, 3), game.enemies)
+					check(elephant >= 0 and game.enemies[elephant].hp == 3 and game.enemies[elephant].max_hp == 3, "elephant lesson starts with current three-HP elephant")
+					check(game.hand == ["sword", "sword", "sword", "horse"] and game.energy == 3, "elephant lesson supplies exactly three swords and three energy")
 				if spec.get("free", false):
 					var escaped = false
 					for y in 10:
@@ -53,6 +57,14 @@ func run_checks():
 						if reward_mode == "remove": game.delete_reward(0)
 						else: game.choose_reward(0 if reward_mode == "add" else -1)
 					"end_turn": game.end_turn()
+				if lesson == 1 and step in [4, 5]:
+					var elephant = RULES.occupied(Vector2i(5, 3), game.enemies)
+					check(elephant >= 0 and game.enemies[elephant].hp == 6 - step, "elephant survives sword %d with correct remaining HP" % (step - 3))
+				if lesson == 1 and step == 6:
+					check(RULES.occupied(Vector2i(5, 3), game.enemies) < 0, "third tutorial sword actually kills elephant")
+					check(game.energy == 0 and game.hand == ["horse"], "three sword hits spend all three energy and retain horse")
+				if lesson == 1 and step == 7:
+					check(game.energy == 3 and game.hand == ["horse"], "elephant lesson end turn restores energy and retains horse")
 				check(not game.tutorial._retry_pending and game.tutorial._pending_step == step + 1, "lesson %d step %d %s achieves observed success (%s)" % [lesson, step, spec.action, reward_mode])
 				if game.tutorial._retry_pending or game.tutorial._pending_step != step + 1: break
 				settle()

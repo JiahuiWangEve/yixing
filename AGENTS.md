@@ -1,6 +1,6 @@
 # 弈行开发约定
 
-- 当前可编辑工程是 `game/project.godot`，恢复自 v0.4.4，当前开发 v0.9.2。`archive/` 仅用于追溯。
+- 当前可编辑工程是 `game/project.godot`，恢复自 v0.4.4，当前开发 v0.10.0。`archive/` 仅用于追溯。
 - 使用 Godot **4.6.3 标准版**，不使用 .NET。Linux 首次运行 `bash scripts/setup.sh`。
 - 始终可使用 `bin/godot`；若需要裸命令，先 `export PATH="$PWD/bin:$PATH"`。
 - 验证命令：`bash scripts/verify.sh`。覆盖资源导入、所有游戏脚本解析、主场景 120 帧启动、核心规则回归。日志在 `verification/latest/`。

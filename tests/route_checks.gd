@@ -77,7 +77,7 @@ func run():
 	game.collection = ["sword_plus", "sword"];game.route.choices = game.route.options();game.route.resolve(0);game.route.resolve(0)
 	check(game.collection == ["sword"], "workshop removes only selected upgraded instance once")
 	game.route.enter(10);game.route.resolve(0);game.route.enter(12);game.route.resolve(0);game.route.enter(15)
-	check(game.enemies[0].hp == 2, "boss defense actually weakened")
+	check(game.enemies[0].hp == 8, "boss defense actually weakened")
 	game.new_expedition();check(game.route.state.visited.is_empty() and not game.route.state.weakened and "sword_plus" not in game.collection, "new run resets chapter")
 	game.start_debug_stage(6)
 	for i in 5: game.navigation_lock = 0;game.choose_reward(-1)

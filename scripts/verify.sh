@@ -46,3 +46,5 @@ run seal-map --script "$root/tests/seal_map_checks.gd"
 run font-subset --script "$root/tests/font_subset_checks.gd"
 
 run map-performance --script "$root/tests/map_performance_checks.gd"
+
+run enemy-encounters --script "$root/tests/enemy_encounter_checks.gd"

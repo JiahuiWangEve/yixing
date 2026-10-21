@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.9.2"
+const BUILD_VERSION = "v0.10.0"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -15,6 +15,9 @@ const UNTARGETED = ["sweep", "life", "breath", "deploy", "pack", "tuna", "suppre
 const CONSUMABLES = ["life", "breath", "deploy", "tuna", "guard", "permanent_stake"]
 const TACTICS = preload("res://tactics.gd")
 const CAMPAIGN = preload("res://campaign.gd")
+const ENCOUNTERS = preload("res://encounters.gd")
+var encounter_state: Dictionary = {}
+var encounter_info_open = false
 const ENEMY_AI = preload("res://enemy_ai.gd")
 const TUTORIAL = preload("res://tutorial.gd")
 const REWARD_UI = preload("res://reward_choice.gd")
@@ -29,7 +32,7 @@ var RESTART_RECT = Rect2(773, 20, 130, 40)
 var END_TURN_RECT = Rect2(680, 663, 223, 45)
 var HAND_Y = 744.0
 var CELL: float = 57.0
-const ENEMY_HEALTH = {"g": 3, "e": 2}
+const ENEMY_HEALTH = {"g": 3, "e": 3, "h": 2}
 var screen = "game"
 var tutorial = TUTORIAL.new()
 var frontend = FRONTEND.new(self)
@@ -236,8 +239,13 @@ var hand_views: Array = []
 var audio_system = AUDIO.new()
 var mouse_pos = Vector2(-100, -100)
 func enemy_health(kind: String) -> int:
+	if kind == "g" and not tutorial.active:
+		var tier = encounter_state.get("config", {}).get("tier", "")
+		if tier == "boss" or (tier.is_empty() and stage == 6): return 9
+		if tier == "elite": return 5
 	return ENEMY_HEALTH.get(kind, 1)
 func clear_effects():
+	encounter_info_open = false
 	effects.clear();hand_views.clear();input_lock = 0.0
 	audio_system.clear_playback()
 	player_visual = cell_pos(player)
@@ -291,6 +299,7 @@ func damage_enemy(idx: int, impact_delay: float = 0.12, amount: int = 1) -> bool
 	if idx < 0 or idx >= enemies.size() or enemies[idx].kind == "stake": return false
 	var e = enemies[idx]
 	e.hp = e.get("hp", enemy_health(e.kind)) - amount
+	if amount > 0: ENCOUNTERS.on_general_damage(self, e)
 	effect("hit", cell_pos(e.pos), cell_pos(e.pos), 0.24, impact_delay, {"piece": e})
 	if e.hp <= 0:
 		effect("death", cell_pos(e.pos), cell_pos(e.pos), 0.42, impact_delay + 0.08, {"symbol": piece_name(e.kind), "impact": impact_delay})
@@ -433,7 +442,7 @@ func start_stage():
 	navigation_lock = 0.0
 	reinforcement_turns = 0;reinforcement_pending = 0;hand_page = 0;hand_drawer = false
 	artillery_mode = "march";deploy_draw_used = false;tuna_turns = 0;tuna_active = false
-	clear_battle_card_effects();next_enemy_uid = 1
+	clear_battle_card_effects();next_enemy_uid = 1;encounter_state = {}
 	clear_effects()
 	player = Vector2i(4, 9);player_visual = cell_pos(player);enemies = [];turn = 1;energy = 3;basic_used = false;card_move_used = false;selected = -1
 	refresh_free_card()
@@ -441,7 +450,7 @@ func start_stage():
 	CAMPAIGN.setup(self)
 	plan_intents()
 	phase = "play";initial_threat = 2.0;notice = "向前一步，抽取你的第一张牌。"
-	log_line("第%d关 · %s" % [stage, CAMPAIGN.stage_name(stage)])
+	log_line("第%d关 · %s" % [stage, ENCOUNTERS.title(encounter_state.config) if ENCOUNTERS.active(self) else CAMPAIGN.stage_name(stage)])
 func log_line(s: String):
 	logs.push_front(s)
 	if logs.size() > 7: logs.pop_back()
@@ -455,6 +464,7 @@ func _process(delta):
 
 	player_visual = cell_pos(player)
 	for e in enemies: e.visual = cell_pos(e.pos)
+	var animated_pieces: Array = []
 	for fx in effects:
 		fx.age += delta
 		if fx.has("sound") and not fx.sound_played and fx.age >= fx.sound_at:
@@ -464,6 +474,10 @@ func _process(delta):
 			var landing = clampf((t - 0.46) / 0.54, 0, 1)
 			fx.piece.visual = fx.to - Vector2(0, (1 - landing) * 24)
 		if fx.kind == "move" or fx.kind == "recoil":
+			var animated_piece = fx.get("piece", {})
+			# A queued bonus move must not overwrite its still-playing first step.
+			if fx.age < fx.delay and animated_piece in animated_pieces: continue
+			animated_pieces.append(animated_piece)
 			var eased = t * t * (3 - 2 * t)
 			var v: Vector2 = fx.from.lerp(fx.to, eased)
 			v.y -= sin(t * PI) * (24 if fx.get("arc", false) else 9)
@@ -567,6 +581,9 @@ func hand_rect(i: int) -> Rect2: return hand_visual_rect(i)
 func _gui_input(event):
 	if screen in ["map", "route_choice"] and route.input_event(event): return
 	if event is InputEventMouse and event.device == -1 and touch_seen and not delivering_touch: return
+	if encounter_info_open:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT: handle_click(event.position)
+		return
 	if event is InputEventMouseMotion and not (gesture.active and gesture.source == "touch"):
 		hover = board_cell(event.position);mouse_pos = event.position;gesture.motion(event.position)
 	if event is InputEventMouseButton:
@@ -576,10 +593,15 @@ func _gui_input(event):
 		mouse_pos = event.position
 		if event.pressed:
 			audio_system.unlock()
-			if gesture.press(event.position, "mouse"): return
+			if not encounter_info_open and gesture.press(event.position, "mouse"): return
 			handle_click(event.position)
 		else: gesture.release(event.position)
 func handle_click(pos: Vector2):
+	if encounter_info_open:
+		if encounter_close_rect().has_point(pos) or not encounter_panel_rect().has_point(pos): encounter_info_open = false
+		return
+	if screen == "game" and mobile_layout and ENCOUNTERS.active(self) and phase in ["play", "discard"] and encounter_rules_rect().has_point(pos):
+		cancel_gesture();encounter_info_open = true;return
 	if SOUND_RECT.has_point(pos): audio_system.toggle_mute();return
 	if screen in ["map", "route_choice"]: route.click(pos);return
 	if screen != "game": cancel_gesture();frontend.click(pos);return
@@ -610,6 +632,9 @@ func handle_click(pos: Vector2):
 	elif free_selected and not full_hand_area().has_point(pos): cancel_selection()
 
 func _input(event):
+	if encounter_info_open and event is InputEventKey:
+		if event.pressed and event.keycode == KEY_ESCAPE: encounter_info_open = false
+		get_viewport().set_input_as_handled();return
 	if screen in ["map", "route_choice"] and (event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventKey):
 		if route.input_event(event): get_viewport().set_input_as_handled();return
 	if event is InputEventScreenTouch:
@@ -621,7 +646,7 @@ func _input(event):
 			audio_system.unlock()
 			if active_touch < 0:
 				active_touch = event.index;touch_start = event.position;touch_dragged = false;mouse_pos = event.position
-				gesture.press(event.position, "touch")
+				if not encounter_info_open: gesture.press(event.position, "touch")
 		elif event.index == active_touch:
 			active_touch = -1;mouse_pos = event.position
 			if gesture.active: gesture.release(event.position)
@@ -640,7 +665,7 @@ func _input(event):
 	elif event.keycode == KEY_SPACE: request_end_turn()
 
 func request_end_turn():
-
+	if encounter_info_open: return
 	if screen != "game" or phase != "play" or input_lock > 0 or navigation_lock > 0: return
 	cancel_gesture();end_turn()
 func play_card(i: int, p: Vector2i):
@@ -731,12 +756,8 @@ func debug_skip():
 	settle_victory()
 
 func plan_intents():
-	for e in enemies:
-		e.intent = Vector2i(-1, -1)
-		if e.kind != "stake" and e.cd <= 1 and e.stun == 0:
-			var options = R.moves(e, enemies, player)
-			if not options.is_empty():
-				e.intent = ENEMY_AI.choose(e, options, enemies, player, rng)
+	# Warning is countdown-only. Never choose or reveal a future square during player play.
+	for e in enemies: e.intent = Vector2i(-1, -1)
 func end_turn():
 	if screen != "game" or phase != "play" or not tutorial_allows("end_turn"): return
 	history.record("end_turn");cancel_gesture()
@@ -765,20 +786,38 @@ func end_turn():
 			timeline += 0.34
 			player = destination;break
 
+	# Lock rotating guard before any movement. The phase never inserts a new attack.
+	var rotating_guard = ENCOUNTERS.selected_guard(self) if ENCOUNTERS.has_rule(self, "palace_rotation") else -1
 	for i in enemies.size():
 		var e = enemies[i]
 		if e.kind == "stake" or e.stun > 0: continue
 		e.cd -= 1
 		if e.cd <= 0:
-			var target: Vector2i = e.get("intent", Vector2i(-1, -1))
-			if e != attacker and e not in blocked_attackers and target in R.moves(e, enemies, player):
-				move_piece(e, cell_pos(e.pos), cell_pos(target), timeline, e.kind == "h")
-				timeline += 0.28
-				e.pos = target
+			if e == attacker or e in blocked_attackers:
+				e.cd = e.period;continue
+			var options = R.moves(e, enemies, player)
+			# Decide now, using the latest player/recoil and earlier movers' board state.
+			var target: Vector2i = ENEMY_AI.choose(e, options, enemies, player, rng)
+			if e != attacker and e not in blocked_attackers and target in options:
+				var origin: Vector2i = e.pos
+				move_piece(e, cell_pos(origin), cell_pos(target), timeline, e.kind == "h")
+				timeline += 0.28;e.pos = target
+				ENCOUNTERS.after_normal_move(self, e, origin)
+				var pending = e.get("bonus_pending", false) and int(e.get("bonus_after_phase", 0)) <= int(encounter_state.get("phases", 0))
+				var double_move = ENCOUNTERS.has_rule(self, "double_step") and e.get("march_mark", false) and int(e.get("normal_moves", 0)) % 2 == 0
+				if pending or double_move or (rotating_guard >= 0 and e.get("uid", -1) == rotating_guard):
+					# Multiple rules grant at most one extra legal move; no recursive triggers.
+					if pending: e.bonus_pending = false
+					var extra_options = R.moves(e, enemies, player)
+					var extra = ENEMY_AI.choose(e, extra_options, enemies, player, rng)
+					if extra in extra_options:
+						move_piece(e, cell_pos(e.pos), cell_pos(extra), timeline, e.kind == "h")
+						timeline += 0.28;e.pos = extra
 			e.cd = e.period
 	for e in enemies:
 		if e.stun > 0: e.stun -= 1
-	resolve_reinforcements(timeline)
+	if ENCOUNTERS.active(self): ENCOUNTERS.finish_phase(self, timeline)
+	else: resolve_reinforcements(timeline)
 	TACTICS.expire_stakes(self, maxf(timeline, input_lock))
 	turn += 1;history.trim()
 	shield_charges = 0;active_displacements = 0
@@ -812,7 +851,7 @@ func resolve_reinforcements(timeline: float):
 	effect("spawn", cell_pos(spawn), cell_pos(spawn), 0.65, timeline, {"piece": e})
 	reinforcement_pending -= 1
 func piece_name(k: String) -> String:
-	return {"p": "卒", "e": "象", "g": "将", "c": "炮", "r": "车", "h": "马", "stake": "桩"}.get(k, k)
+	return {"p": "卒", "q": "卒", "a": "士", "e": "象", "g": "将", "c": "炮", "r": "车", "h": "马", "stake": "桩"}.get(k, k)
 func text_at(p: Vector2, s: String, size: int = 20, color: Color = INK): draw_string(FONT, p, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
 func wrapped_text(value: String, rect: Rect2, font_size: int = 16, color: Color = INK):
 	var line = ""; var y = rect.position.y + font_size
@@ -840,8 +879,8 @@ func context_hint() -> String:
 	if idx >= 0:
 		var e = enemies[idx]
 		if e.kind == "stake": return "机关炮架 · 持续本场战斗" if e.get("permanent", false) else "木桩 · 挡路与炮架 · 剩余%d回合" % int(e.get("ttl", 3))
-		return "%s · 移动倒计时 %d%s" % [piece_name(e.kind), e.cd, " · 定身中" if e.stun > 0 else ""]
-	return ""
+		return "%s · %d/%d血 · 倒计时%d%s" % [("急行卒" if e.kind == "q" else piece_name(e.kind)), e.hp, e.max_hp, e.cd, " · 定身中" if e.stun > 0 else ""]
+	return ENCOUNTERS.status(self)
 func _draw():
 	if screen in ["map", "route_choice"]:
 		route.draw();return
@@ -858,14 +897,14 @@ func _draw():
 	var heading = tutorial.title() if tutorial.active else (("调试 · " if debug_target > 0 else "") + "第 %d / 6 关   回合 %d" % [stage, turn] + " · " + PROFILES.DATA[player_skill].name)
 	if route.active() and route.state.pending >= 0:
 		var node = route.state.nodes[route.state.pending]
-		heading = "山河 %d / 8 站 · %s · 回合 %d" % [node.row + 1, {"battle": "普通战", "elite": "精锐", "boss": "敌将"}.get(node.kind, ""), turn]
+		heading = "%s · %s · 回合%d" % [ENCOUNTERS.title(node.encounter), {"battle": "普通", "elite": "精锐", "boss": "决战"}.get(node.kind, ""), turn]
 	var heading_size = 16 if tutorial.active else 20
 	var heading_width = ui_size.x - 48 if mobile_layout and not compact_landscape else RESTART_RECT.position.x - heading_pos.x - 12
 	while heading_size > 12 and FONT.get_string_size(heading, HORIZONTAL_ALIGNMENT_LEFT, -1, heading_size).x > heading_width: heading_size -= 1
 	text_at(heading_pos, heading, heading_size, THEME.HEADING)
 	panel(BOARD_RECT, THEME.BOARD, THEME.BORDER)
-	for x in 9: draw_line(cell_pos(Vector2i(x, 0)), cell_pos(Vector2i(x, 9)), THEME.GRID, 1)
-	for y in 10: draw_line(cell_pos(Vector2i(0, y)), cell_pos(Vector2i(8, y)), THEME.GRID, 1)
+	for x in 9: draw_line(cell_pos(Vector2i(x, 0)), cell_pos(Vector2i(x, 9)), THEME.GRID, 1.5 if mobile_layout else 1.0, true)
+	for y in 10: draw_line(cell_pos(Vector2i(0, y)), cell_pos(Vector2i(8, y)), THEME.GRID, 1.5 if mobile_layout else 1.0, true)
 	draw_rect(Rect2(O + Vector2(-3, 4.15 * CELL), Vector2(8 * CELL + 6, 0.7 * CELL)), THEME.BOARD)
 	text_at(O + Vector2(CELL * 1.1, 4.63 * CELL), "楚 河", 22, GOLD);text_at(O + Vector2(CELL * 5.3, 4.63 * CELL), "汉 界", 22, GOLD)
 	for top in [0, 7]:
@@ -891,13 +930,7 @@ func _draw():
 		var danger_color = RED if R.threatened(hover, enemies) else THEME.SAFE
 		draw_circle(target, 20, Color(THEME.DANGER, 0.27) if R.threatened(hover, enemies) else Color(THEME.SAFE, 0.25));draw_line(start, target, danger_color, 3)
 		draw_line(target, target - dir.rotated(0.5) * 13, danger_color, 3);draw_line(target, target - dir.rotated( - 0.5) * 13, danger_color, 3)
-	var inspected_index = R.occupied(hover, enemies)
-	if inspected_index >= 0 and input_lock <= 0:
-		var inspected = enemies[inspected_index]
-		var intent: Vector2i = inspected.get("intent", Vector2i(-1, -1))
-		if R.inside(intent):
-			draw_line(cell_pos(inspected.pos), cell_pos(intent), THEME.GRID, 2)
-			draw_arc(cell_pos(intent), 16, 0, TAU, 20, THEME.GRID, 2)
+	if ENCOUNTERS.active(self): draw_encounter_signals()
 	for e in enemies:
 		if e.kind == "stake":
 			draw_stake(cell_pos(e.pos));text_at(cell_pos(e.pos) + Vector2(-4, 26), ("∞" if e.get("permanent", false) else str(e.get("ttl", 3))), 13, THEME.INK);continue
@@ -919,8 +952,19 @@ func _draw():
 		var badge = Vector2(CELL * 0.36, - CELL * 0.36) if mobile_layout else Vector2(20, -20)
 		draw_circle(v + badge, 12 if mobile_layout else 10, THEME.SAFE);text_at(v + badge + Vector2(-5, 6), str(e.cd), 18 if mobile_layout else 13, THEME.LIGHT)
 		var max_hp = e.get("max_hp", enemy_health(e.kind))
-		if max_hp > 1:
+		if max_hp > 3:
+			var hp_label = "%d/%d" % [e.hp, max_hp]
+			var hp_size = 12 if mobile_layout else 14
+			var hp_width = FONT.get_string_size(hp_label, HORIZONTAL_ALIGNMENT_LEFT, -1, hp_size).x
+			panel(Rect2(v + Vector2(-hp_width * 0.5 - 3, CELL * 0.34), Vector2(hp_width + 6, 17)), THEME.PAPER)
+			text_at(v + Vector2(-hp_width * 0.5, CELL * 0.34 + 13), hp_label, hp_size, RED)
+		elif max_hp > 1:
 			for h in max_hp: draw_circle(v + Vector2((h - (max_hp - 1) * 0.5) * 9, CELL * 0.46 if mobile_layout else 29), 3, RED if h < e.get("hp", max_hp) else THEME.BORDER)
+		if e.kind == "q" or e.get("signal", false):
+			var rule_badge = v + Vector2(-CELL * 0.36, -CELL * 0.36)
+			draw_circle(rule_badge, 10, RED)
+			text_at(rule_badge + Vector2(-6, 5), "疾" if e.kind == "q" else "旗", 12, THEME.LIGHT)
+		if e.get("march_mark", false) or e.get("bonus_pending", false): text_at(v + Vector2(-CELL * 0.48, CELL * 0.24), "+", 15, RED)
 		if e.stun > 0: text_at(v + Vector2(-21, 40), "定身", 14, THEME.SAFE)
 		var bleed_damage = 0
 		for bleed in pending_bleeds:
@@ -965,6 +1009,10 @@ func _draw():
 	panel(UNDO_RECT, THEME.BUTTON, GOLD if history.can_undo() else THEME.BORDER);text_at(UNDO_RECT.position + Vector2(8, 29), "教学禁用悔棋" if tutorial.active else ("悔棋 · 3回合" if mobile_layout else "悔棋 Ctrl+Z · 最多3回合"), 14 if mobile_layout else 16)
 	panel(home_rect(), THEME.BUTTON);text_at(home_rect().position + Vector2(10, 29 if mobile_layout else 27), "首页" if mobile_layout else "返回首页", 18)
 	panel(SOUND_RECT, THEME.BUTTON);text_at(SOUND_RECT.position + Vector2(12, 32 if mobile_layout else 27), "静音" if audio_system.muted else "声音 开", 16)
+
+	if mobile_layout and ENCOUNTERS.active(self) and phase in ["play", "discard"]:
+		panel(encounter_rules_rect(), THEME.BUTTON);text_at(encounter_rules_rect().position + Vector2(8, 29), "军阵", 16, THEME.INK)
+	if encounter_info_open: draw_encounter_panel()
 
 func draw_stake(position: Vector2, alpha: float = 1.0):
 	var radius = minf(20, CELL * 0.32)
@@ -1046,3 +1094,38 @@ func draw_effects():
 				text_at(rect.position + Vector2(15, 35), CARDS[fx.card][0], 24, Color(THEME.INK, fade))
 
 func draw_mobile_hand_controls(): pass
+
+func draw_encounter_signals():
+	var spawn: Vector2i = encounter_state.get("spawn_cell", Vector2i(-1, -1))
+	if R.inside(spawn):
+		draw_rect(Rect2(cell_pos(spawn) - Vector2.ONE * CELL * 0.42, Vector2.ONE * CELL * 0.84), Color(RED, 0.2))
+		text_at(cell_pos(spawn) + Vector2(-17, 5), "援马", 13, RED)
+	if ENCOUNTERS.has_rule(self, "palace_rotation"):
+		var guard_uid = ENCOUNTERS.selected_guard(self)
+		for enemy in enemies:
+			if enemy.uid == guard_uid: draw_arc(cell_pos(enemy.pos), CELL * 0.46, 0, TAU, 28, GOLD, 2)
+	if not mobile_layout:
+		var area = Rect2(24, 144, 350, 220)
+		panel(area, THEME.PAPER)
+		text_at(area.position + Vector2(16, 30), ENCOUNTERS.title(encounter_state.config), 24, THEME.INK)
+		wrapped_text(ENCOUNTERS.details(encounter_state.config) if not encounter_state.config.rules.is_empty() else "普通军阵：棋子按象棋规则行动。先攻击，再按倒计时移动。", Rect2(area.position + Vector2(16, 43), Vector2(318, 130)), 17, THEME.INK)
+		wrapped_text(ENCOUNTERS.status(self), Rect2(area.position + Vector2(16, 171), Vector2(318, 40)), 15, RED)
+
+func encounter_rules_rect() -> Rect2:
+	return Rect2(540, 440, 124, 44) if compact_landscape else Rect2(240, BOARD_RECT.end.y + 8, 56, 48)
+func encounter_panel_rect() -> Rect2:
+	return Rect2(Vector2(24, 110) if not compact_landscape else Vector2(200, 90), Vector2(ui_size.x - 48, minf(400, ui_size.y - 160)) if not compact_landscape else Vector2(560, 360))
+func encounter_close_rect() -> Rect2:
+	var area = encounter_panel_rect()
+	return Rect2(area.position.x + 16, area.end.y - 66, area.size.x - 32, 50)
+func draw_encounter_panel():
+	draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.OVERLAY)
+	var area = encounter_panel_rect()
+	panel(area, THEME.PAPER)
+	text_at(area.position + Vector2(16, 34), ENCOUNTERS.title(encounter_state.config), 24, THEME.INK)
+	var desc = ENCOUNTERS.details(encounter_state.config)
+	if desc.is_empty(): desc = "普通军阵：先攻击，再按倒计时移动。士限九宫，象不过河，急行卒仍按卒的方向走。"
+	desc += "\n所有加步均不额外攻击；多种加步同时触发时，最多额外一步。"
+	wrapped_text(desc, Rect2(area.position + Vector2(16, 53), Vector2(area.size.x - 32, area.size.y - 148)), 18, THEME.INK)
+	panel(encounter_close_rect(), THEME.PAPER_SELECTED)
+	text_at(encounter_close_rect().position + Vector2(16, 32), "关闭 · 返回棋盘", 18, THEME.INK)

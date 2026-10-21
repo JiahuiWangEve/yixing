@@ -10,6 +10,11 @@ const STAGES = [
 ]
 const LAST_STAGE = 6
 static func setup(game):
+	if game.route.active() and game.route.state.pending >= 0:
+		var node = game.route.state.nodes[game.route.state.pending]
+		if node.get("encounter", {}) != {}:
+			game.ENCOUNTERS.setup(game, node.encounter)
+			return
 	var config = STAGES[clampi(game.stage, 1, LAST_STAGE) - 1]
 	game.add_enemy("g", Vector2i(4, 0), 3)
 	for spec in config.pieces:

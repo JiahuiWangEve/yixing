@@ -186,9 +186,10 @@ func _build_steps() -> Array:
 				_step("cancel", "再次点短剑取消；也可按 Esc。", 0), 
 				_step("play", "选短剑，再点亮格的卒；一击扣一血。", 0, {"card": "sword", "target": Vector2i(4, 5)}), 
 				_step("end_turn", "短剑花一气；结束回合，余牌会保留。", 0), 
-				_step("play", "新预设：象有两血；用短剑击中亮格。", 1, {"card": "sword", "target": Vector2i(5, 3), "label": "两血象练习"}), 
-				_step("play", "象还剩一血；再用短剑，观察碎裂。", 1, {"card": "sword", "target": Vector2i(5, 3)}), 
-				_step("end_turn", "能量剩一；结束回合回三气，踏马保留。", 1)]
+				_step("play", "新预设：象有三血；用短剑击中亮格。", 1, {"card": "sword", "target": Vector2i(5, 3), "label": "三血象练习"}),
+				_step("play", "象还剩两血；再用短剑击中亮格。", 1, {"card": "sword", "target": Vector2i(5, 3)}),
+				_step("play", "象还剩一血；第三剑击败它，观察碎裂。", 1, {"card": "sword", "target": Vector2i(5, 3)}),
+				_step("end_turn", "三气已用完；结束回合回三气，踏马保留。", 1)]
 		2:
 			return [
 				_step("move", "固定抽牌：基础移动到亮格，抽到踏马。", 0, {"target": Vector2i(4, 7), "label": "移动接攻击"}), 
@@ -242,7 +243,7 @@ func _load_section(section: int):
 				game.add_enemy("p", Vector2i(4, 5), 3)
 			else:
 				game.player = Vector2i(4, 3)
-				game.hand = ["sword", "sword", "horse"]
+				game.hand = ["sword", "sword", "sword", "horse"]
 				_general()
 				game.add_enemy("e", Vector2i(5, 3), 3)
 		2:
@@ -380,11 +381,13 @@ func _presentation_finished() -> bool:
 
 func _result_hint() -> String:
 	if lesson_index == 0 and step_index == 1: return "移动已恢复，手牌仍一张；没有自动抽牌。"
-	if lesson_index == 1 and step_index in [3, 6]: return "能量恢复三气；没有打出的踏马仍在手里。"
+	if lesson_index == 1 and step_index in [3, 7]: return "能量恢复三气；没有打出的踏马仍在手里。"
 	if lesson_index == 2 and step_index == 3: return "基础移动与移动牌次数都恢复了。"
 	if lesson_index == 2 and step_index == 4: return "已抽到第七张；必须弃一张才能继续。"
 	if lesson_index == 4 and step_index == 6: return "马援军已落地，倒计时三；本阶段不会行动。"
-	if lesson_index == 1 and step_index == 4: return "象受伤但未死；还剩一血。"
+	if lesson_index == 1 and step_index == 4: return "象受伤但未死；还剩两血。"
+	if lesson_index == 1 and step_index == 5: return "象还剩一血；第三剑可击败它。"
+	if lesson_index == 1 and step_index == 6: return "三剑击败三血象；三气用完，踏马仍在手里。"
 	if lesson_index == 3 and step_index == 2: return "卒已前进形成威胁，但没有同阶段再攻击。"
 	return str(_steps[step_index].hint)
 
@@ -402,7 +405,7 @@ func _complete():
 func _completion_hint() -> String:
 	match lesson_index:
 		0: return "移动免费且抽牌；每回合一次，回合不自动抽牌。"
-		1: return "卒一血、象两血；回合恢复三气，保留手牌。"
+		1: return "卒一血、象三血；回合恢复三气，保留手牌。"
 		2: return "两种移动各一次；超六张要选牌确认弃置。"
 		3: return "先攻击后移动；一命受击失败，先解围。"
 		4: return "破将得奖励；第三关起每三敌方阶段来援军。"

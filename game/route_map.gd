@@ -69,8 +69,8 @@ func ensure_road_cache():
 					solid.append(p);solid.append(q)
 					if step % 6 < 4: dashed.append(p);dashed.append(q)
 			road_cache[Vector2i(node.id, next)] = {"solid": solid, "dashed": dashed, "from": from, "to": to, "bounds": Rect2(from, Vector2.ZERO).expand(to).grow(8)}
-const SAVE = "user://route_run_v080.cfg"
-const WEB_SAVE_KEY = "yixing.route_run.v080"
+const SAVE = "user://route_run_v0100.cfg"
+const WEB_SAVE_KEY = "yixing.route_run.v0100"
 const LABELS = {"battle": "战", "elite": "精", "camp": "营", "workshop": "坊", "event": "事", "outpost": "寨", "boss": "帅"}
 var game
 var state: Dictionary = {}
@@ -91,7 +91,7 @@ var pointer_dragged = false
 var pointer_scroll = false
 var layout_size = Vector2.ZERO
 const TITLES = {"battle": "军旗阵地", "elite": "精锐军阵", "camp": "行军营地", "workshop": "山间工坊", "event": "渡口偶遇", "outpost": "关隘据点", "boss": "终点城寨"}
-const DETAILS = {"battle": "战胜守军后选择战利品。", "elite": "较强敌阵；胜利后选择战利品。", "camp": "升级一张剑或枪，或为下一战整备。", "workshop": "永久删除一张牌，也可直接离开。", "event": "借渡整备，或访师获得一张长枪。", "outpost": "破寨可将本章敌将生命由3降为2。", "boss": "击败敌将即完成本章。"}
+const DETAILS = {"battle": "战胜守军后选择战利品。", "elite": "较强敌阵；胜利后选择战利品。", "camp": "升级一张剑或枪，或为下一战整备。", "workshop": "永久删除一张牌，也可直接离开。", "event": "借渡整备，或访师获得一张长枪。", "outpost": "破寨令章末敌将生命由9降为8。", "boss": "击败敌将即完成本章。"}
 
 func reset_view():
 	selected_node = -1;travel_target = -1;travel_elapsed = 0.0
@@ -208,6 +208,8 @@ func generate(seed_number: int):
 			var loot = game.PROFILES.draw_rewards(game.player_skill, random)
 			state.nodes.append({"id": state.nodes.size(), "row": row, "lane": rows[row][col], "kind": types[row][col], "next": [], "loot": loot, "layout": clampi(row + random.randi_range(0, 1), 1, 5)})
 	for node in state.nodes:
+		node.encounter = game.ENCOUNTERS.node_config(node.kind, node.row, random)
+	for node in state.nodes:
 		for target in state.nodes:
 			if target.row == node.row + 1 and (abs(target.lane - node.lane) <= 1 or rows[node.row].size() == 1 or rows[target.row].size() == 1): node.next.append(target.id)
 	choices = [];deck_view = false;reset_view()
@@ -224,7 +226,7 @@ func enter(id: int):
 		game.screen = "game";game.start_stage()
 		if node.kind == "boss" and state.weakened:
 			for enemy in game.enemies:
-				if enemy.kind == "g": enemy.hp = 2;enemy.max_hp = 2
+				if enemy.kind == "g": enemy.hp = 8;enemy.max_hp = 8
 		if state.prepared:
 			state.prepared = false;game.draw_card()
 	else:
@@ -241,7 +243,7 @@ func options() -> Array:
 	elif kind == "workshop":
 		for i in game.collection.size(): result.append({"label": "删除「%s」第%d张" % [game.CARDS[game.collection[i]][0], i + 1], "action": "remove", "index": i})
 	elif kind == "outpost":
-		result.append({"label": "破寨 · 本章敌将生命由3降为2", "action": "weaken"})
+		result.append({"label": "破寨 · 章末敌将生命由9降为8", "action": "weaken"})
 	else:
 		result.append({"label": "借渡 · 下一战初始额外抽1张", "action": "prepare"})
 		result.append({"label": "访师 · 获得一张长枪", "action": "card"})
@@ -262,7 +264,7 @@ func complete():
 	state.current = state.pending;state.visited.append(state.pending);state.pending = -1
 	game.history.clear();game.cancel_gesture();game.clear_effects();game.rewardui.reset()
 	game.hand = [];game.hand_ids = [];game.deck = [];game.discard = [];game.enemies = [];game.energy = 0;game.tuna_turns = 0;game.tuna_active = false
-	game.clear_battle_card_effects()
+	game.clear_battle_card_effects();game.encounter_state = {}
 	game.selected = -1;game.free_selected = false;game.handui.reset();game.reinforcement_pending = 0
 	game.phase = "play";game.screen = "map";choices = [];page = 0;reset_view()
 	stamp_node = state.current;stamp_elapsed = 0.0
@@ -270,7 +272,7 @@ func complete():
 func save():
 	if not active(): return
 	var config = ConfigFile.new()
-	config.set_value("run", "version", 2)
+	config.set_value("run", "version", 3)
 	config.set_value("run", "route", state)
 	config.set_value("run", "battle", game.history.capture())
 	config.set_value("run", "screen", game.screen if game.screen in ["game", "map", "route_choice"] else "map")
@@ -288,7 +290,7 @@ func resume() -> bool:
 		var snapshot = JavaScriptBridge.eval("(function(){try{return localStorage.getItem('" + WEB_SAVE_KEY + "')||'';}catch(e){return '';}})()")
 		if snapshot is String and not snapshot.is_empty(): loaded = config.parse(snapshot) == OK
 	if not loaded: loaded = config.load(SAVE) == OK
-	if not loaded or config.get_value("run", "version", 0) != 2: return false
+	if not loaded or config.get_value("run", "version", 0) != 3: return false
 	var saved = config.get_value("run", "route", {})
 	var battle = config.get_value("run", "battle", {})
 	var saved_screen = config.get_value("run", "screen", "map")
@@ -320,10 +322,13 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 	for id in 16:
 		var node = saved.nodes[id]
 		if not node is Dictionary: return false
-		for key in ["id", "row", "lane", "kind", "next", "loot", "layout"]:
+		for key in ["id", "row", "lane", "kind", "next", "loot", "layout", "encounter"]:
 			if not node.has(key): return false
 		if node.id != id or node.row != rows[id] or node.lane != lanes[id] or node.kind != kinds[id]: return false
 		if not node.next is Array or not node.loot is Array or not node.layout is int or node.layout < 1 or node.layout > 5: return false
+		if node.kind in ["battle", "elite", "boss"]:
+			if not game.ENCOUNTERS.valid_config(node.encounter) or node.encounter.tier != node.kind: return false
+		elif node.encounter != {}: return false
 		var expected = []
 		for target in 16:
 			if rows[target] == rows[id] + 1 and (abs(lanes[target] - lanes[id]) <= 1 or rows[id] in [0, 3, 7] or rows[target] in [0, 3, 7]): expected.append(target)
@@ -354,6 +359,11 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 		for card in battle[key]:
 			if card not in game.CARDS: return false
 	if battle.active_displacements < 0 or battle.shield_charges not in [0, 1] or battle.next_enemy_uid < 1: return false
+	if not battle.encounter_state.is_empty():
+		if not game.ENCOUNTERS.valid_state(battle.encounter_state): return false
+	if saved_screen == "game":
+		if battle.encounter_state.is_empty() or battle.encounter_state.config != saved.nodes[saved.pending].encounter: return false
+	elif not battle.encounter_state.is_empty(): return false
 	var ids = {}
 	for enemy in battle.enemies:
 		if not enemy is Dictionary or not enemy.has("kind") or not enemy.has("pos") or not enemy.pos is Vector2i: return false
@@ -570,8 +580,11 @@ func draw_info():
 		var node = state.nodes[selected_node]
 		var reachable = selected_node in legal()
 		var status = "可出发" if reachable else ("已行经" if selected_node in state.visited else "当前不可达")
-		game.text_at(Vector2(x, y), TITLES[node.kind] + " · " + status, 20, INK)
-		game.wrapped_text(DETAILS[node.kind], Rect2(x, y + 8, width, 48), 16, MUTED)
+		var combat = node.kind in ["battle", "elite", "boss"]
+		game.text_at(Vector2(x, y), (game.ENCOUNTERS.title(node.encounter) if combat else TITLES[node.kind]) + " · " + status, 18, INK)
+		var detail = DETAILS[node.kind]
+		if combat and not node.encounter.rules.is_empty(): detail = game.ENCOUNTERS.summary(node.encounter) + "：" + game.ENCOUNTERS.details(node.encounter)
+		game.wrapped_text(detail, Rect2(x, y + 8, width, 48), 13 if combat else 16, MUTED)
 		if side_layout():
 			game.wrapped_text("选择只作查看。确认后，棋子沿真实道路行进；抵达才会进入节点。" if reachable else "只能沿当前地标相连的深墨箭头前进，不能跳关或回头。", Rect2(x, y + 86, width, 90), 17, MUTED)
 			if info.size.y > 600:

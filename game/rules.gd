@@ -19,7 +19,8 @@ static func attacks(e: Dictionary, p: Vector2i, enemies: Array) -> bool:
 	if not inside(p) or e.get("stun", 0) > 0 or p == e.pos: return false
 	var d: Vector2i = p - e.pos
 	match e.kind:
-		"p": return d == Vector2i(0, 1) or (e.pos.y >= 5 and abs(d.x) == 1 and d.y == 0)
+		"p", "q": return d == Vector2i(0, 1) or (e.pos.y >= 5 and abs(d.x) == 1 and d.y == 0)
+		"a": return abs(d.x) == 1 and abs(d.y) == 1 and p.x >= 3 and p.x <= 5 and p.y <= 2 and e.pos.x >= 3 and e.pos.x <= 5 and e.pos.y <= 2
 		"e": return abs(d.x) == 2 and abs(d.y) == 2 and p.y <= 4 and occupied(e.pos + d / 2, enemies) < 0
 		"g": return absi(d.x) + absi(d.y) == 1 and p.x >= 3 and p.x <= 5 and p.y <= 2
 		"r": return blockers(e.pos, p, enemies) == 0

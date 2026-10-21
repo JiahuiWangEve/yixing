@@ -1,0 +1,395 @@
+{
+  "pck_bytes": 914288,
+  "pck_gzip9_bytes": 713296,
+  "entries": [
+    {
+      "path": ".godot/exported/133200997/export-3070c538c03ee49b7677ff960a3f5195-main.scn",
+      "bytes": 858
+    },
+    {
+      "path": ".godot/global_script_class_cache.cfg",
+      "bytes": 160
+    },
+    {
+      "path": ".godot/imported/01_land.wav-72eb2501ec381c62aa4d768f008eb263.sample",
+      "bytes": 27715
+    },
+    {
+      "path": ".godot/imported/02_draw.wav-43b66c454186ef3a03fce4fcefd6f0f4.sample",
+      "bytes": 30359
+    },
+    {
+      "path": ".godot/imported/03_select.wav-78ba7f31a19a70656a03242761f70318.sample",
+      "bytes": 20659
+    },
+    {
+      "path": ".godot/imported/04_use.wav-efb2f440c19d627267b82b864d00e765.sample",
+      "bytes": 34771
+    },
+    {
+      "path": ".godot/imported/05_hit.wav-538e73c770300112d3fbf37d0f19b748.sample",
+      "bytes": 25067
+    },
+    {
+      "path": ".godot/imported/06_death.wav-4e0a5b902268d3e4da3d850967dfc19e.sample",
+      "bytes": 43591
+    },
+    {
+      "path": ".godot/imported/07_hurt.wav-6a390a94125796428fcf6b941df40450.sample",
+      "bytes": 39179
+    },
+    {
+      "path": ".godot/imported/08_stun.wav-ce5703c710657cba2a9009892a20a4b6.sample",
+      "bytes": 35651
+    },
+    {
+      "path": ".godot/imported/09_push.wav-ae1bf00023ad7d6ce8817804585aa233.sample",
+      "bytes": 38299
+    },
+    {
+      "path": ".godot/imported/10_heal.wav-2a6b3fe0c60e5f4e7aca43b97e1c2bd5.sample",
+      "bytes": 42707
+    },
+    {
+      "path": ".godot/imported/11_spawn.wav-fb3ebacfb4f117fc4d049543b09faafb.sample",
+      "bytes": 42707
+    },
+    {
+      "path": ".godot/imported/12_victory.wav-071b3a11d2f089c058de3fe60ae338c7.sample",
+      "bytes": 52411
+    },
+    {
+      "path": ".godot/imported/battle.svg-4a38119e4801e1c6a73334e0ecc7c923.ctex",
+      "bytes": 5668
+    },
+    {
+      "path": ".godot/imported/boss.svg-bf59827fd65f128176244819dd7f582d.ctex",
+      "bytes": 2630
+    },
+    {
+      "path": ".godot/imported/camp.svg-f99ac78157cdeb7e6f38c6d3e6552ee1.ctex",
+      "bytes": 3752
+    },
+    {
+      "path": ".godot/imported/elite.svg-cf1516d2b1f76e2392792ffd1cdd4d7c.ctex",
+      "bytes": 3216
+    },
+    {
+      "path": ".godot/imported/event.svg-d30d7cd4176dcb967ae48018a98cf24b.ctex",
+      "bytes": 2882
+    },
+    {
+      "path": ".godot/imported/fields.svg-2c441add6d09e8a06d3d7151f5aa4e92.ctex",
+      "bytes": 4486
+    },
+    {
+      "path": ".godot/imported/font-subset.otf-18a16f768a9008e5b2429c474754b1ce.fontdata",
+      "bytes": 236672
+    },
+    {
+      "path": ".godot/imported/mountains.svg-f699a54d78f44558db12b4b720f7a268.ctex",
+      "bytes": 3696
+    },
+    {
+      "path": ".godot/imported/outpost.svg-75d59fe59b417e9c3e28b95bdbb44604.ctex",
+      "bytes": 2046
+    },
+    {
+      "path": ".godot/imported/river.svg-45327ab30f248b4c11fff4313074d74c.ctex",
+      "bytes": 3860
+    },
+    {
+      "path": ".godot/imported/victory_seal.svg-ad45977296b2006ff8b301a69da9d8da.ctex",
+      "bytes": 6820
+    },
+    {
+      "path": ".godot/imported/workshop.svg-f94899e8fdc8a2d5c30beca6a7eb7f5a.ctex",
+      "bytes": 2596
+    },
+    {
+      "path": ".godot/uid_cache.bin",
+      "bytes": 1927
+    },
+    {
+      "path": "SITE_BUILD_INFO.json",
+      "bytes": 2366
+    },
+    {
+      "path": "assets/FONT_LICENSE.txt",
+      "bytes": 14712
+    },
+    {
+      "path": "assets/audio/wood_paper/01_land.wav.import",
+      "bytes": 154
+    },
+    {
+      "path": "assets/audio/wood_paper/02_draw.wav.import",
+      "bytes": 154
+    },
+    {
+      "path": "assets/audio/wood_paper/03_select.wav.import",
+      "bytes": 156
+    },
+    {
+      "path": "assets/audio/wood_paper/04_use.wav.import",
+      "bytes": 153
+    },
+    {
+      "path": "assets/audio/wood_paper/05_hit.wav.import",
+      "bytes": 153
+    },
+    {
+      "path": "assets/audio/wood_paper/06_death.wav.import",
+      "bytes": 155
+    },
+    {
+      "path": "assets/audio/wood_paper/07_hurt.wav.import",
+      "bytes": 153
+    },
+    {
+      "path": "assets/audio/wood_paper/08_stun.wav.import",
+      "bytes": 154
+    },
+    {
+      "path": "assets/audio/wood_paper/09_push.wav.import",
+      "bytes": 154
+    },
+    {
+      "path": "assets/audio/wood_paper/10_heal.wav.import",
+      "bytes": 154
+    },
+    {
+      "path": "assets/audio/wood_paper/11_spawn.wav.import",
+      "bytes": 154
+    },
+    {
+      "path": "assets/audio/wood_paper/12_victory.wav.import",
+      "bytes": 157
+    },
+    {
+      "path": "assets/audio/wood_paper/approved_manifest.json",
+      "bytes": 1979
+    },
+    {
+      "path": "assets/font-subset.otf.import",
+      "bytes": 168
+    },
+    {
+      "path": "assets/map/seals/FONT_LICENSE.txt",
+      "bytes": 14712
+    },
+    {
+      "path": "assets/map/seals/battle.svg.import",
+      "bytes": 194
+    },
+    {
+      "path": "assets/map/seals/boss.svg.import",
+      "bytes": 193
+    },
+    {
+      "path": "assets/map/seals/camp.svg.import",
+      "bytes": 193
+    },
+    {
+      "path": "assets/map/seals/elite.svg.import",
+      "bytes": 194
+    },
+    {
+      "path": "assets/map/seals/event.svg.import",
+      "bytes": 194
+    },
+    {
+      "path": "assets/map/seals/fields.svg.import",
+      "bytes": 195
+    },
+    {
+      "path": "assets/map/seals/mountains.svg.import",
+      "bytes": 198
+    },
+    {
+      "path": "assets/map/seals/outpost.svg.import",
+      "bytes": 196
+    },
+    {
+      "path": "assets/map/seals/river.svg.import",
+      "bytes": 194
+    },
+    {
+      "path": "assets/map/seals/victory_seal.svg.import",
+      "bytes": 201
+    },
+    {
+      "path": "assets/map/seals/workshop.svg.import",
+      "bytes": 196
+    },
+    {
+      "path": "campaign.gd.remap",
+      "bytes": 35
+    },
+    {
+      "path": "campaign.gdc",
+      "bytes": 1214
+    },
+    {
+      "path": "card_input.gd.remap",
+      "bytes": 37
+    },
+    {
+      "path": "card_input.gdc",
+      "bytes": 3790
+    },
+    {
+      "path": "encounters.gd.remap",
+      "bytes": 37
+    },
+    {
+      "path": "encounters.gdc",
+      "bytes": 7149
+    },
+    {
+      "path": "enemy_ai.gd.remap",
+      "bytes": 35
+    },
+    {
+      "path": "enemy_ai.gdc",
+      "bytes": 2171
+    },
+    {
+      "path": "fan_hand.gd.remap",
+      "bytes": 35
+    },
+    {
+      "path": "fan_hand.gdc",
+      "bytes": 17820
+    },
+    {
+      "path": "free_move_card.gd.remap",
+      "bytes": 41
+    },
+    {
+      "path": "free_move_card.gdc",
+      "bytes": 946
+    },
+    {
+      "path": "frontend.gd.remap",
+      "bytes": 35
+    },
+    {
+      "path": "frontend.gdc",
+      "bytes": 6219
+    },
+    {
+      "path": "main.gd.remap",
+      "bytes": 31
+    },
+    {
+      "path": "main.gdc",
+      "bytes": 46845
+    },
+    {
+      "path": "main.tscn.remap",
+      "bytes": 97
+    },
+    {
+      "path": "pixel_audio.gd.remap",
+      "bytes": 38
+    },
+    {
+      "path": "pixel_audio.gdc",
+      "bytes": 1732
+    },
+    {
+      "path": "player_skills.gd.remap",
+      "bytes": 40
+    },
+    {
+      "path": "player_skills.gdc",
+      "bytes": 1199
+    },
+    {
+      "path": "project.binary",
+      "bytes": 600
+    },
+    {
+      "path": "reward_choice.gd.remap",
+      "bytes": 40
+    },
+    {
+      "path": "reward_choice.gdc",
+      "bytes": 8403
+    },
+    {
+      "path": "route_map.gd.remap",
+      "bytes": 36
+    },
+    {
+      "path": "route_map.gdc",
+      "bytes": 28990
+    },
+    {
+      "path": "rules.gd.remap",
+      "bytes": 32
+    },
+    {
+      "path": "rules.gdc",
+      "bytes": 2226
+    },
+    {
+      "path": "sound_preview.gd.remap",
+      "bytes": 40
+    },
+    {
+      "path": "sound_preview.gdc",
+      "bytes": 1083
+    },
+    {
+      "path": "start_profiles.gd.remap",
+      "bytes": 41
+    },
+    {
+      "path": "start_profiles.gdc",
+      "bytes": 1363
+    },
+    {
+      "path": "tactics.gd.remap",
+      "bytes": 34
+    },
+    {
+      "path": "tactics.gdc",
+      "bytes": 3462
+    },
+    {
+      "path": "test_support.gd.remap",
+      "bytes": 39
+    },
+    {
+      "path": "test_support.gdc",
+      "bytes": 1035
+    },
+    {
+      "path": "theme.gd.remap",
+      "bytes": 32
+    },
+    {
+      "path": "theme.gdc",
+      "bytes": 723
+    },
+    {
+      "path": "tutorial.gd.remap",
+      "bytes": 35
+    },
+    {
+      "path": "tutorial.gdc",
+      "bytes": 13703
+    },
+    {
+      "path": "undo_history.gd.remap",
+      "bytes": 39
+    },
+    {
+      "path": "undo_history.gdc",
+      "bytes": 2066
+    }
+  ]
+}
+PASS web package: original TTC/legacy art excluded; subset, license and seals present; PCK < 2 MB
