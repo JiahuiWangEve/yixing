@@ -19,7 +19,7 @@ from PIL import Image
 from playwright.async_api import async_playwright
 from browser_chapter_checks import ROOT, URL, KEY, assert_rendered, boot, parse_save as chapter_save, variant_json
 
-OUT = ROOT / 'verification/v0.14.2/pass'
+OUT = ROOT / 'verification/v0.14.5/pass'
 MATRIX = {(1280, 940), (390, 844), (360, 780), (844, 390)}
 EXTRA_BATTLE = ['airdrop_recovery_turn', 'basic_used', 'card_move_used', 'free_card_uid', 'hand_ids',
                 'next_card_uid', 'active_displacements', 'shield_charges', 'pending_bleeds', 'reload_ready',
@@ -56,17 +56,19 @@ def validate():
                     points.extend(action[key] for key in ['from', 'preview', 'to', 'second'])
                 else: points.append(action['point'])
             previous = step['expected']
-        assert labels == {'cancel-held-drag-keeps-card', 'pass-consumable-no-effect-or-redraw',
+        assert labels == {'cancel-held-drag-keeps-card', 'pass-consumable-draws-one-no-effect',
                           'insufficient-energy-no-change', 'zero-cost-pass-multitouch-once',
                           'free-card-pass-keeps-basic-quota', 'reload-preserves-free-card-removal',
-                          'basic-move-still-available'}
+                          'basic-move-still-available', 'unaffordable-generated-pass-no-change',
+                          'next-turn-before-printed-zero-pass', 'next-turn-before-generated-pass'}
         for x, y in points: assert 0 <= x < uw and 0 <= y < uh, (replay['fixture'], 'out-of-bounds input', [x, y])
         final = replay['steps'][-1]['expected']
         assert final['free_card_uid'] == 0 and final['basic_used'] and final['energy'] == 0
-        assert final['player'] == [5, 9] and final['hand'] == ['spear', 'sword']
-        assert final['discard'] == ['airdrop', 'breath'] and not final['deck']
+        assert final['player'] == [5, 9] and final['hand'][:4] == ['spear', 'sword', 'spear', 'fatigue'] and len(final['hand']) == 5
+        assert not final['discard'] and len(final['deck']) == 1 and final['hand'][-1] in ['airdrop', 'breath']
         assert final['lives'] == 3 and final['airdrop_recovery_turn'] == 0
-        assert final['enemies'] == replay['initial']['enemies'], 'Pass should never affect enemies'
+        assert final['enemies'][0]['hp'] == replay['initial']['enemies'][0]['hp'], 'Pass should never damage enemies'
+        assert final['turn'] == 3
     return replays
 
 
@@ -102,7 +104,7 @@ async def main(full=False, validate_only=False):
                 scale = min(w / uw, h / uh);ox, oy = (w - uw * scale) / 2, (h - uh * scale) / 2
                 context = await browser.new_context(viewport={'width': w, 'height': h}, has_touch=True)
                 page = await context.new_page();await install_debug_settings(page);cdp = await context.new_cdp_session(page)
-                errors = [];screenshots = [];highlights = [];events = []
+                errors = [];screenshots = [];highlights = [];events = [];overlays = []
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.on('console', lambda msg: errors.append(msg.text) if msg.type == 'error' and
                         ('SCRIPT ERROR' in msg.text or 'Parse Error' in msg.text) else None)
@@ -126,11 +128,19 @@ async def main(full=False, validate_only=False):
                     assert_rendered(data, [w, h])
                     screenshots.append({'file': path.name, 'sha256': hashlib.sha256(data).hexdigest(), **metadata})
                     return data
+                async def visible_zone(label):
+                    data = await screenshot(label, selected_or_held=True)
+                    zx, zy, zw, zh = replay['zone']
+                    box = tuple(round(v) for v in [ox+zx*scale, oy+zy*scale, ox+(zx+zw)*scale, oy+(zy+zh)*scale])
+                    count = border_color_count(data, box, (230,212,176), max(w,h))
+                    assert count > (box[2]-box[0])*(box[3]-box[1])*.15, (stem,label,'shared discard zone is not visible',count)
+                    overlays.append({'label':label,'button_fill_pixels':count})
                 async def resume():
                     await tap(replay['resume']);await page.wait_for_timeout(400)
                 async def drag(action, label, expected_before):
                     a, preview, b = [screen_point(action[key]) for key in ['from', 'preview', 'to']]
-                    await send_touch('touchStart', [{**a, 'id': 1}])
+                    await send_touch('touchStart', [{**a, 'id': 1}]);await page.wait_for_timeout(350)
+                    await visible_zone(label + '-held-before-drag')
                     for fraction in [.25, .5, .75, 1]:
                         xy = {key: a[key] + (preview[key] - a[key]) * fraction for key in ['x', 'y']}
                         await send_touch('touchMove', [{**xy, 'id': 1}]);await page.wait_for_timeout(30)
@@ -174,7 +184,12 @@ async def main(full=False, validate_only=False):
                             await page.reload();await boot(page);await resume()
                         else:
                             for action in step['inputs']:
-                                if action['action'] == 'tap': await tap(action['point'])
+                                if action['action'] == 'tap':
+                                    await tap(action['point'])
+                                    if action.get('selected_zone'):
+                                        await page.wait_for_timeout(100)
+                                        await visible_zone(label + '-selected-before-commit')
+                                        assert await snapshot() == previous, (stem,label,'selection committed before zone click')
                                 else: await drag(action, label, previous)
                                 await page.wait_for_timeout(100)
                             # For unchanged-state assertions, cross a complete
@@ -190,7 +205,7 @@ async def main(full=False, validate_only=False):
                     if w < 1000: assert any(e['points'] == 2 for e in events)
                     reports.append({'fixture': replay['fixture'], 'viewport': [w, h],
                                     'state_assertions': len(replay['steps']) + 2, 'errors': errors,
-                                    'screenshots': screenshots, 'highlights': highlights,
+                                    'screenshots': screenshots, 'highlights': highlights, 'selection_and_hold_overlays': overlays,
                                     'touch_events': events, 'final': await snapshot()})
                     print('PASS pass-cards', stem, len(replay['steps']) + 2, 'state checks;',
                           len(highlights), 'held highlight checks', flush=True)

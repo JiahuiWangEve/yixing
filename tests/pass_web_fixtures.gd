@@ -1,6 +1,6 @@
 extends SceneTree
 # Ordinary production saves and real input coordinates. No runtime QA hooks.
-const OUT = "res://../verification/v0.14.2/pass/"
+const OUT = "res://../verification/v0.14.5/pass/"
 const ROUTE_FIELDS = ["chapter", "current", "pending", "visited", "done", "prepared", "reward_debt", "reward_blocked", "pending_homework", "homework_awarded", "victory_recorded"]
 const BATTLE_FIELDS = ["phase", "turn", "lives", "energy", "collection", "deck", "hand", "discard", "rewards", "player", "encounter_state", "airdrop_recovery_turn", "basic_used", "card_move_used", "free_card_uid", "hand_ids", "next_card_uid", "active_displacements", "shield_charges", "pending_bleeds", "reload_ready", "artillery_mode", "deploy_draw_used", "tuna_turns", "tuna_active"]
 var game
@@ -63,19 +63,22 @@ func drag(index: int, label: String, mode: String = "release", free: bool = fals
 	else: touch(to, false)
 	step(label, [action], "blocked" if mode == "cancel" or not allowed else "action")
 func pass_input(index: int, label: String, free: bool = false, allowed: bool = true, mode: String = "release"):
-	if game.mobile_layout:
+	if mode != "select":
 		drag(index, label, mode, free, allowed)
 	else:
 		var from: Vector2 = game.handui.free_exposed_point() if free else game.handui.exposed_point(index)
 		var button: Vector2 = game.pass_button_rect().get_center()
-		tap(from);tap(button)
-		step(label, [input_tap(from), input_tap(button)], "action" if allowed else "blocked")
+		tap(from)
+		check(game.pass_zone_visible() and game.gesture.pass_zone_state().enabled == allowed, label + " selection displays the shared zone")
+		var selection = input_tap(from);selection.selected_zone = true
+		tap(button)
+		step(label, [selection, input_tap(button)], "action" if allowed else "blocked")
 func fresh(size: Vector2):
 	game.configure_layout(size);game.seed_value = 14242;game.player_skill = "king";game.new_expedition();game.route.enter(0)
 	game.enemies = [];game.next_enemy_uid = 1;game.add_enemy("g", Vector2i(4, 0), 999)
 	game.enemies[0].hp = 9;game.enemies[0].max_hp = 9
-	game.collection = ["airdrop", "spear", "breath", "sword"]
-	game.hand = ["airdrop", "spear", "breath"];game.hand_ids = [];game.deck = ["sword"];game.discard = [];game.rewards = []
+	game.collection = ["airdrop", "spear", "breath", "sword", "spear", "fatigue"]
+	game.hand = ["airdrop", "spear", "breath"];game.hand_ids = [];game.deck = ["fatigue", "spear", "sword"];game.discard = [];game.rewards = []
 	game.energy = 3;game.lives = 3;game.player = Vector2i(4, 9)
 	game.plan_intents();settle();steps = []
 func replay(size: Vector2):
@@ -91,21 +94,26 @@ func replay(size: Vector2):
 	var before = summary()
 	drag(0, "cancel-held-drag-keeps-card", "cancel")
 	check(summary() == before, "touch cancel leaves every compared gameplay field unchanged")
-	pass_input(0, "pass-consumable-no-effect-or-redraw")
-	check(game.hand == ["spear", "breath"] and game.discard == ["airdrop"] and game.deck == ["sword"], "passing consumes just the selected copy and never redraws or exhausts")
-	check(game.energy == 0 and game.lives == 3 and game.player == Vector2i(4, 9) and game.airdrop_recovery_turn == 0 and game.enemies[0].hp == 9, "passing pays normal cost without any airdrop effect")
+	pass_input(0, "pass-consumable-draws-one-no-effect", false, true, "select")
+	check(game.hand == ["spear", "breath", "sword"] and game.discard == ["airdrop"] and game.deck == ["fatigue", "spear"], "passing pays three, replaces exactly the selected copy and never exhausts")
+	check(game.energy == 0 and game.lives == 3 and game.player == Vector2i(4, 9) and game.airdrop_recovery_turn == 0 and game.enemies[0].hp == 9, "passing pays three without any airdrop effect")
 	before = summary();pass_input(0, "insufficient-energy-no-change", false, false)
 	check(summary() == before, "insufficient energy changes no compared gameplay field")
+	pass_input(-1, "unaffordable-generated-pass-no-change", true, false)
+	check(summary() == before, "generated card also requires three energy")
+	var end_turn = game.END_TURN_RECT.get_center()
+	tap(end_turn);step("next-turn-before-printed-zero-pass", [input_tap(end_turn)])
 	pass_input(1, "zero-cost-pass-multitouch-once", false, true, "multitouch")
-	check(game.energy == 0 and game.hand == ["spear"] and game.discard == ["airdrop", "breath"] and game.deck == ["sword"], "zero-cost pass does not resolve breath or double-deduct under multitouch")
+	check(game.energy == 0 and game.hand == ["spear", "sword", "spear"] and game.discard == ["airdrop", "breath"] and game.deck == ["fatigue"], "printed-zero card still pays three and draws once without resolving breath or double-committing")
+	tap(end_turn);step("next-turn-before-generated-pass", [input_tap(end_turn)])
 	pass_input(-1, "free-card-pass-keeps-basic-quota", true)
-	check(game.free_card_uid == 0 and not game.basic_used and game.energy == 0 and game.hand == ["spear"], "passing free card clears its UID without spending basic quota or drawing")
+	check(game.free_card_uid == 0 and not game.basic_used and game.energy == 0 and game.hand == ["spear", "sword", "spear", "fatigue"] and game.deck.is_empty(), "passing generated card costs three, draws fatigue at zero floor, and preserves basic quota")
 	game.route.save();check(game.route.resume(), "post-pass production save resumes")
 	step("reload-preserves-free-card-removal", [], "reload")
 	check(game.free_card_uid == 0 and not game.basic_used and game.discard == ["airdrop", "breath"], "reload does not resurrect passed free or consumed cards")
 	var target = game.cell_pos(Vector2i(5, 9));tap(target)
 	step("basic-move-still-available", [input_tap(target)])
-	check(game.player == Vector2i(5, 9) and game.basic_used and game.hand == ["spear", "sword"] and game.energy == 0, "basic move quota was preserved and draws only when actually used")
+	check(game.player == Vector2i(5, 9) and game.basic_used and game.hand.size() == 5 and game.hand[-1] in ["airdrop", "breath"] and game.deck.size() == 1 and game.discard.is_empty() and game.energy == 0, "preserved basic move normally reshuffles passed cards and draws one")
 	report.steps = steps.duplicate(true);reports.append(report)
 func run():
 	DirAccess.make_dir_recursive_absolute(OUT + "fixtures")

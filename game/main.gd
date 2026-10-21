@@ -1,5 +1,6 @@
 extends Control
-const BUILD_VERSION = "v0.14.4"
+const BUILD_VERSION = "v0.14.5"
+const PASS_CARD_COST = 3
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -23,7 +24,6 @@ const TUTORIAL = preload("res://tutorial.gd")
 const REWARD_UI = preload("res://reward_choice.gd")
 const FRONTEND = preload("res://frontend.gd")
 const AUDIO = preload("res://pixel_audio.gd")
-var SOUND_RECT = Rect2(913, 20, 88, 40)
 const R = preload("res://rules.gd")
 const FONT = preload("res://assets/font-subset.otf")
 var O = Vector2(412, 105)
@@ -106,17 +106,17 @@ func configure_layout(size: Vector2):
 	PREV_RECT = Rect2();NEXT_RECT = Rect2();DRAWER_RECT = Rect2();CANCEL_RECT = Rect2()
 	if not mobile_layout:
 		ui_size = Vector2(1280, 940);O = Vector2(448, 105);CELL = 48.0;BOARD_RECT = Rect2(417, 74, 446, 494)
-		RESTART_RECT = Rect2(773, 20, 130, 40);SOUND_RECT = Rect2(913, 20, 88, 40);UNDO_RECT = Rect2(1015, 20, 230, 40)
+		RESTART_RECT = Rect2(773, 20, 130, 40);UNDO_RECT = Rect2(1015, 20, 230, 40)
 		END_TURN_RECT = Rect2(680, 578, 223, 45);HAND_Y = 624
 	elif compact_landscape:
 		ui_size = Vector2(960, 540);CELL = 36.0;O = Vector2(56, 101);BOARD_RECT = Rect2(24, 69, 352, 388)
-		RESTART_RECT = Rect2(690, 12, 130, 64);SOUND_RECT = Rect2(830, 12, 106, 64);UNDO_RECT = Rect2(240, 12, 130, 52)
+		RESTART_RECT = Rect2(690, 12, 130, 64);UNDO_RECT = Rect2(240, 12, 130, 52)
 		END_TURN_RECT = Rect2(688, 430, 220, 64);HAND_Y = 155
 	else:
 		ui_size = Vector2(480, maxf(660, 480 * size.y / maxf(1, size.x)))
 		CELL = clampf((ui_size.y - 450) / 9, 24, 44);O = Vector2(240 - CELL * 4, 135)
 		BOARD_RECT = Rect2(O - Vector2(24, 24), Vector2(CELL * 8 + 48, CELL * 9 + 48))
-		RESTART_RECT = Rect2(104, 12, 110, 46);SOUND_RECT = Rect2(220, 12, 88, 46);UNDO_RECT = Rect2(320, 12, 148, 46)
+		RESTART_RECT = Rect2(104, 12, 110, 46);UNDO_RECT = Rect2(320, 12, 148, 46)
 		END_TURN_RECT = Rect2(305, BOARD_RECT.end.y + 8, 163, 48);HAND_Y = full_hand_area().position.y
 	USE_RECT = END_TURN_RECT
 	hand_views.clear()
@@ -164,32 +164,42 @@ func undo_label() -> String:
 # Passing is not playing: central guards deliberately ignore target/stance legality.
 func can_pass_card(index: int, free: bool = false) -> bool:
 	if screen != "game" or phase != "play" or recovery_active() or tutorial.active or encounter_info_open: return false
+	if presentation.active() or card_picker.active: return false
 	if input_lock > 0 or navigation_lock > 0: return false
-	if free: return energy >= 0 and free_card_available()
-	return index >= 0 and index < hand.size() and energy >= card_cost(hand[index])
+	if energy < PASS_CARD_COST: return false
+	if free: return free_card_available()
+	return index >= 0 and index < hand.size()
 func pass_card(index: int, free: bool = false) -> bool:
 	if not can_pass_card(index, free): return false
 	history.record("pass");cancel_gesture()
+	energy -= PASS_CARD_COST
 	if free:
 		free_card_uid = 0
 	else:
 		sync_hand_ids()
 		var id: String = hand[index]
-		energy -= card_cost(id)
 		discard.append(hand.pop_at(index));hand_ids.remove_at(index)
 		log_line("过牌「%s」" % CARDS[id][0])
 	selected = -1;free_selected = false;handui.sync()
-	notice = "已过牌，不触发效果、不补抽。"
+	notice = "已过牌，不触发效果，抽1张牌。"
+	# Remove first, then use the normal draw hook (shuffle, fatigue, hand limit).
+	# A just-discarded card can be drawn again when the draw pile is empty.
+	draw_card()
 	queue_redraw()
 	return true
 func pass_button_rect() -> Rect2:
-	if mobile_layout: return Rect2() # Touch uses an intentional side drop, without shrinking the hand.
-	return Rect2(920, 578, 150, 45)
+	return pass_drop_rect() # Selection and dragging share one visible target on every layout.
 func pass_drop_rect() -> Rect2:
-	# Overlay only while dragging; inset from OS gesture edges and outside board targets.
+	# Transient selection/hold overlay; inset from OS gesture edges and outside board targets.
 	if compact_landscape: return Rect2(840, 176, 84, 198)
 	if mobile_layout: return Rect2(380, full_hand_area().position.y + 28, 84, 166)
 	return Rect2(1100, 350, 140, 200)
+func pass_zone_visible() -> bool:
+	if screen != "game" or phase != "play" or recovery_active() or tutorial.active: return false
+	if card_picker.active or encounter_info_open or presentation.active(): return false
+	if gesture.active:
+		return (gesture.uid == free_card_uid and free_card_available()) if gesture.free_move else hand_ids.has(gesture.uid)
+	return (free_selected and free_card_available()) or (selected >= 0 and selected < hand.size())
 func confirm_card():
 	if screen != "game" or input_lock > 0 or navigation_lock > 0 or selected < 0 or selected >= hand.size(): return
 	if phase == "discard": discard_hand(selected)
@@ -383,6 +393,8 @@ func _ready():
 	configure_layout(Vector2(1280, 940))
 	update_window_layout()
 	settings.load_settings()
+	audio_system.set_muted(settings.audio_muted)
+	audio_system.mute_changed.connect(settings.set_audio_muted)
 	skill_system.load_progress()
 	new_run()
 	show_home()
@@ -428,6 +440,9 @@ func show_home():
 	if tutorial.active: tutorial_resume_lesson = tutorial.lesson_index
 	navigation_lock = 0.0
 	tutorial.stop();clear_effects();selected = -1;free_selected = false;active_touch = -1;touch_dragged = true;debug_remaining = 0;debug_target = 0;screen = "home"
+func open_settings():
+	if screen != "home": return
+	cancel_gesture();screen = "settings";queue_redraw()
 func open_tutorial_menu():
 	show_home();screen = "tutorial_menu"
 func start_tutorial(index: int):
@@ -696,7 +711,6 @@ func handle_click(pos: Vector2):
 		return
 	if screen == "game" and mobile_layout and ENCOUNTERS.active(self) and phase in ["play", "discard"] and encounter_rules_rect().has_point(pos):
 		cancel_gesture();encounter_info_open = true;return
-	if SOUND_RECT.has_point(pos): audio_system.toggle_mute();return
 	if screen in ["map", "route_choice"]: route.click(pos);return
 	if screen != "game": cancel_gesture();frontend.click(pos);return
 	if home_rect().has_point(pos): show_home();return
@@ -715,7 +729,7 @@ func handle_click(pos: Vector2):
 		if rewardui.mode != previous_mode: navigation_lock = maxf(navigation_lock, 0.15)
 		return
 	if phase in ["dead", "win"]: return
-	if pass_button_rect().has_point(pos) and (selected >= 0 or free_selected): pass_card(selected, free_selected);return
+	if pass_zone_visible() and pass_drop_rect().has_point(pos): pass_card(selected, free_selected);return
 	if USE_RECT.has_point(pos) and selected >= 0 and (phase == "discard" or hand[selected] in UNTARGETED): confirm_card();return
 	if phase == "discard": return
 	if END_TURN_RECT.has_point(pos): request_end_turn();return
@@ -727,6 +741,9 @@ func handle_click(pos: Vector2):
 	elif free_selected and not full_hand_area().has_point(pos): cancel_selection()
 
 func _input(event):
+	if screen == "settings" and event is InputEventKey:
+		if event.pressed and not event.echo and event.keycode == KEY_ESCAPE: show_home()
+		get_viewport().set_input_as_handled();return
 	if presentation.input_event(event): get_viewport().set_input_as_handled();return
 	if card_picker.input_event(event): get_viewport().set_input_as_handled();return
 	if encounter_info_open and event is InputEventKey:
@@ -1042,7 +1059,6 @@ func _draw():
 		route.draw();presentation.draw();return
 	if screen != "game":
 		frontend.draw()
-		panel(SOUND_RECT, THEME.BUTTON);text_at(SOUND_RECT.position + Vector2(12, 32 if mobile_layout else 27), "静音" if audio_system.muted else "声音 开", 16)
 		return
 	draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.BACKGROUND)
 	if settings.debug_mode and not tutorial.active and phase in ["play", "discard"]:
@@ -1147,11 +1163,6 @@ func _draw():
 	text_at((Vector2(200, 500) if compact_landscape else Vector2(150, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(550, 609), "能量 %d" % energy, 20, THEME.LIGHT)
 	var confirm = selected >= 0 and (phase == "discard" or (phase == "play" and hand[selected] in UNTARGETED))
 	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else (("跳过回合" if mobile_layout else "跳过回合 [空格]") if recovery_active() else ("结束回合" if mobile_layout else "结束回合 [空格]"))), 18, THEME.INK)
-	if not mobile_layout and phase == "play" and (selected >= 0 or free_selected):
-		var cost = 0 if free_selected else card_cost(hand[selected])
-		var allowed = can_pass_card(selected, free_selected)
-		panel(pass_button_rect(), THEME.BUTTON, GOLD if allowed else THEME.BORDER)
-		text_at(pass_button_rect().position + Vector2(12, 30), "过牌 · %d费" % cost, 18, THEME.INK if allowed else THEME.GRID)
 	var statuses: Array[String] = []
 	if tuna_active or tuna_turns > 0: statuses.append(("吐纳 本回合+1" if tuna_active else "吐纳") + " 后续%d回合" % tuna_turns)
 	if shield_charges > 0: statuses.append("固守 1次")
@@ -1178,7 +1189,6 @@ func _draw():
 
 	panel(UNDO_RECT, THEME.BUTTON, GOLD if history.can_undo() else THEME.BORDER);text_at(UNDO_RECT.position + Vector2(8, 29), undo_label(), 14 if mobile_layout else 16)
 	panel(home_rect(), THEME.BUTTON);text_at(home_rect().position + Vector2(10, 29 if mobile_layout else 27), "首页" if mobile_layout else "返回首页", 18)
-	panel(SOUND_RECT, THEME.BUTTON);text_at(SOUND_RECT.position + Vector2(12, 32 if mobile_layout else 27), "静音" if audio_system.muted else "声音 开", 16)
 
 	if mobile_layout and ENCOUNTERS.active(self) and phase in ["play", "discard"]:
 		panel(encounter_rules_rect(), THEME.BUTTON);text_at(encounter_rules_rect().position + Vector2(8, 29), "军阵", 16, THEME.INK)

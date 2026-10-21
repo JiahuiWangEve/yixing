@@ -39,7 +39,7 @@ async def main():
                         ack_tasks.append(asyncio.create_task(cdp.send('Page.screencastFrameAck',{'sessionId':event['sessionId']})))
                     cdp.on('Page.screencastFrame',receive_frame)
                     await cdp.send('Page.startScreencast',{'format':'png','everyNthFrame':1})
-                    await tap(r['confirm']);await page.wait_for_timeout(2100)
+                    await tap(r['confirm']);await page.wait_for_timeout(2300)
                     await cdp.send('Page.stopScreencast');await asyncio.gather(*ack_tasks);await cdp.detach()
                     assert (await state())['collection']==r['after']
                     # Production card colors identify the two fully expanded
@@ -51,7 +51,7 @@ async def main():
                         x,y=probe;patch=im.crop((x-3,y-3,x+4,y+4));rgb=ImageStat.Stat(patch).mean
                         label=next((label for label,target in [('old-card',(242,229,204)),('upgraded-card',(234,213,172))] if max(abs(rgb[i]-target[i]) for i in range(3))<5),None)
                         frame_info.append({'frame':number,'timestamp':stamp,'probe_rgb':rgb,'phase':label})
-                        if label and label not in selected:selected[label]=(number,stamp,data)
+                        if label and (label not in selected or label == 'upgraded-card'):selected[label]=(number,stamp,data)
                     assert set(selected)=={'old-card','upgraded-card'},('missing distinct visible card phases',w,frame_info)
                     assert selected['old-card'][0]<selected['upgraded-card'][0],frame_info
                     for label,(_,stamp,data) in selected.items():

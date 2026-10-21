@@ -8,14 +8,25 @@ var dragging = false
 var free_move = false
 var source = ""
 var pass_armed = false
+var pass_pressed = false
+var pass_click_moved = false
 const DRAG_THRESHOLD = 12.0
 func _init(owner): game = owner
 func cancel():
-	active = false;dragging = false;free_move = false;uid = -1;source = "";pass_armed = false
+	active = false;dragging = false;free_move = false;uid = -1;source = "";pass_armed = false;pass_pressed = false;pass_click_moved = false
 func press(position: Vector2, kind: String = "mouse") -> bool:
 	if active: return true
+	# The shared overlay owns pointer-down before any overlapping hand card.
+	# Bind its selected UID now, so a later release cannot discard another copy.
+	if game.pass_zone_visible() and game.pass_drop_rect().has_point(position):
+		game.sync_hand_ids()
+		free_move = game.free_selected
+		uid = game.free_card_uid if free_move else game.hand_ids[game.selected]
+		down = position;pointer = position;active = true;dragging = false;source = kind;pass_pressed = true
+		return true
 	if game.phase == "play" and game.recovery_active(): return false
 	if game.screen != "game" or game.phase not in ["play", "discard"]: return false
+	if game.card_picker.active or game.encounter_info_open or game.presentation.active(): return false
 	if game.freecard.hit_test(position):
 
 
@@ -31,6 +42,10 @@ func press(position: Vector2, kind: String = "mouse") -> bool:
 func motion(position: Vector2):
 	if not active: return
 	pointer = position
+	if pass_pressed:
+		# Once a press becomes movement, returning to the zone is not a click.
+		pass_click_moved = pass_click_moved or position.distance_to(down) >= DRAG_THRESHOLD
+		return # A zone press never starts a new card drag underneath it.
 	if position.x < game.pass_drop_rect().position.x - 12 or position.x - down.x >= 28: pass_armed = true
 	if position.distance_to(down) >= DRAG_THRESHOLD: dragging = true
 func release(position: Vector2, canceled: bool = false):
@@ -38,11 +53,20 @@ func release(position: Vector2, canceled: bool = false):
 	pointer = position
 	var chosen_uid = uid
 	var chosen_free = free_move
-	var was_dragging = dragging or position.distance_to(down) >= DRAG_THRESHOLD
+	var clicked_pass = pass_pressed
+	var was_dragging = dragging or pass_click_moved or position.distance_to(down) >= DRAG_THRESHOLD
 	var over_pass = was_dragging and game.pass_drop_rect().has_point(position)
 	var deliberate_pass = pass_armed or position.x - down.x >= 28
 	cancel()
 	if canceled or game.screen != "game" or game.input_lock > 0 or game.navigation_lock > 0: return
+	if game.card_picker.active or game.encounter_info_open or game.presentation.active(): return
+	if clicked_pass:
+		if was_dragging or not game.pass_zone_visible() or not game.pass_drop_rect().has_point(position): return
+		if chosen_free:
+			if chosen_uid == game.free_card_uid: game.pass_card(-1, true)
+		else:
+			game.pass_card(game.hand_ids.find(chosen_uid))
+		return
 	if over_pass:
 		if not deliberate_pass: return
 		if chosen_free:
@@ -79,23 +103,32 @@ func valid_target() -> bool:
 	if index < 0: return false
 	var card: String = game.hand[index]
 	return game.can_commit_card(index, game.player if card in game.UNTARGETED else target_cell())
+func pass_zone_state() -> Dictionary:
+	var visible: bool = game.pass_zone_visible()
+	var chosen_free: bool = free_move if active else game.free_selected
+	var index: int = game.hand_ids.find(uid) if active else game.selected
+	var allowed: bool = visible and game.can_pass_card(index, chosen_free)
+	var inside: bool = visible and active and dragging and pass_armed and game.pass_drop_rect().has_point(pointer)
+	var hint = "单击弃置"
+	if active and not pass_pressed: hint = "松手弃置" if inside else "拖入弃置"
+	if not allowed: hint = "能量不足" if game.energy < game.PASS_CARD_COST else "不可弃置"
+	return {"visible": visible, "enabled": allowed, "highlighted": inside and allowed, "inside": inside, "title": "弃置", "cost": "%d费" % game.PASS_CARD_COST, "replacement": "补抽1张", "hint": hint}
 func draw_pass_zone():
-	if game.phase != "play": return
+	var state = pass_zone_state()
+	if not state.visible: return
 	var rect: Rect2 = game.pass_drop_rect()
-	var index: int = game.hand_ids.find(uid)
-	var cost = 0 if free_move else (game.card_cost(game.hand[index]) if index >= 0 else 0)
-	var allowed: bool = game.can_pass_card(index, free_move)
-	var inside = rect.has_point(pointer) and pass_armed
-	var outline: Color = game.GOLD if inside and allowed else (game.RED if inside else game.THEME.BORDER)
-	game.panel(rect, game.THEME.PAPER_SELECTED if inside and allowed else game.THEME.BUTTON, outline)
-	if inside: game.draw_rect(rect.grow(-3), outline, false, 3)
+	var outline: Color = game.GOLD if state.highlighted else (game.RED if state.inside else game.THEME.BORDER)
+	game.panel(rect, game.THEME.PAPER_SELECTED if state.highlighted else game.THEME.BUTTON, outline)
+	if state.inside: game.draw_rect(rect.grow(-3), outline, false, 3)
 	var x = rect.position.x + 8
-	game.text_at(Vector2(x, rect.position.y + 36), "过牌", 22, game.THEME.INK)
-	game.text_at(Vector2(x, rect.position.y + 66), "%d费" % cost, 20, game.THEME.INK)
-	game.text_at(Vector2(x, rect.position.y + 100), ("松手弃置" if pass_armed else "向右拖入") if allowed else ("能量不足" if game.energy < cost else "不可过牌"), 14, game.THEME.INK if allowed else game.RED)
-	game.text_at(Vector2(x, rect.position.y + 124), "不补抽", 14, game.THEME.GRID)
+	game.text_at(Vector2(x, rect.position.y + 36), state.title, 22, game.THEME.INK if state.enabled else game.THEME.GRID)
+	game.text_at(Vector2(x, rect.position.y + 66), state.cost, 20, game.THEME.INK if state.enabled else game.THEME.GRID)
+	game.text_at(Vector2(x, rect.position.y + 100), state.hint, 14, game.THEME.INK if state.enabled else game.RED)
+	game.text_at(Vector2(x, rect.position.y + 124), state.replacement, 14, game.THEME.GRID)
 func draw():
-	if not dragging: return
+	if not dragging:
+		draw_pass_zone()
+		return
 	if free_move:
 		_draw_free()
 		draw_pass_zone()

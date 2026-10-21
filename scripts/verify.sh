@@ -73,6 +73,7 @@ run chapter-web-fixtures --script "$root/tests/chapter_web_fixtures.gd"
 run airdrop --script "$root/tests/airdrop_checks.gd"
 run airdrop-web-fixtures --script "$root/tests/airdrop_web_fixtures.gd"
 run pass-cards --script "$root/tests/pass_card_checks.gd"
+run discard-zone --script "$root/tests/discard_zone_checks.gd"
 run pass-web-fixtures --script "$root/tests/pass_web_fixtures.gd"
 run elite-action-credits --script "$root/tests/elite_action_credit_checks.gd"
 
@@ -83,3 +84,5 @@ run presentation --script "$root/tests/presentation_checks.gd"
 run presentation-web-fixtures --script "$root/tests/presentation_web_fixtures.gd"
 
 run debug-undo --script "$root/tests/debug_undo_checks.gd"
+
+run sound-settings --script "$root/tests/sound_settings_checks.gd"

@@ -93,6 +93,11 @@ func survive(size: Vector2):
 	check(not game.gesture.press(card, "touch"), "recovery rejects card drag start")
 	step("blocked", "recovery-rejects-card-drag-and-free-step", inputs)
 	check(summary() == before, "recovery attempts cannot mutate saved gameplay state")
+	inputs = taps([card, game.pass_drop_rect().get_center()])
+	inputs.append({"action": "drag", "from": point(card), "to": point(game.pass_drop_rect().get_center())})
+	check(not game.pass_zone_visible() and not game.pass_card(0) and not game.pass_card(-1, true), "recovery suppresses shared discard zone and rejects both three-fee passes")
+	step("blocked", "recovery-rejects-shared-discard-zone-click-and-drag", inputs)
+	check(summary() == before, "recovery discard attempts neither spend energy nor draw")
 	if game.mobile_layout:
 		game.route.save();check(game.route.resume(), "recovery save resumes")
 		step("reload", "reload-preserves-recovery", [])

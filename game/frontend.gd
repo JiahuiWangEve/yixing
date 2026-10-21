@@ -1,10 +1,18 @@
 extends RefCounted
+# Add future preferences here; home entry indices remain stable.
+const SETTINGS_OPTIONS = [{"id": "sound", "label": "声音"}]
 const LESSON_NAMES = ["移动与抽牌", "攻击与能量", "移动牌与留牌", "危险与行动顺序", "破将、奖励与增援"]
 var game
 func _init(owner): game = owner
 func entries() -> Array:
 	match game.screen:
-		"home": return ["开始游戏", "教程", "声音：" + ("静音" if game.audio_system.muted else "开启"), "继续山河棋路存档", "调试模式：" + ("开" if game.settings.debug_mode else "关")]
+		"home": return ["开始游戏", "教程", "设置", "继续山河棋路存档", "调试模式：" + ("开" if game.settings.debug_mode else "关")]
+		"settings":
+			var result = []
+			for option in SETTINGS_OPTIONS:
+				match option.id:
+					"sound": result.append(option.label + "：" + ("关闭" if game.audio_system.muted else "开启"))
+			result.append("返回首页");return result
 		"skill_selection": return ["将 · 四向一步", "马 · 马步移动" if game.skill_system.is_unlocked("horse") else "马 · 通关后解锁", "炮车 · 行军与驻扎" if game.skill_system.is_unlocked("artillery") else "炮车 · 通关后解锁", "返回首页"]
 		"debug_profile": return ["将 · 2命与恢复", "马 · 1命与机动", "炮车 · 1命与炮击", "返回首页"]
 		"tutorial_menu":
@@ -37,10 +45,15 @@ func activate(i: int):
 			match i:
 				0: game.skill_system.show_selection()
 				1: game.open_tutorial_menu()
-				2: game.audio_system.toggle_mute()
+				2: game.open_settings()
 				3:
 					if not game.route.resume(): game.notice = "此存档不可续用，请开始新征途。"
 				4: game.settings.set_debug_mode(not game.settings.debug_mode);game.queue_redraw()
+		"settings":
+			if i == SETTINGS_OPTIONS.size(): game.show_home()
+			elif i >= 0 and i < SETTINGS_OPTIONS.size():
+				match SETTINGS_OPTIONS[i].id:
+					"sound": game.audio_system.toggle_mute();game.queue_redraw()
 		"skill_selection":
 			match i:
 				0: game.skill_system.choose("king")
@@ -79,12 +92,15 @@ func activate(i: int):
 				3: game.show_home()
 func draw():
 	game.draw_rect(Rect2(Vector2.ZERO, game.ui_size), game.THEME.BACKGROUND)
-	var titles = {"home": "弈 行", "skill_selection": "选择开局", "debug_profile": "调试 · 选择开局", "tutorial_menu": "教程 · 选择小节", "debug_menu": "调试选关", "tutorial_pause": "教学菜单", "tutorial_complete": "本节完成"}
+	var titles = {"home": "弈 行", "settings": "设置", "skill_selection": "选择开局", "debug_profile": "调试 · 选择开局", "tutorial_menu": "教程 · 选择小节", "debug_menu": "调试选关", "tutorial_pause": "教学菜单", "tutorial_complete": "本节完成"}
 	var origin = (Vector2(24, 60) if game.compact_landscape else Vector2(24, 90)) if game.mobile_layout else Vector2(420, 100)
 	game.text_at(origin, titles.get(game.screen, "弈 行"), 32, game.THEME.HEADING)
 	if game.screen == "home":
 		game.text_at(origin + Vector2(0, 32), "山河棋路 · 三种开局 · 八步破关", 16, game.THEME.LIGHT)
 		if game.notice in ["暂无可继续的章节", "此存档不可续用，请开始新征途。"]: game.text_at(Vector2(24, game.ui_size.y - 48), game.notice, 16, game.THEME.HEADING)
+	elif game.screen == "settings":
+		game.text_at(origin + Vector2(0, 28), "点击切换声音开关", 16, game.THEME.LIGHT)
+		if game.settings.save_error != OK: game.text_at(Vector2(24, game.ui_size.y - 48), "设置已生效，本地保存暂不可用", 16, game.THEME.HEADING)
 	elif game.screen == "skill_selection":
 		game.text_at(origin + Vector2(0, 28), "各有 8 张初始牌；移动抽牌，回合保留手牌", 16, game.THEME.LIGHT)
 		game.text_at(origin + Vector2(0, 48), "消耗：每张每关使用一次，下关恢复", 16, game.THEME.LIGHT)

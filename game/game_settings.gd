@@ -3,9 +3,10 @@ extends RefCounted
 const SAVE = "user://game_settings.cfg"
 const WEB_SAVE_KEY = "yixing.settings.v1"
 var debug_mode = false
+var audio_muted = false
 var save_error = OK
 func load_settings():
-	debug_mode = false
+	debug_mode = false;audio_muted = false
 	var config = ConfigFile.new()
 	var loaded = false
 	if OS.has_feature("web"):
@@ -15,10 +16,18 @@ func load_settings():
 	if loaded:
 		var value = config.get_value("settings", "debug_mode", false)
 		debug_mode = value is bool and value
+		value = config.get_value("settings", "audio_muted", false)
+		audio_muted = value is bool and value
 func set_debug_mode(enabled: bool):
 	debug_mode = enabled
+	save_settings()
+func set_audio_muted(muted: bool):
+	audio_muted = muted
+	save_settings()
+func save_settings():
 	var config = ConfigFile.new()
 	config.set_value("settings", "debug_mode", debug_mode)
+	config.set_value("settings", "audio_muted", audio_muted)
 	save_error = config.save(SAVE)
 	if OS.has_feature("web"):
 		var encoded = JSON.stringify(config.encode_to_text())

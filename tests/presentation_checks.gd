@@ -40,7 +40,12 @@ func run():
 	before = game.collection.duplicate();game.handle_click(game.route.footer_rect(0).get_center())
 	check(game.collection == before and not game.card_picker.active, "upgrade modal blocks underlying map")
 	game.presentation.tick(0.5);check(game.presentation.active(), "old to new transition has readable duration")
-	game.presentation.tick(1.31);check(not game.presentation.active(), "upgrade returns automatically")
+	game.presentation.tick(0.55);check(game.presentation.active(), "new face begins after old hold and flip")
+	var release = InputEventScreenTouch.new();release.pressed = false
+	game.presentation.input_event(release)
+	check(game.presentation.active(), "tap cannot skip the new-card reading window")
+	game.presentation.tick(0.94);check(game.presentation.active(), "upgrade remains visible until the full two seconds")
+	game.presentation.tick(0.02);check(not game.presentation.active(), "upgrade returns automatically at two seconds")
 	check(game.route.resume() and game.collection == before and not game.presentation.active(), "reload never rerolls or repeats upgrade")
 	# Read-only deck browsing preserves physical copies and map camera exactly.
 	game.route.selected_node = -1;game.route.scroll_y = 123

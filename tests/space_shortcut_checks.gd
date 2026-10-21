@@ -73,7 +73,7 @@ func check_combat_keys():
 	check(game.turn == turn + 2 and game.history.entries.size() == 2, "a fresh Space press after release can end the next turn once")
 
 func check_context_guards():
-	for screen in ["home", "skill_selection", "debug_menu", "tutorial_menu", "tutorial_pause", "tutorial_complete", "route_choice"]:
+	for screen in ["home", "settings", "skill_selection", "debug_menu", "tutorial_menu", "tutorial_pause", "tutorial_complete", "route_choice"]:
 		fresh();game.screen = screen
 		var before = unchanged_state()
 		key(KEY_SPACE)

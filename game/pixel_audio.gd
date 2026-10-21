@@ -1,4 +1,5 @@
 extends Node
+signal mute_changed(muted: bool)
 
 const RATE = 44100
 const CUES = {
@@ -28,9 +29,13 @@ func _ready():
 func unlock():
 	unlocked = true
 func toggle_mute():
-	muted = not muted
+	set_muted(not muted)
+func set_muted(value: bool):
+	if muted == value: return
+	muted = value
 	if muted:
 		for voice in voices: voice.stop()
+	mute_changed.emit(muted)
 func clear_playback():
 	for voice in voices: voice.stop()
 	played_events.clear();last_played.clear()

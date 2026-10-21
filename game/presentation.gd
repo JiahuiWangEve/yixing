@@ -28,15 +28,12 @@ func tick(delta: float):
 	if game.screen != context_screen or game.phase != context_phase: clear();return
 	elapsed += maxf(0, delta)
 	if kind == "victory" and elapsed >= 1.05: clear()
-	elif kind == "upgrade" and elapsed >= 1.8: clear()
+	elif kind == "upgrade" and elapsed >= 2.0: clear()
 	game.queue_redraw()
 func input_event(event) -> bool:
 	if not active(): return false
 	if game.screen != context_screen or game.phase != context_phase: clear();return false
-	if kind == "upgrade" and elapsed >= 0.9:
-		if event is InputEventScreenTouch and not event.pressed: clear()
-		elif event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT: clear()
-		elif event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE, KEY_ESCAPE]: clear()
+	# Keep both reading windows intact; only the two-second timer dismisses.
 	return true
 func draw():
 	if not active(): return
@@ -55,7 +52,7 @@ func draw():
 		return
 	var dimensions = Vector2(260,310)
 	if game.compact_landscape: dimensions = Vector2(220,270)
-	var progress = clampf((elapsed - 0.32) / 0.46, 0, 1)
+	var progress = clampf((elapsed - 0.6) / 0.45, 0, 1)
 	var id = old_id if progress < 0.5 else new_id
 	var scale_x = maxf(0.035, absf(cos(progress * PI)))
 	var position = center - dimensions * 0.5
@@ -68,4 +65,4 @@ func draw():
 	game.text_at(Vector2(center.x-width*0.5, position.y-24), title,24,game.THEME.HEADING)
 	var label = "第%d张 · %s" % [card_index+1, "伤害与效果已更新" if progress >= 0.5 else "被选中的永久牌"]
 	game.text_at(Vector2(center.x-120,position.y+dimensions.y+30),label,18,game.THEME.LIGHT)
-	if elapsed >= 0.9: game.text_at(Vector2(center.x-115,position.y+dimensions.y+58),"轻点继续 · 稍后自动返回",17,game.THEME.LIGHT)
+	if elapsed >= 1.05: game.text_at(Vector2(center.x-115,position.y+dimensions.y+58),"强化完成 · 稍后自动返回",17,game.THEME.LIGHT)
