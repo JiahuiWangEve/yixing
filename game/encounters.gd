@@ -78,7 +78,7 @@ static func details(config: Dictionary) -> String:
 			text += "反扑：敌将首次受伤存活，现存士象卒各获得1次加速行动，仅一次。\n"
 		else: text += RULE_TEXT[rule] + "\n"
 	if config.get("tier", "") == "boss":
-		text += "每回合最多移动一次，加速叠加顺延。成功移动消耗1次；定身、堵路或攻击留位时保留。镇四方同时延迟加速2轮；移动不额外攻击。"
+		text += "每轮最多移动一次，加速叠加顺延。移动或战术留守耗1次；定身、堵路、攻击留位保留。镇四方延迟加速2轮；移动不额外攻击。"
 	return text.strip_edges()
 
 static func selected_guard(game) -> int:

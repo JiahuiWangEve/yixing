@@ -370,6 +370,10 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 		if not enemy.get("uid") is int or enemy.uid < 1 or ids.has(enemy.uid) or enemy.uid >= battle.next_enemy_uid: return false
 		for counter in ["action_credits", "action_credit_delay"]:
 			if enemy.has(counter) and (not enemy[counter] is int or enemy[counter] < 0): return false
+		if enemy.has("ai_recent"):
+			if not enemy.ai_recent is Array or enemy.ai_recent.size()>2: return false
+			for position_value in enemy.ai_recent:
+				if not position_value is Vector2i or not game.R.inside(position_value): return false
 		ids[enemy.uid] = true
 	for bleed in battle.pending_bleeds:
 		if not bleed is Dictionary or not bleed.get("enemy_uid") is int or not bleed.get("amount") is int: return false

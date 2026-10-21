@@ -50,3 +50,7 @@ run map-performance --script "$root/tests/map_performance_checks.gd"
 run enemy-encounters --script "$root/tests/enemy_encounter_checks.gd"
 
 run boss-action-credits --script "$root/tests/boss_action_credit_checks.gd"
+
+run cannon-planner --script "$root/tests/cannon_planner_checks.gd"
+
+run cannon-fixtures --script "$root/tests/cannon_visual_capture.gd"

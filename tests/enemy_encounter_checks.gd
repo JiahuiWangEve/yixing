@@ -108,7 +108,7 @@ func check_templates():
 				var options = R.moves(enemy, game.enemies, game.player)
 				var before = game.enemies.duplicate(true)
 				var choice = game.ENEMY_AI.choose(enemy, options, game.enemies, game.player, game.rng)
-				check(choice in options or (options.is_empty() and choice == Vector2i(-1, -1)), "AI chooses legal option " + id + " " + enemy.kind)
+				check(choice in options or (not options.is_empty() and choice == enemy.pos and enemy.stun == 0) or (options.is_empty() and choice == Vector2i(-1, -1)), "AI chooses legal movement or voluntary hold " + id + " " + enemy.kind)
 				check(game.enemies == before, "AI scoring is read-only")
 			check(general == 1 and not R.threatened(Vector2i(4, 9), game.enemies), id + " safe opening and one general")
 	var a = RandomNumberGenerator.new();var b = RandomNumberGenerator.new();a.seed = 9381;b.seed = 9381
@@ -264,10 +264,16 @@ func check_actual_modifiers():
 	pawn = game.enemies[index_of(game.encounter_state.signal_uid)]
 	var cannon = game.enemies[index_of(game.encounter_state.cannon_uid)]
 	game.enemies = [game.enemies[0], pawn, cannon]
+	# Joint direct threat requires the signal pawn to cross, not obey a stale intent.
+	game.player = Vector2i(4, 5);pawn.pos = Vector2i(2, 4)
 	pawn.cd = 1;pawn.period = 2;pawn.intent = Vector2i(2, 5)
-	cannon.pos = Vector2i(0, 2);cannon.cd = 1;cannon.period = 1;cannon.intent = Vector2i(1, 2)
+	cannon.pos = Vector2i(0, 0);cannon.cd = 1;cannon.period = 1;cannon.intent = Vector2i(1, 0)
+	var rear_screen = add("stake", Vector2i(2, 7), 999);rear_screen.permanent = true
 	game.clear_effects();game.end_turn()
-	check(game.encounter_state.river_triggered and move_effects(cannon.uid) == 1 and cannon.bonus_pending, "pawn before cannon in array still cannot grant same-phase river bonus")
+	check(game.encounter_state.river_triggered and move_effects(cannon.uid) == 1 and cannon.bonus_pending, "signal pawn crossing grants pending bonus but no extra cannon move in crossing phase")
+	# Move away from the formed front line: the rear screen gives the cannon a
+	# useful relocation this phase, so consuming the armed bonus is observable.
+	game.player = Vector2i(4, 7)
 	game.clear_effects();cannon.intent = Vector2i(1, 3);game.end_turn()
 	check(move_effects(cannon.uid) == 2 and not cannon.bonus_pending, "river cannon consumes bonus next phase")
 	fixture("horse_cannon", "elite", ["horse_relay"]);game.encounter_state.phases = 4;game.encounter_state.spawn_cell = Vector2i(0, 0)
@@ -414,15 +420,14 @@ func check_reactive_decision():
 	rook.intent = Vector2i(0, 2);second.intent = first_target
 	game.end_turn()
 	check(rook.pos == first_target and second.pos == second_target and rook.pos != second.pos, "later rook reacts to earlier rook occupancy")
-	# A pawn screen changes the hypothetical cannon position scores before cannon acts.
-	fixture();game.enemies = [game.enemies[0]];game.encounter_state = {};game.enemies[0].pos = Vector2i(3, 0);game.player = Vector2i(4, 9)
-	var pawn = add("p", Vector2i(4, 3), 1);var cannon = add("c", Vector2i(0, 0), 1)
-	random = cloned_rng();board = game.enemies.duplicate(true)
-	var pawn_copy: Dictionary = board[1];var cannon_copy: Dictionary = board[2]
-	pawn_copy.pos = game.ENEMY_AI.choose(pawn_copy, R.moves(pawn_copy, board, game.player), board, game.player, random)
-	var cannon_target = game.ENEMY_AI.choose(cannon_copy, R.moves(cannon_copy, board, game.player), board, game.player, random)
-	cannon.intent = alternative_legal(cannon, cannon_target);game.end_turn()
-	check(pawn.pos == pawn_copy.pos and cannon.pos == cannon_target, "cannon reacts to current friendly screen position")
+	# Recompute a joint cannon/support decision from the current board, not old intents.
+	fixture();game.enemies = [game.enemies[0]];game.encounter_state = {};game.enemies[0].pos = Vector2i(3, 0);game.player = Vector2i(4, 5)
+	var pawn = add("p", Vector2i(2, 4), 3);var cannon = add("c", Vector2i(0, 0), 3)
+	pawn.cd = 1;cannon.cd = 1
+	# Both actor-alone choices fail: only a freshly coordinated screen creates threat.
+	cannon.intent = Vector2i(1, 0);pawn.intent = Vector2i(2, 4)
+	game.end_turn()
+	check(pawn.pos == Vector2i(2, 5) and cannon.pos == Vector2i(0, 5) and R.attacks(cannon, game.player, game.enemies), "cannon reacts to current friendly screen and ignores stale destination")
 	# Frozen and unready pieces do not make a hidden random decision.
 	rook = isolated_mover("r", Vector2i(0, 0));rook.cd = 2;rook.intent = Vector2i(0, 5)
 	old_rng = game.rng.state;game.end_turn();check(rook.pos == Vector2i(0, 0) and game.rng.state == old_rng, "not-ready piece neither moves nor rolls a destination")

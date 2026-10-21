@@ -642,6 +642,7 @@
     "game/SITE_BUILD_INFO.json",
     "game/assets/audio/wood_paper/approved_manifest.json",
     "game/campaign.gd",
+    "game/cannon_planner.gd",
     "game/card_input.gd",
     "game/encounters.gd",
     "game/enemy_ai.gd",

@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.10.1"
+const BUILD_VERSION = "v0.11.0"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -791,36 +791,63 @@ func end_turn():
 	var credit_mode = ENCOUNTERS.uses_action_credits(self)
 	ENCOUNTERS.prepare_phase(self)
 	var rotating_guard = ENCOUNTERS.selected_guard(self) if ENCOUNTERS.has_rule(self, "palace_rotation") and not credit_mode else -1
-	for i in enemies.size():
-		var e = enemies[i]
+	# Decide readiness once for the whole army, after attacks/recoil. Joint plans
+	# can then choose a legal support-first or cannon-first execution order.
+	var ready = {};var credit_ready_by_uid = {}
+	for e in enemies:
 		if e.kind == "stake" or e.stun > 0: continue
 		e.cd -= 1
 		var credit_delayed = credit_mode and int(e.get("action_credit_delay", 0)) > 0
 		if credit_delayed: e.action_credit_delay -= 1
 		var credit_ready = credit_mode and int(e.get("action_credits", 0)) > 0 and not credit_delayed
 		if e.cd <= 0 or credit_ready:
-			if e == attacker or e in blocked_attackers:
-				e.cd = e.period;continue
-			var options = R.moves(e, enemies, player)
-			# Decide now, using the latest player/recoil and earlier movers' board state.
-			var target: Vector2i = ENEMY_AI.choose(e, options, enemies, player, rng)
-			if e != attacker and e not in blocked_attackers and target in options:
-				var origin: Vector2i = e.pos
-				move_piece(e, cell_pos(origin), cell_pos(target), timeline, e.kind == "h")
-				timeline += 0.28;e.pos = target
-				ENCOUNTERS.after_normal_move(self, e, origin)
-				if credit_ready: e.action_credits -= 1
-				var pending = e.get("bonus_pending", false) and int(e.get("bonus_after_phase", 0)) <= int(encounter_state.get("phases", 0))
-				var double_move = ENCOUNTERS.has_rule(self, "double_step") and e.get("march_mark", false) and int(e.get("normal_moves", 0)) % 2 == 0
-				if not credit_mode and (pending or double_move or (rotating_guard >= 0 and e.get("uid", -1) == rotating_guard)):
-					# Multiple rules grant at most one extra legal move; no recursive triggers.
-					if pending: e.bonus_pending = false
-					var extra_options = R.moves(e, enemies, player)
-					var extra = ENEMY_AI.choose(e, extra_options, enemies, player, rng)
-					if extra in extra_options:
-						move_piece(e, cell_pos(e.pos), cell_pos(extra), timeline, e.kind == "h")
-						timeline += 0.28;e.pos = extra
-			e.cd = e.period
+			if e == attacker or e in blocked_attackers: e.cd = e.period;continue
+			ready[e.uid] = true;credit_ready_by_uid[e.uid] = credit_ready
+	var next_rotation = -1
+	if credit_mode and ENCOUNTERS.has_rule(self,"palace_rotation"):
+		var guards = []
+		for ally in enemies:
+			if ally.uid in encounter_state.guard_uids: guards.append(ally.uid)
+		if not guards.is_empty(): next_rotation = guards[(int(encounter_state.phases)+1)%guards.size()]
+	var ai_context = {"next_rotation_uid":next_rotation,"player_skill":player_skill,"artillery_mode":artillery_mode,"credit_mode":credit_mode,"credit_ready":credit_ready_by_uid}
+	var coordination = ENEMY_AI.CP.plan(enemies,player,ready,ai_context) if not tutorial.active else {"order":ready.keys(),"targets":{}}
+	var extra_queue = []
+	for uid in coordination.order:
+		var index = ENEMY_AI.CP.by_uid(enemies,uid)
+		if index < 0: continue
+		var e = enemies[index]
+		var options = R.moves(e,enemies,player)
+		var target: Vector2i = coordination.targets.get(uid,Vector2i(-1,-1))
+		var deliberate_hold = target == e.pos and not options.is_empty()
+		if not deliberate_hold and target not in options:
+			target = ENEMY_AI.choose(e,options,enemies,player,rng,ai_context,not tutorial.active)
+			deliberate_hold = target == e.pos and not options.is_empty()
+		if deliberate_hold:
+			# A voluntary tactical hold completes one action; inability to move does not.
+			if credit_ready_by_uid.get(uid,false): e.action_credits -= 1
+		elif target in options:
+			var origin: Vector2i = e.pos
+			move_piece(e,cell_pos(origin),cell_pos(target),timeline,e.kind == "h")
+			timeline += 0.28;e.pos = target;ENEMY_AI.CP.remember(e,origin)
+			ENCOUNTERS.after_normal_move(self,e,origin)
+			if credit_ready_by_uid.get(uid,false): e.action_credits -= 1
+			var pending = e.get("bonus_pending",false) and int(e.get("bonus_after_phase",0)) <= int(encounter_state.get("phases",0))
+			var double_move = ENCOUNTERS.has_rule(self,"double_step") and e.get("march_mark",false) and int(e.get("normal_moves",0)) % 2 == 0
+			if not credit_mode and (pending or double_move or (rotating_guard >= 0 and e.uid == rotating_guard)):
+				if pending: e.bonus_pending = false
+				extra_queue.append(uid)
+		e.cd = e.period
+	# Complete coordinated normal moves before evaluating any elite follow-up.
+	for uid in extra_queue:
+		var index = ENEMY_AI.CP.by_uid(enemies,uid)
+		if index < 0: continue
+		var e = enemies[index]
+		var extra_options = R.moves(e,enemies,player)
+		var extra = ENEMY_AI.choose(e,extra_options,enemies,player,rng,ai_context,false)
+		if extra in extra_options:
+			var extra_origin: Vector2i = e.pos
+			move_piece(e,cell_pos(e.pos),cell_pos(extra),timeline,e.kind == "h")
+			timeline += 0.28;e.pos = extra;ENEMY_AI.CP.remember(e,extra_origin)
 	for e in enemies:
 		if e.stun > 0: e.stun -= 1
 	if ENCOUNTERS.active(self): ENCOUNTERS.finish_phase(self, timeline)

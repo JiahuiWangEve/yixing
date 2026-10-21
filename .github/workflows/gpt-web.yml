@@ -48,7 +48,7 @@ jobs:
           PY
       - name: Install browser test runtime
         run: |
-          python3 -m pip install playwright==1.55.0
+          python3 -m pip install playwright==1.55.0 pillow==11.3.0
           python3 -m playwright install --with-deps chromium
       - name: Verify real Web map flows at four sizes
         run: |
@@ -56,6 +56,8 @@ jobs:
           trap 'kill $!' EXIT
           if ! python3 tests/browser_map_checks.py > build/browser.log 2>&1; then cat build/browser.log; exit 1; fi
           cat build/browser.log
+          if ! python3 tests/browser_cannon_checks.py > build/cannon-browser.log 2>&1; then cat build/cannon-browser.log; exit 1; fi
+          cat build/cannon-browser.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,7 +68,9 @@ jobs:
             build/export.log
             build/package-audit.log
             build/browser.log
-            verification/v0.10.1/browser/
+            build/cannon-browser.log
+            verification/v0.11.0/cannon/
+            verification/v0.11.0/browser/
             verification/latest/
           include-hidden-files: true
       - name: Commit Web export to gh-pages
