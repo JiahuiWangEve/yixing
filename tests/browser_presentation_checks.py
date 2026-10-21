@@ -2,6 +2,7 @@ from browser_settings import install_debug_settings
 """Capture visible old/new card and victory seal before reward UI on real Web."""
 import asyncio, base64, io, json, os, shutil, time
 from PIL import Image, ImageChops, ImageStat
+from presentation_image_checks import seal_score
 from playwright.async_api import async_playwright
 from browser_event_checks import ROOT, KEY, parse, boot
 OUT=ROOT/'verification/v0.14.3/presentation';URL=os.environ.get('YIXING_TEST_URL','http://127.0.0.1:8765')
@@ -22,29 +23,36 @@ async def main():
                 await page.add_init_script('if(!sessionStorage.getItem("qa")){localStorage.setItem(%s,%s);sessionStorage.setItem("qa","1")}'%(json.dumps(KEY),json.dumps(fixture)))
                 await page.goto(URL);await boot(page);await tap(r['resume']);await page.wait_for_timeout(400)
                 if mode=='victory':
+                    baseline=await page.screenshot()
                     cdp=await context.new_cdp_session(page);frames=[];ack_tasks=[]
                     def receive_seal_frame(event):
                         frames.append(base64.b64decode(event['data']))
                         ack_tasks.append(asyncio.create_task(cdp.send('Page.screencastFrameAck',{'sessionId':event['sessionId']})))
                     cdp.on('Page.screencastFrame',receive_seal_frame)
                     await cdp.send('Page.startScreencast',{'format':'jpeg','quality':80,'maxWidth':640,'maxHeight':640,'everyNthFrame':1})
-                    def red_pixels(data):
-                        im=Image.open(io.BytesIO(data)).convert('RGB');crop=im.crop((int(im.width*.25),int(im.height*.25),int(im.width*.75),int(im.height*.75)))
-                        return sum(1 for rr,g,b in crop.getdata() if rr>110 and rr>g*1.8 and rr>b*1.8)
+                    def red_pixels(data):return seal_score(data,baseline,(uw,uh))
+                    assert red_pixels(baseline)==0,'Pre-action red general must not be recognized as a victory seal'
                     await tap(r['skip'])
-                    cursor=0;seen_seal=False;finished=False;deadline=time.monotonic()+20
+                    cursor=0;seen_seal=False;finished=False;blocked_checked=False;deadline=time.monotonic()+20
                     while not finished and time.monotonic()<deadline:
                         while cursor<len(frames):
                             count=red_pixels(frames[cursor]);cursor+=1
-                            if count>150:seen_seal=True
-                            elif seen_seal:finished=True
+                            if count>1000:
+                                seen_seal=True
+                                if not blocked_checked:
+                                    settled=await state()
+                                    await tap((920,405) if w==1280 else (240,442))
+                                    assert await state()==settled,'Reward input leaked through visible victory seal'
+                                    blocked_checked=True
+                            elif seen_seal and count==0:finished=True
                         if not finished:await asyncio.sleep(.05)
                     await cdp.send('Page.stopScreencast');await asyncio.gather(*ack_tasks);await cdp.detach()
                     assert finished,('victory display did not visibly finish',w,len(frames))
                     s=await state();assert s['phase']=='reward'
+                    (output/f"{r['name']}-victory-red-counts.json").write_text(json.dumps([red_pixels(frame) for frame in frames]))
                     assert frames,('no victory compositor frames',w)
                     data=max(frames,key=red_pixels);red=red_pixels(data)
-                    assert red>150,('victory seal not visible in any frame',w,red,len(frames))
+                    assert red>1000,('victory seal not visible in any frame',w,red,len(frames))
                     Image.open(io.BytesIO(data)).save(output/f"{r['name']}-{mode}-seal-before-reward.png")
                     await shot('reward-after-seal');assert await state()==s
                     await page.reload();await boot(page);await tap(r['resume']);await page.wait_for_timeout(450);await shot('reload-no-second-seal');assert await state()==s
