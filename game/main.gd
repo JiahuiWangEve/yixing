@@ -74,6 +74,24 @@ var touch_dragged = false
 var touch_seen = false
 var delivering_touch = false
 var last_window_size = Vector2i.ZERO
+# Godot Web may translate DOM touchcancel into a normal release. Capture the
+# browser cancellation before that translation, so no cancel can commit a card.
+var web_cancel_callback = null
+var web_window = null
+const WEB_CANCEL_EVENTS = ["touchcancel", "pointercancel", "blur", "pagehide", "visibilitychange", "resize"]
+func install_web_input_cancel():
+	if not OS.has_feature("web"): return
+	web_window = JavaScriptBridge.get_interface("window")
+	web_cancel_callback = JavaScriptBridge.create_callback(on_web_input_cancel)
+	for event_name in WEB_CANCEL_EVENTS:
+		web_window.addEventListener(event_name, web_cancel_callback, true)
+func on_web_input_cancel(_arguments: Array):
+	cancel_gesture()
+func _exit_tree():
+	if web_window == null or web_cancel_callback == null: return
+	for event_name in WEB_CANCEL_EVENTS:
+		web_window.removeEventListener(event_name, web_cancel_callback, true)
+	web_cancel_callback = null;web_window = null
 func configure_layout(size: Vector2):
 	cancel_gesture()
 	mobile_layout = size.x < 800 or size.x < size.y * 0.95 or (size.x < 1100 and size.y < 500) or OS.has_feature("web_android") or OS.has_feature("web_ios")
@@ -346,6 +364,7 @@ func damage_enemy(idx: int, impact_delay: float = 0.12, amount: int = 1, before_
 	return false
 
 func _ready():
+	install_web_input_cancel()
 	add_child(audio_system)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	configure_layout(Vector2(1280, 940))
