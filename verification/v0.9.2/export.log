@@ -1,0 +1,109 @@
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Started Project initialization (5 steps)[39m[0m
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Scanning file structure...[39m[0m
+[  16% ] [90m[1mfirst_scan_filesystem[22m | Loading global class names...[39m[0m
+[  33% ] [90m[1mfirst_scan_filesystem[22m | Verifying GDExtensions...[39m[0m
+[  50% ] [90m[1mfirst_scan_filesystem[22m | Creating autoload scripts...[39m[0m
+[  66% ] [90m[1mfirst_scan_filesystem[22m | Initializing plugins...[39m[0m
+[  83% ] [90m[1mfirst_scan_filesystem[22m | Starting file scan...[39m[0m
+[92m[ DONE ][39m [1mfirst_scan_filesystem[22m
+[0m
+[   0% ] [90m[1msavepack[22m | Started Packing (102 steps)[39m[0m
+[   1% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/01_land.wav-72eb2501ec381c62aa4d768f008eb263.sample[39m[0m
+[   1% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/01_land.wav.import[39m[0m
+[   3% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/02_draw.wav-43b66c454186ef3a03fce4fcefd6f0f4.sample[39m[0m
+[   3% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/02_draw.wav.import[39m[0m
+[   5% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/03_select.wav-78ba7f31a19a70656a03242761f70318.sample[39m[0m
+[   5% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/03_select.wav.import[39m[0m
+[   7% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/04_use.wav-efb2f440c19d627267b82b864d00e765.sample[39m[0m
+[   7% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/04_use.wav.import[39m[0m
+[   9% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/05_hit.wav-538e73c770300112d3fbf37d0f19b748.sample[39m[0m
+[   9% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/05_hit.wav.import[39m[0m
+[  11% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/06_death.wav-4e0a5b902268d3e4da3d850967dfc19e.sample[39m[0m
+[  11% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/06_death.wav.import[39m[0m
+[  13% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/07_hurt.wav-6a390a94125796428fcf6b941df40450.sample[39m[0m
+[  13% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/07_hurt.wav.import[39m[0m
+[  15% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/08_stun.wav-ce5703c710657cba2a9009892a20a4b6.sample[39m[0m
+[  15% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/08_stun.wav.import[39m[0m
+[  17% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/09_push.wav-ae1bf00023ad7d6ce8817804585aa233.sample[39m[0m
+[  17% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/09_push.wav.import[39m[0m
+[  19% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/10_heal.wav-2a6b3fe0c60e5f4e7aca43b97e1c2bd5.sample[39m[0m
+[  19% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/10_heal.wav.import[39m[0m
+[  21% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/11_spawn.wav-fb3ebacfb4f117fc4d049543b09faafb.sample[39m[0m
+[  21% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/11_spawn.wav.import[39m[0m
+[  23% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/12_victory.wav-071b3a11d2f089c058de3fe60ae338c7.sample[39m[0m
+[  23% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/12_victory.wav.import[39m[0m
+[  26% ] [90m[1msavepack[22m | Storing File: res://assets/audio/wood_paper/approved_manifest.json[39m[0m
+[  28% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/battle.svg-4a38119e4801e1c6a73334e0ecc7c923.ctex[39m[0m
+[  28% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/battle.svg.import[39m[0m
+[  30% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/boss.svg-bf59827fd65f128176244819dd7f582d.ctex[39m[0m
+[  30% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/boss.svg.import[39m[0m
+[  32% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/camp.svg-f99ac78157cdeb7e6f38c6d3e6552ee1.ctex[39m[0m
+[  32% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/camp.svg.import[39m[0m
+[  33% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/elite.svg-cf1516d2b1f76e2392792ffd1cdd4d7c.ctex[39m[0m
+[  33% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/elite.svg.import[39m[0m
+[  35% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/event.svg-d30d7cd4176dcb967ae48018a98cf24b.ctex[39m[0m
+[  35% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/event.svg.import[39m[0m
+[  37% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/fields.svg-2c441add6d09e8a06d3d7151f5aa4e92.ctex[39m[0m
+[  37% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/fields.svg.import[39m[0m
+[  39% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/mountains.svg-f699a54d78f44558db12b4b720f7a268.ctex[39m[0m
+[  39% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/mountains.svg.import[39m[0m
+[  41% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/outpost.svg-75d59fe59b417e9c3e28b95bdbb44604.ctex[39m[0m
+[  41% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/outpost.svg.import[39m[0m
+[  43% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/river.svg-45327ab30f248b4c11fff4313074d74c.ctex[39m[0m
+[  43% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/river.svg.import[39m[0m
+[  45% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/victory_seal.svg-ad45977296b2006ff8b301a69da9d8da.ctex[39m[0m
+[  45% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/victory_seal.svg.import[39m[0m
+[  47% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/workshop.svg-f94899e8fdc8a2d5c30beca6a7eb7f5a.ctex[39m[0m
+[  47% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/workshop.svg.import[39m[0m
+[  50% ] [90m[1msavepack[22m | Storing File: res://tutorial.gdc[39m[0m
+[  52% ] [90m[1msavepack[22m | Storing File: res://undo_history.gdc[39m[0m
+[  54% ] [90m[1msavepack[22m | Storing File: res://assets/FONT_LICENSE.txt[39m[0m
+[  56% ] [90m[1msavepack[22m | Storing File: res://.godot/imported/font-subset.otf-18a16f768a9008e5b2429c474754b1ce.fontdata[39m[0m
+[  56% ] [90m[1msavepack[22m | Storing File: res://assets/font-subset.otf.import[39m[0m
+[  58% ] [90m[1msavepack[22m | Storing File: res://assets/map/seals/FONT_LICENSE.txt[39m[0m
+[  60% ] [90m[1msavepack[22m | Storing File: res://campaign.gdc[39m[0m
+[  62% ] [90m[1msavepack[22m | Storing File: res://card_input.gdc[39m[0m
+[  64% ] [90m[1msavepack[22m | Storing File: res://enemy_ai.gdc[39m[0m
+[  66% ] [90m[1msavepack[22m | Storing File: res://fan_hand.gdc[39m[0m
+[  67% ] [90m[1msavepack[22m | Storing File: res://free_move_card.gdc[39m[0m
+[  69% ] [90m[1msavepack[22m | Storing File: res://frontend.gdc[39m[0m
+[  71% ] [90m[1msavepack[22m | Storing File: res://main.gdc[39m[0m
+[  74% ] [90m[1msavepack[22m | Storing File: res://.godot/exported/133200997/export-3070c538c03ee49b7677ff960a3f5195-main.scn[39m[0m
+[  76% ] [90m[1msavepack[22m | Storing File: res://pixel_audio.gdc[39m[0m
+[  78% ] [90m[1msavepack[22m | Storing File: res://player_skills.gdc[39m[0m
+[  80% ] [90m[1msavepack[22m | Storing File: res://reward_choice.gdc[39m[0m
+[  82% ] [90m[1msavepack[22m | Storing File: res://route_map.gdc[39m[0m
+[  84% ] [90m[1msavepack[22m | Storing File: res://rules.gdc[39m[0m
+[  86% ] [90m[1msavepack[22m | Storing File: res://SITE_BUILD_INFO.json[39m[0m
+[  88% ] [90m[1msavepack[22m | Storing File: res://sound_preview.gdc[39m[0m
+[  90% ] [90m[1msavepack[22m | Storing File: res://start_profiles.gdc[39m[0m
+[  92% ] [90m[1msavepack[22m | Storing File: res://tactics.gdc[39m[0m
+[  94% ] [90m[1msavepack[22m | Storing File: res://test_support.gdc[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://theme.gdc[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://tutorial.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://undo_history.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://campaign.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://card_input.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://enemy_ai.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://fan_hand.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://free_move_card.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://frontend.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://main.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://main.tscn.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://pixel_audio.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://player_skills.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://reward_choice.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://route_map.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://rules.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://sound_preview.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://start_profiles.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://tactics.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://test_support.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://theme.gd.remap[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://.godot/global_script_class_cache.cfg[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://.godot/uid_cache.bin[39m[0m
+[  96% ] [90m[1msavepack[22m | Storing File: res://project.binary[39m[0m
+[92m[ DONE ][39m [1msavepack[22m
+[0m

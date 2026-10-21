@@ -5,7 +5,7 @@ import asyncio, json, os, re, shutil
 from pathlib import Path
 from playwright.async_api import async_playwright
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'verification/v0.9.1/browser'
+OUT = ROOT / 'verification/v0.9.2/browser'
 OUT.mkdir(parents=True, exist_ok=True)
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
 XS = [.46,.15,.50,.85,.22,.76,.53,.13,.48,.86,.24,.73,.15,.49,.84,.79]
@@ -72,6 +72,26 @@ async def main():
    # v0.6.0 reward selector: third choice is Skip, not the older add-card footer.
    skip_reward=(920,405) if w==1280 else ((792,257) if side else (240,442))
    await tap(*skip_reward,500); await state('map',0,-1); await shot('returned')
+   # Idle map frames must stay visually stable; touch drag must scroll without selecting.
+   baseline=await page.screenshot()
+   await page.wait_for_timeout(150)
+   assert await page.screenshot()==baseline, 'Idle map should be visually stable'
+   cdp=await context.new_cdp_session(page)
+   dx=ox+(mx+mw*.48)*scale; dy=oy+(my+mh*.28)*scale
+   await cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':dx,'y':dy}]})
+   for step in range(1,13):
+    await cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':dx,'y':dy+step*10*scale}]})
+    await page.wait_for_timeout(16)
+   await cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
+   await page.wait_for_timeout(100)
+   await state('map',0,-1)
+   assert await page.screenshot()!=baseline, 'Touch drag must change map scroll position'
+   await shot('touch-scrolled')
+   center=cancel if side else (uw-107,uh-48)
+   await tap(*center)
+   assert await page.screenshot()==baseline, 'Focus-current restores exact static map after drag'
+   frame_deltas=await page.evaluate("""() => new Promise(resolve => {let last=null, values=[]; function tick(now) {if(last!==null) values.push(now-last);last=now;if(values.length<60) requestAnimationFrame(tick);else resolve(values);}requestAnimationFrame(tick);})""")
+   await cdp.detach()
    await tap(*node(1)); await tap(*confirm,350); await shot('march')
    await page.wait_for_timeout(700); await state('route_choice',0,1); await shot('event')
    await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
@@ -79,7 +99,7 @@ async def main():
    await shot('event-return'); await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
    await state('map',1,-1); await shot('map-resume')
    assert not errors,(w,errors)
-   reports.append({'viewport':[w,h],'errors':errors,'state_assertions':assertions,'keyboard_assertions':keyboard_assertions,'note':'Actual Web export: touch preview/cancel/confirm, duplicate suppression, battle reload, debug reward return, curved march, event reload/resolve, map refresh.'})
+   reports.append({'viewport':[w,h],'errors':errors,'state_assertions':assertions,'keyboard_assertions':keyboard_assertions,'map_performance':{'touch_scroll_checks':3,'idle_browser_raf_ms':frame_deltas},'note':'Actual Web export: touch preview/cancel/confirm, duplicate suppression, battle reload, debug reward return, curved march, event reload/resolve, map refresh.'})
    await context.close()
   await browser.close()
  (OUT/'browser-flow.json').write_text(json.dumps(reports,indent=2))

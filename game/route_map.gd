@@ -22,6 +22,53 @@ var stamp_node = -1
 var stamp_elapsed = STAMP_SECONDS
 var decoration_cache: Array = []
 var decoration_key = ""
+# Geometry is in content coordinates: dragging only translates cached ink.
+var road_cache: Dictionary = {}
+var road_cache_key = 0
+var road_cache_builds = 0
+var scenery_obstacles: Array[Rect2] = []
+var scenery_roads = PackedVector2Array()
+var road_segment_tests = 0
+var paper_lines = PackedVector2Array()
+var paper_size = Vector2.ZERO
+var redraw_key = 0
+func needs_redraw() -> bool:
+	var key = [game.screen, game.ui_size, game.mobile_layout, game.compact_landscape, save_error, state.hash(), choices.hash(), game.collection.hash(), selected_node, travel_target, stamp_node, travel_elapsed if travel_target >= 0 else 0.0, stamp_elapsed if stamp_node >= 0 and stamp_elapsed < STAMP_SECONDS else STAMP_SECONDS, scroll_y, deck_view, page].hash()
+	if key == redraw_key: return false
+	redraw_key = key
+	return true
+func ensure_road_cache():
+	var key = [game.ui_size, game.mobile_layout, game.compact_landscape, state.get("seed", 0), state.get("nodes", []).hash(), state.get("visited", []).hash()].hash()
+	if key == road_cache_key: return
+	road_cache_key = key;road_cache.clear();road_cache_builds += 1
+	scenery_obstacles.clear();scenery_roads.clear()
+	if not active(): return
+	var obstacles: Array[Rect2] = []
+	for node in state.nodes:
+		var reserved = hit_rect(node).merge(stamp_rect(node)).grow(24);reserved.position.y += scroll_y
+		scenery_obstacles.append(reserved)
+		var hit = hit_rect(node).grow(3);hit.position.y += scroll_y
+		obstacles.append(hit)
+		if node.id in state.visited:
+			var stamp = stamp_rect(node).grow(5);stamp.position.y += scroll_y
+			obstacles.append(stamp)
+	for node in state.nodes:
+		for next in node.next:
+			var target = state.nodes[next]
+			var from = content_point(node);var to = content_point(target)
+			for step in 41: scenery_roads.append(edge_point(from, to, step / 40.0))
+			var solid = PackedVector2Array();var dashed = PackedVector2Array()
+			for step in 80:
+				var p = edge_point(from, to, step / 80.0)
+				var q = edge_point(from, to, (step + 1) / 80.0)
+				var hidden = false
+				for obstacle in obstacles:
+					road_segment_tests += 1
+					if obstacle.has_point(p) or obstacle.has_point(q): hidden = true;break
+				if not hidden:
+					solid.append(p);solid.append(q)
+					if step % 6 < 4: dashed.append(p);dashed.append(q)
+			road_cache[Vector2i(node.id, next)] = {"solid": solid, "dashed": dashed, "from": from, "to": to, "bounds": Rect2(from, Vector2.ZERO).expand(to).grow(8)}
 const SAVE = "user://route_run_v080.cfg"
 const WEB_SAVE_KEY = "yixing.route_run.v080"
 const LABELS = {"battle": "战", "elite": "精", "camp": "营", "workshop": "坊", "event": "事", "outpost": "寨", "boss": "帅"}
@@ -368,17 +415,15 @@ func decoration_clear(rect: Rect2) -> bool:
 	# Decoration uses unscrolled content coordinates, never the current viewport.
 	var bounds = Rect2(map_rect().position + Vector2(14, 14), Vector2(map_rect().size.x - 28, content_height() - 28))
 	if not bounds.encloses(rect): return false
-	for node in state.nodes:
-		var reserved = hit_rect(node).merge(stamp_rect(node)).grow(24)
-		reserved.position.y += scroll_y
+	ensure_road_cache()
+	for reserved in scenery_obstacles:
 		if reserved.intersects(rect): return false
-		for next in node.next:
-			for step in 41:
-				var point = edge_point(content_point(node), content_point(state.nodes[next]), step / 40.0)
-				if rect.grow(18).has_point(point): return false
+	var corridor = rect.grow(18)
+	for point in scenery_roads:
+		if corridor.has_point(point): return false
 	return true
 func decoration_layout() -> Array:
-	var key = str(state.get("seed", 0)) + ":" + str(game.ui_size)
+	var key = str([state.get("seed", 0), game.ui_size, game.mobile_layout, game.compact_landscape, state.get("nodes", []).hash()].hash())
 	if key == decoration_key: return decoration_cache
 	decoration_key = key;decoration_cache = []
 	if not active(): return decoration_cache
@@ -398,14 +443,20 @@ func draw_paper():
 	var area = map_rect()
 	game.draw_rect(area, PAPER_LIGHT)
 	# Restrained neutral fibres, not brown vignette, burnt edges or parchment curls.
-	var random = RandomNumberGenerator.new();random.seed = 9631
-	for i in 420:
-		var p = area.position + Vector2(random.randf() * area.size.x, random.randf() * area.size.y)
-		var q = p + Vector2(random.randf_range(1, 5), random.randf_range(-2, 2))
-		game.draw_line(p, q, Color(0.35, 0.34, 0.29, 0.045), 0.7, true)
+	if paper_size != area.size:
+		paper_size = area.size;paper_lines.clear()
+		var random = RandomNumberGenerator.new();random.seed = 9631
+		for i in 420:
+			var p = Vector2(random.randf() * area.size.x, random.randf() * area.size.y)
+			var q = p + Vector2(random.randf_range(1, 5), random.randf_range(-2, 2))
+			paper_lines.append(p);paper_lines.append(q)
+	game.draw_set_transform(area.position)
+	game.draw_multiline(paper_lines, Color(0.35, 0.34, 0.29, 0.045), 0.7, true)
+	game.draw_set_transform(Vector2.ZERO)
 	for item in decoration_layout():
 		var r: Rect2 = item.rect
 		r.position.y -= scroll_y
+		if not r.grow(10).intersects(area): continue
 		var c = Color(0.20, 0.21, 0.18, 0.11)
 		if item.kind == "mountains":
 			for offset in [0.0, 0.32, 0.60]:
@@ -418,28 +469,25 @@ func draw_paper():
 		else:
 			for row in 4: game.draw_line(r.position + Vector2(0, row * r.size.y / 4), r.position + Vector2(r.size.x, row * r.size.y / 4 + 4), c, 1, true)
 			for col in 5: game.draw_line(r.position + Vector2(col * r.size.x / 5, 0), r.position + Vector2(col * r.size.x / 5 + 8, r.size.y), c, 1, true)
-func draw_route_edge(node: Dictionary, target: Dictionary):
+func draw_route_edge(node: Dictionary, target: Dictionary, cache_ready: bool = false):
+	if not cache_ready: ensure_road_cache()
+	var edge = road_cache[Vector2i(node.id, target.id)]
+	var bounds: Rect2 = edge.bounds;bounds.position.y -= scroll_y
+	if not bounds.intersects(map_rect()): return
 	var traversed = node.id in state.visited and target.id in state.visited
 	var available = node.id == state.current and target.id in legal()
 	var selected = available and target.id == selected_node
 	var color = INK if available or traversed else Color("a5a399")
-	var from = position(node);var to = position(target)
-	# Roads stop outside the symbols and their permanent labels. No opaque icon backing.
-	for step in 80:
-		if not traversed and step % 6 >= 4: continue
-		var p = edge_point(from, to, step / 80.0)
-		var q = edge_point(from, to, (step + 1) / 80.0)
-		var hidden = false
-		for obstacle in state.nodes:
-			if hit_rect(obstacle).grow(3).has_point(p) or hit_rect(obstacle).grow(3).has_point(q): hidden = true;break
-			if obstacle.id in state.visited and (stamp_rect(obstacle).grow(5).has_point(p) or stamp_rect(obstacle).grow(5).has_point(q)): hidden = true;break
-		if not hidden: game.draw_line(p, q, color, 2.4 if selected else (1.9 if available or traversed else 1.3), true)
+	var points: PackedVector2Array = edge.solid if traversed else edge.dashed
+	game.draw_set_transform(Vector2(0, -scroll_y))
+	if not points.is_empty(): game.draw_multiline(points, color, 2.4 if selected else (1.9 if available or traversed else 1.3), true)
 	if available:
-		var p = edge_point(from, to, 0.52)
-		var q = edge_point(from, to, 0.54)
+		var p = edge_point(edge.from, edge.to, 0.52)
+		var q = edge_point(edge.from, edge.to, 0.54)
 		var direction = (q - p).normalized()
 		game.draw_line(p - direction.rotated(0.65) * 7, p, INK, 1.8, true)
 		game.draw_line(p - direction.rotated(-0.65) * 7, p, INK, 1.8, true)
+	game.draw_set_transform(Vector2.ZERO)
 func draw_stamp(node: Dictionary):
 	var rect = stamp_rect(node)
 	var progress = clampf(stamp_elapsed / STAMP_SECONDS, 0, 1) if stamp_node == node.id else 1.0
@@ -480,9 +528,12 @@ func draw_piece():
 func draw_map():
 	var area = map_rect()
 	draw_paper()
+	ensure_road_cache()
 	for node in state.nodes:
-		for next in node.next: draw_route_edge(node, state.nodes[next])
-	for id in range(state.nodes.size() - 1, -1, -1): draw_landmark(state.nodes[id])
+		for next in node.next: draw_route_edge(node, state.nodes[next], true)
+	for id in range(state.nodes.size() - 1, -1, -1):
+		var node = state.nodes[id]
+		if hit_rect(node).merge(stamp_rect(node)).grow(24).intersects(area): draw_landmark(node)
 	draw_piece()
 	# Fixed opaque masks provide a strict visual viewport for the immediate-mode canvas.
 	game.draw_rect(Rect2(0, 0, game.ui_size.x, area.position.y), PAPER)

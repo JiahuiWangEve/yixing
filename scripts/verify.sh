@@ -44,3 +44,5 @@ run space-shortcut --script "$root/tests/space_shortcut_checks.gd"
 run seal-map --script "$root/tests/seal_map_checks.gd"
 
 run font-subset --script "$root/tests/font_subset_checks.gd"
+
+run map-performance --script "$root/tests/map_performance_checks.gd"

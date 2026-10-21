@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.9.1"
+const BUILD_VERSION = "v0.9.2"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -477,7 +477,12 @@ func _process(delta):
 	if tutorial.active and screen == "game":
 		tutorial.tick(delta)
 		if tutorial.lesson_complete and input_lock <= 0: screen = "tutorial_complete"
-	queue_redraw()
+	# Retain the static map canvas between input/animation changes. Battle still animates.
+	if screen not in ["map", "route_choice"]:
+		route.redraw_key = 0
+		queue_redraw()
+	elif route.needs_redraw():
+		queue_redraw()
 func cell_pos(p: Vector2i) -> Vector2: return O + Vector2(p) * CELL
 func board_cell(pos: Vector2) -> Vector2i:
 	var p = Vector2i(roundi((pos.x - O.x) / CELL), roundi((pos.y - O.y) / CELL))

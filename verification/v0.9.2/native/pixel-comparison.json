@@ -1,0 +1,50 @@
+[
+  {
+    "old": "verification/v0.9.1/native/map-1280.png",
+    "new": "verification/v0.9.2/native/map-1280.png",
+    "changed_pixels": 91,
+    "total_pixels": 1203200,
+    "max_channel_delta": 131,
+    "mean_abs_channel_delta": 0.002712211879432624
+  },
+  {
+    "old": "verification/v0.9.1/native/stamp-static-390.png",
+    "new": "verification/v0.9.2/native/stamp-static-390.png",
+    "changed_pixels": 22,
+    "total_pixels": 329160,
+    "max_channel_delta": 1,
+    "mean_abs_channel_delta": 2.329161096933609e-05
+  },
+  {
+    "old": "verification/v0.9.0/native/map-1280.png",
+    "new": "verification/v0.9.2/native/map-1280.png",
+    "changed_pixels": 115,
+    "total_pixels": 1203200,
+    "max_channel_delta": 131,
+    "mean_abs_channel_delta": 0.0036920988475177305
+  },
+  {
+    "old": "verification/v0.9.0/native/stamp-static-390.png",
+    "new": "verification/v0.9.2/native/stamp-static-390.png",
+    "changed_pixels": 22,
+    "total_pixels": 329160,
+    "max_channel_delta": 1,
+    "mean_abs_channel_delta": 2.329161096933609e-05
+  },
+  {
+    "old": "verification/v0.9.0/native/stamp-static-844.png",
+    "new": "verification/v0.9.2/native/stamp-static-844.png",
+    "changed_pixels": 8,
+    "total_pixels": 329160,
+    "max_channel_delta": 1,
+    "mean_abs_channel_delta": 8.10142990237777e-06
+  },
+  {
+    "old": "verification/v0.9.0/native/summit-360.png",
+    "new": "verification/v0.9.2/native/summit-360.png",
+    "changed_pixels": 1,
+    "total_pixels": 230400,
+    "max_channel_delta": 1,
+    "mean_abs_channel_delta": 1.4467592592592592e-06
+  }
+]

@@ -1,0 +1,1 @@
+PASS font corpus guard: literals, Unicode escapes, numeric codepoints, ASCII, rejects unknown dynamic chars

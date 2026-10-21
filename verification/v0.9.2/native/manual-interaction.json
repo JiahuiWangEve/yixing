@@ -1,0 +1,12 @@
+{
+  "environment": "Cloud Linux Godot 4.6.3 native llvmpipe; not physical phone",
+  "actions": [
+    "Start fresh run",
+    "Drag map down about 200 screen pixels",
+    "Focus-current restored initial map position",
+    "Select starting node and inspect updated detail panel",
+    "Cancel selection",
+    "Stop game and return editor to Project Manager"
+  ],
+  "result": "All visibly responded; no native frame-time measurement performed"
+}

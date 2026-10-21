@@ -1,0 +1,54 @@
+{
+  "assertions": 108,
+  "screenshots": 40,
+  "viewports": [
+    {
+      "assertions": 27,
+      "logical_size": [
+        1280.0,
+        940.0
+      ],
+      "rendered_screens": 10,
+      "viewport": [
+        1280,
+        940
+      ]
+    },
+    {
+      "assertions": 27,
+      "logical_size": [
+        480.0,
+        1038.76928710938
+      ],
+      "rendered_screens": 10,
+      "viewport": [
+        390,
+        844
+      ]
+    },
+    {
+      "assertions": 27,
+      "logical_size": [
+        960.0,
+        540.0
+      ],
+      "rendered_screens": 10,
+      "viewport": [
+        844,
+        390
+      ]
+    },
+    {
+      "assertions": 27,
+      "logical_size": [
+        480.0,
+        853.333312988281
+      ],
+      "rendered_screens": 10,
+      "viewport": [
+        360,
+        640
+      ]
+    }
+  ]
+}
