@@ -75,7 +75,9 @@ func click(pos: Vector2):
 		match choice_hit_index(pos):
 			0: mode = "add";selected = -1;page = 0
 			1:
-				if not game.collection.is_empty(): mode = "remove";selected = -1;page = 0
+				if not game.collection.is_empty():
+					mode = "remove";selected = -1;page = 0
+					game.card_picker.open("remove", "战后奖励 · 删除卡牌", range(game.collection.size()), picker_confirm, picker_cancel)
 			2: game.choose_reward(-1)
 	elif mode == "add":
 		if back_rect().has_point(pos): reset()
@@ -213,3 +215,8 @@ func _draw_remove():
 		game.wrapped_text("点选一张普通牌，再确认删除；可以删至空牌组。", detail_rect, 16, game.THEME.LIGHT)
 	_button(back_rect(), "返回", true)
 	_button(confirm_rect(), confirm_label, valid, true)
+
+func picker_confirm(index: int):
+	if game.screen == "game" and game.phase == "reward" and not game.route.rewards_blocked(): game.delete_reward(index)
+func picker_cancel():
+	reset();game.queue_redraw()

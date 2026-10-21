@@ -474,6 +474,7 @@ func check_stage_cleanup_and_camp():
 	check(game.screen == "map" and game.active_displacements == 0 and game.shield_charges == 0 and not game.reload_ready and game.pending_bleeds.is_empty(), "map return clears every battle-only buff and delayed effect")
 	game.route.enter(3);game.route.resolve(game.route.choices.size() - 1);game.route.enter(5);game.debug_skip();game.choose_reward(-1);game.route.enter(6)
 	game.collection = ["sword", "spear", "pierce", "sweep", "guard", "permanent_stake", "reload", "chain_assault"]
+	game.route.choice_mode = "upgrade"
 	var options = game.route.options();var upgraded = []
 	for option in options:
 		if option.action == "upgrade": upgraded.append(game.collection[option.index])

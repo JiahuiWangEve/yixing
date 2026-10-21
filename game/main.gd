@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.14.2"
+const BUILD_VERSION = "v0.14.3"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -37,6 +37,8 @@ var screen = "game"
 var tutorial = TUTORIAL.new()
 var frontend = FRONTEND.new(self)
 var rewardui = REWARD_UI.new(self)
+var card_picker = preload("res://card_picker.gd").new(self)
+var presentation = preload("res://presentation.gd").new(self)
 var player_skill = "king"
 var artillery_mode = "march"
 var deploy_draw_used = false
@@ -87,6 +89,7 @@ func install_web_input_cancel():
 		web_window.addEventListener(event_name, web_cancel_callback, true)
 func on_web_input_cancel(_arguments: Array):
 	cancel_gesture()
+	if card_picker.active: card_picker.pointer = -2;card_picker.dragged = true
 func _exit_tree():
 	if web_window == null or web_cancel_callback == null: return
 	for event_name in WEB_CANCEL_EVENTS:
@@ -117,6 +120,7 @@ func configure_layout(size: Vector2):
 	if handui != null: handui.reset()
 	player_visual = cell_pos(player)
 	for e in enemies: e.visual = cell_pos(e.pos)
+	if card_picker.active: card_picker.pointer = -2;card_picker.refresh()
 func full_hand_area() -> Rect2:
 	if not mobile_layout: return Rect2(24, 624, 1232, 308)
 	if compact_landscape: return Rect2(410, 155, 526, 242)
@@ -384,6 +388,7 @@ func new_expedition():
 	route.save()
 
 func new_run(preserve_tutorial: bool = false):
+	presentation.clear();card_picker.close()
 	route.state = {}
 	history.clear();cancel_gesture();hand_ids = [];next_card_uid = 1;free_selected = false
 	if preserve_tutorial: player_skill = "king"
@@ -515,6 +520,8 @@ func log_line(s: String):
 	logs.push_front(s)
 	if logs.size() > 7: logs.pop_back()
 func _process(delta):
+	presentation.tick(delta)
+	if card_picker.active and not card_picker.valid_context(): card_picker.close()
 	update_window_layout()
 	route.tick(delta)
 	tick += delta
@@ -651,6 +658,8 @@ func draw_card():
 	if hand.size() > 6: phase = "discard";selected = -1;free_selected = false;notice = "选一张牌，再确认弃置。"
 func hand_rect(i: int) -> Rect2: return hand_visual_rect(i)
 func _gui_input(event):
+	if presentation.input_event(event): return
+	if card_picker.input_event(event): return
 	if screen in ["map", "route_choice"] and route.input_event(event): return
 	if event is InputEventMouse and event.device == -1 and touch_seen and not delivering_touch: return
 	if encounter_info_open:
@@ -669,6 +678,8 @@ func _gui_input(event):
 			handle_click(event.position)
 		else: gesture.release(event.position)
 func handle_click(pos: Vector2):
+	if presentation.active(): return
+	if card_picker.active: card_picker.tap(pos);return
 	if encounter_info_open:
 		if encounter_close_rect().has_point(pos) or not encounter_panel_rect().has_point(pos): encounter_info_open = false
 		return
@@ -705,6 +716,8 @@ func handle_click(pos: Vector2):
 	elif free_selected and not full_hand_area().has_point(pos): cancel_selection()
 
 func _input(event):
+	if presentation.input_event(event): get_viewport().set_input_as_handled();return
+	if card_picker.input_event(event): get_viewport().set_input_as_handled();return
 	if encounter_info_open and event is InputEventKey:
 		if event.pressed and event.keycode == KEY_ESCAPE: encounter_info_open = false
 		get_viewport().set_input_as_handled();return
@@ -826,6 +839,7 @@ func play_card(i: int, p: Vector2i):
 	if not general_alive(): settle_victory()
 	tutorial_after("play", {"index": i, "target": p, "card": id})
 func settle_victory():
+	if lives <= 0: return
 	if screen != "game" or phase not in ["play", "discard"]: return
 	cancel_gesture();clear_effects();rewardui.reset();clear_battle_card_effects()
 	ENCOUNTERS.cancel_pending(self)
@@ -843,6 +857,7 @@ func settle_victory():
 		if route.active():
 			rewards = [] if route.rewards_blocked() else route.state.nodes[route.state.pending].loot.duplicate()
 			route.save()
+	presentation.victory()
 func debug_skip_rect() -> Rect2:
 	if compact_landscape: return Rect2(410, 440, 116, 44)
 	if mobile_layout: return Rect2(352, 64, 116, 40)
@@ -1010,8 +1025,9 @@ func context_hint() -> String:
 		return "%s · %d/%d血 · 倒计时%d%s%s" % [(ENCOUNTERS.enemy_tags(e) + piece_name(e.kind) if ENCOUNTERS.enemy_tags(e) != "" else ("急行卒" if e.kind == "q" else piece_name(e.kind))), e.hp, e.max_hp, ENCOUNTERS.effective_countdown(self, e), credit_label, " · 定身中" if e.stun > 0 else ""]
 	return ENCOUNTERS.status(self)
 func _draw():
+	if card_picker.active: card_picker.draw();return
 	if screen in ["map", "route_choice"]:
-		route.draw();return
+		route.draw();presentation.draw();return
 	if screen != "game":
 		frontend.draw()
 		panel(SOUND_RECT, THEME.BUTTON);text_at(SOUND_RECT.position + Vector2(12, 32 if mobile_layout else 27), "静音" if audio_system.muted else "声音 开", 16)
@@ -1138,6 +1154,7 @@ func _draw():
 	if phase == "discard": draw_rect(full_hand_area().grow(2), RED, false, 3)
 	handui.draw()
 	gesture.draw()
+	if presentation.active(): presentation.draw();return
 	if phase == "reward" and input_lock <= 0: rewardui.draw()
 	if phase in ["dead", "win"] and input_lock <= 0:
 		draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.OVERLAY);text_at(Vector2(24, ui_size.y * 0.4) if mobile_layout else Vector2(410, 380), ("山河已定 · 两章通关" if route.active() else "六关突破 · 原型通关") if phase == "win" else "此局已尽 · 再弈一局", 28 if mobile_layout else 36, THEME.HEADING)

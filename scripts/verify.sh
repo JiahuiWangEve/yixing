@@ -75,3 +75,9 @@ run airdrop-web-fixtures --script "$root/tests/airdrop_web_fixtures.gd"
 run pass-cards --script "$root/tests/pass_card_checks.gd"
 run pass-web-fixtures --script "$root/tests/pass_web_fixtures.gd"
 run elite-action-credits --script "$root/tests/elite_action_credit_checks.gd"
+
+run card-picker --script "$root/tests/card_picker_checks.gd"
+run picker-web-fixtures --script "$root/tests/picker_web_fixtures.gd"
+
+run presentation --script "$root/tests/presentation_checks.gd"
+run presentation-web-fixtures --script "$root/tests/presentation_web_fixtures.gd"

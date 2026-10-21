@@ -78,7 +78,7 @@ async def main():
    resume=(640,425) if w==1280 else ((695,241) if side else (240,max(150,uh*.25)+252))
    await tap(*resume,500); await state('game',-1,0); await shot('resume')
    skip=(1098,102) if w==1280 else ((468,462) if side else (410,84))
-   await tap(*skip,500); await shot('reward')
+   await tap(*skip,1200); await shot('reward')
    # v0.6.0 reward selector: third choice is Skip, not the older add-card footer.
    skip_reward=(920,405) if w==1280 else ((792,257) if side else (240,442))
    await tap(*skip_reward,500); await state('map',0,-1); await shot('returned')

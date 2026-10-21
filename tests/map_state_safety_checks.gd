@@ -123,13 +123,13 @@ func check_scroll_and_overlays():
 	check(route.scroll_y < scroll, "physical wheel inside map scrolls")
 	route.focus_current()
 	tap(route.footer_rect(0).get_center())
-	check(route.deck_view, "deck footer opens deck overlay")
+	check(game.card_picker.active and game.card_picker.action == "view", "deck footer opens read-only card grid")
 	var p = route.position(route.state.nodes[0])
 	scroll = route.scroll_y
 	tap(p);mouse(center, true, MOUSE_BUTTON_WHEEL_UP)
 	check(route.selected_node == -1 and is_equal_approx(route.scroll_y, scroll), "deck overlay blocks hidden node selection and map scroll")
 	key(KEY_ESCAPE)
-	check(not route.deck_view, "Escape closes deck overlay")
+	check(not game.card_picker.active, "Escape closes read-only card grid")
 
 func check_travel_and_reload():
 	fresh()

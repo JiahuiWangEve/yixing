@@ -269,10 +269,11 @@ func options() -> Array:
 	var result = []
 	if choice_mode == "confirm":
 		return [{"label": "确认 · " + pending_choice.label, "action": "confirm"}, {"label": "取消 · 不作改变", "action": "back"}]
-	if choice_mode in ["remove", "focus", "homework", "exchange"]:
+	if choice_mode in ["remove", "focus", "homework", "exchange", "upgrade"]:
 		for i in game.collection.size():
+			if choice_mode == "upgrade" and not UPGRADES.can_upgrade(game.collection[i]): continue
 			var action = choice_mode
-			var label = {"remove": "删除", "focus": "专注抄写", "homework": "课后作业", "exchange": "交出"}[action] + card_label(i)
+			var label = {"remove": "删除", "focus": "专注抄写", "homework": "课后作业", "exchange": "交出", "upgrade": "强化"}[action] + card_label(i)
 			if action == "focus": label += " · 立即复制并加入疲惫"
 			if action == "homework": label += " · 下一战无奖励，胜利后获得副本"
 			if action == "exchange": label += " → " + game.CARDS[node.offers[merchant_offer]][0]
@@ -280,9 +281,7 @@ func options() -> Array:
 		result.append({"label": "取消 · 返回选项", "action": "back"})
 		return result
 	if node.kind == "workshop":
-		for i in UPGRADES.eligible_indices(game.collection):
-			result.append({"label": "强化" + card_label(i) + " · " + UPGRADES.description(game.collection[i]), "action": "upgrade", "index": i})
-		if result.is_empty(): result.append({"label": "没有可强化的牌", "action": "disabled"})
+		result.append({"label": "强化卡牌" if not UPGRADES.eligible_indices(game.collection).is_empty() else "没有可强化的牌", "action": "select_upgrade" if not UPGRADES.eligible_indices(game.collection).is_empty() else "disabled"})
 	elif node.kind == "camp":
 		result.append({"label": "轻装上阵 · 删除一张永久牌" if not game.collection.is_empty() else "轻装上阵 · 牌组已空", "action": "select_remove" if not game.collection.is_empty() else "disabled"})
 		result.append({"label": "养精蓄锐 · 下一战初始多抽2张" if not state.prepared else "已养精蓄锐 · 额外抽牌不叠加", "action": "prepare" if not state.prepared else "disabled"})
@@ -303,9 +302,10 @@ func resolve(index: int):
 	var choice = choices[index]
 	if choice.action == "disabled": return
 	if choice.action == "back":
+		if game.card_picker.active: game.card_picker.close()
 		choice_mode = "root";pending_choice = {};refresh_choices();return
-	if choice.action in ["select_remove", "select_focus", "select_homework", "select_exchange"]:
-		choice_mode = choice.action.trim_prefix("select_");merchant_offer = choice.get("offer", -1);refresh_choices();return
+	if choice.action in ["select_remove", "select_focus", "select_homework", "select_exchange", "select_upgrade"]:
+		choice_mode = choice.action.trim_prefix("select_");merchant_offer = choice.get("offer", -1);refresh_choices();open_card_picker();return
 	if choice.action == "leave":
 		state.last_result = "已离开" + event_title(state.nodes[state.pending]);complete();return
 	if choice.action != "confirm":
@@ -315,6 +315,8 @@ func resolve(index: int):
 	var i = choice.get("index", -1)
 	if choice.action in ["upgrade", "remove", "focus", "homework", "exchange"] and (i < 0 or i >= game.collection.size()): return
 	var outcome = ""
+	var upgraded_from = ""
+	var upgraded_to = ""
 	match choice.action:
 		"upgrade":
 			if not UPGRADES.can_upgrade(game.collection[i]): return
@@ -322,7 +324,8 @@ func resolve(index: int):
 		"random_upgrade":
 			i = random_upgrade_index()
 			if i < 0: return
-			game.collection[i] = UPGRADES.upgraded_id(game.collection[i]);outcome = "口诀领悟：已强化" + card_label(i)
+			upgraded_from = game.collection[i];upgraded_to = UPGRADES.upgraded_id(upgraded_from)
+			game.collection[i] = upgraded_to;outcome = "口诀领悟：已强化" + card_label(i)
 		"prepare":
 			if state.prepared: return
 			state.prepared = true;outcome = "已养精蓄锐：下一战初始多抽2张"
@@ -346,6 +349,21 @@ func resolve(index: int):
 		"breath": game.collection.append("breath");outcome = "已获得一张调息"
 	state.last_result = outcome
 	complete()
+	if not upgraded_from.is_empty(): game.presentation.upgrade(upgraded_from, upgraded_to, i)
+func open_card_picker():
+	var eligible: Array = UPGRADES.eligible_indices(game.collection) if choice_mode == "upgrade" else range(game.collection.size())
+	var heading = {"upgrade": "工坊 · 强化卡牌", "remove": "休整 · 轻装上阵", "focus": "兵书 · 专注抄写", "homework": "兵书 · 课后作业", "exchange": "行商 · 选择交出的牌"}[choice_mode]
+	if choice_mode == "exchange" and merchant_offer >= 0:
+		heading = "行商 · 换取" + game.CARDS[state.nodes[state.pending].offers[merchant_offer]][0]
+	game.card_picker.open(choice_mode, heading, eligible, picker_confirm, picker_cancel)
+func picker_cancel():
+	choice_mode = "root";pending_choice = {};refresh_choices();game.queue_redraw()
+func picker_confirm(index: int):
+	for n in choices.size():
+		if choices[n].get("index", -1) == index and choices[n].action == choice_mode:
+			resolve(n)
+			if choice_mode == "confirm": resolve(0)
+			return
 func battle_victory() -> bool:
 	if not active() or state.pending < 0 or state.nodes[state.pending].kind not in ["battle", "elite", "boss"]: return false
 	if state.victory_recorded: return state.reward_blocked
@@ -366,6 +384,7 @@ func homework_summary() -> String:
 func rewards_blocked() -> bool:
 	return active() and state.get("reward_blocked", false)
 func complete():
+	if game.card_picker.active: game.card_picker.close()
 	if not active() or state.pending < 0 or state.done: return
 	var completed_boss = state.nodes[state.pending].kind == "boss"
 	if completed_boss and chapter() == LAST_CHAPTER:
@@ -421,6 +440,7 @@ func resume() -> bool:
 	# Older v5 runs predate the optional air-drop recovery counter.
 	if battle is Dictionary and not battle.has("airdrop_recovery_turn"): battle.airdrop_recovery_turn = 0
 	if not valid_snapshot(saved, battle, saved_screen): return false
+	game.card_picker.close();game.presentation.clear()
 	game.tutorial.stop();game.history.clear();game.cancel_gesture();game.clear_effects()
 	state = saved.duplicate(true)
 	# v0.13 / version-5 saves had a single chapter and used seed directly.
@@ -575,7 +595,8 @@ func click(pos: Vector2):
 		if selected_node >= 0:
 			if confirm_rect().has_point(pos): confirm();return
 			if cancel_rect().has_point(pos): selected_node = -1;return
-		elif footer_rect(0).has_point(pos): deck_view = not deck_view;return
+		elif footer_rect(0).has_point(pos):
+			game.card_picker.open("view", "全部永久牌组", range(game.collection.size()), Callable(), Callable());return
 		elif center_rect().has_point(pos): focus_current();return
 		if not deck_view and map_rect().has_point(pos):
 			for id in range(state.nodes.size()):

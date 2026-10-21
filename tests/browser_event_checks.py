@@ -91,7 +91,7 @@ async def main():
                 else:
                     for pos in step['taps']:
                         await tap(*pos)
-                    await page.wait_for_timeout(1800 if step['kind']=='combat' else (1000 if step['kind']=='enter' else 400))
+                    await page.wait_for_timeout(1900 if step['label']=='confirm' and replay['name']=='manual_mnemonic' else (1200 if step['label']=='debug victory' else (1800 if step['kind']=='combat' else (1000 if step['kind']=='enter' else 400))))
                 actual=await await_saved_state(snap,step['expected'])
                 if actual!=step['expected']:
                     await screenshot('failure-'+str(number))

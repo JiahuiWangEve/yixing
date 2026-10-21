@@ -16,6 +16,7 @@ func skip_reward():
 	game.input_lock = 0;game.navigation_lock = 0
 	game.debug_skip();game.choose_reward(-1)
 func act(action: String, index: int = -1):
+	if action == "upgrade" and game.route.choice_mode == "root": act("select_upgrade")
 	for i in game.route.choices.size():
 		var choice = game.route.choices[i]
 		if choice.action == action and (index < 0 or choice.get("index", -1) == index):

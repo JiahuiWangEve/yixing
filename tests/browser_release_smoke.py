@@ -64,6 +64,7 @@ async def main():
                     await state('game', -1, 0)
                     await tap(*( (1098,102) if desktop else (410,84) ))
                     await page.wait_for_function("/\"phase\": \"reward\"/.test(localStorage.getItem('yixing.route_run.v0100')||'')", timeout=12000)
+                    await page.wait_for_timeout(1150) # Victory seal is shown before reward input.
                     await tap(*( (920,405) if desktop else (240,442) ))
                     await state('map', 0, -1)
                     await page.reload()

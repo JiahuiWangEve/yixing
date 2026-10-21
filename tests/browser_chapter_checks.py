@@ -184,8 +184,8 @@ async def main(smoke=False, validate_only=False):
                             # Preserve the existing animation/input-lock settle
                             # window. Save equality alone is not an animation or
                             # input-readiness signal, especially after Continue.
-                            await page.wait_for_timeout(step.get('wait_ms', 1800 if step['kind'] == 'combat' else
-                                                                  1050 if step['kind'] == 'enter' else 350))
+                            await page.wait_for_timeout(max(1150 if 'victory' in step['label'] else 0, step.get('wait_ms', 1800 if step['kind'] == 'combat' else
+                                                                  1050 if step['kind'] == 'enter' else 350)))
                         observed = await await_saved_state(step['expected'], step['label'])
                         assert observed == step['expected'], (stem, number, step['label'], observed, step['expected'])
                         capture = await screenshot(str(number) + '-' + step['label'])

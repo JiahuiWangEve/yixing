@@ -83,6 +83,8 @@ jobs:
           python3 tests/browser_chapter_checks.py --smoke 2>&1 | tee build/chapter-smoke.log
           python3 tests/browser_airdrop_checks.py 2>&1 | tee build/airdrop-smoke.log
           python3 tests/browser_pass_checks.py 2>&1 | tee build/pass-smoke.log
+          python3 tests/browser_picker_checks.py 2>&1 | tee build/picker-smoke.log
+          python3 tests/browser_presentation_checks.py 2>&1 | tee build/presentation-smoke.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -169,6 +171,8 @@ jobs:
             if ! python3 "tests/browser_${suite}_checks.py" > "build/${suite}-browser.log" 2>&1; then failed=1; fi
             cat "build/${suite}-browser.log"
           done
+          if ! python3 tests/browser_picker_checks.py --full > build/picker-browser.log 2>&1; then failed=1; fi
+          cat build/picker-browser.log
           exit "$failed"
       - name: Upload background regression evidence
         if: always()

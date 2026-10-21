@@ -17,6 +17,7 @@ func action_index(action: String, index: int = -1, offer: int = -1) -> int:
 		if c.action == action and (index < 0 or c.get("index", -1) == index) and (offer < 0 or c.get("offer", -1) == offer): return n
 	return -1
 func act(action: String, index: int = -1, offer: int = -1):
+	if action == "upgrade" and route.choice_mode == "root": act("select_upgrade")
 	var found = action_index(action, index, offer)
 	check(found >= 0, "available action " + action)
 	if found >= 0: route.resolve(found)

@@ -13,6 +13,19 @@ func point(v): return [v.x,v.y]
 func step(kind: String, label: String, taps: Array = []):
 	steps.append({"kind":kind,"label":label,"taps":taps,"expected":summary()})
 func choose(action: String, card_index: int = -1):
+	if action == "upgrade" and not game.card_picker.active: choose("select_upgrade")
+	if game.card_picker.active:
+		var picker = game.card_picker
+		var pos: Vector2
+		if action == "back": pos = picker.cancel_rect().get_center()
+		elif action == "confirm": pos = picker.confirm_rect().get_center()
+		else:
+			var slot = picker.indices.find(card_index)
+			check(slot >= 0, "picker instance exists " + action)
+			if slot < 0: return
+			pos = picker.card_rect(slot).get_center()
+			check(picker.grid_rect().has_point(pos), "fixture selection is visible")
+		picker.tap(pos);step("tap", action, [point(pos)]);return
 	var index = -1
 	for i in game.route.choices.size():
 		var choice = game.route.choices[i]
