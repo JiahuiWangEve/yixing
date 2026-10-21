@@ -58,6 +58,8 @@ jobs:
           cat build/browser.log
           if ! python3 tests/browser_cannon_checks.py > build/cannon-browser.log 2>&1; then cat build/cannon-browser.log; exit 1; fi
           cat build/cannon-browser.log
+          if ! python3 tests/browser_rook_checks.py > build/rook-browser.log 2>&1; then cat build/rook-browser.log; exit 1; fi
+          cat build/rook-browser.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,8 +71,10 @@ jobs:
             build/package-audit.log
             build/browser.log
             build/cannon-browser.log
+            build/rook-browser.log
+            verification/v0.12.0/rook/
             verification/v0.11.0/cannon/
-            verification/v0.11.0/browser/
+            verification/v0.12.0/browser/
             verification/latest/
           include-hidden-files: true
       - name: Commit Web export to gh-pages

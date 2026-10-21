@@ -1,6 +1,8 @@
 extends RefCounted
 # A bounded, phase-local joint planner. It never runs during rendering/player play.
 const R = preload("res://rules.gd")
+const GE = preload("res://general_evasion.gd")
+const RT = preload("res://rook_tactics.gd")
 const MAX_CANNONS = 4
 const SUPPORT_LIMIT = 3
 const CANNON_BEAM = 6
@@ -189,9 +191,18 @@ static func advance_projection(board: Array, ready: Dictionary, context: Diction
 		out.append(e)
 	return out
 static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dictionary = {}) -> Dictionary:
-	var result = {"order":[],"targets":{},"stats":{"evaluations":0,"joint":0,"lookahead":0}}
+	var result = {"order":[],"targets":{},"stats":{"evaluations":0,"joint":0,"lookahead":0,"rook_scores":0}}
 	if ready.is_empty(): return result
-	var projected = board.duplicate(true);var locked = {};var aim = targets(board,player,context)
+	var projected = board.duplicate(true);var locked = {}
+	# Reserve an eligible general's legal escape before cannon support planning.
+	# This uses its existing action, never grants a second movement or readiness.
+	for general in board:
+		if general.kind != "g" or not ready.has(general.uid) or not GE.threatened(general,projected,player,context): continue
+		var escape = GE.choose(general,moves(general,projected,player),projected,player,context)
+		if escape == NONE: continue
+		result.order.append(general.uid);result.targets[general.uid]=escape
+		locked[general.uid]=true;projected=placed(projected,general.uid,escape)
+	var aim = targets(projected,player,context)
 	var cannons = []
 	for e in board:
 		if e.kind == "c" and e.get("stun",0) == 0: cannons.append(e.uid)
@@ -207,6 +218,13 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 		var choices = moves(cannon,projected,player) if can_move else []
 		choices.append(cannon.pos)
 		var candidates = [];var seen_pairs = {}
+		var protected_lines = []
+		var original_occ = occupancy(projected,0)
+		for other in projected:
+			if other.kind != "c" or other.uid == cannon_uid or other.get("stun",0)>0: continue
+			for cell in aim:
+				var goal = Vector2i(cell%9,cell/9)
+				if not screen(other.pos,goal,original_occ).is_empty(): protected_lines.append({"from":other.pos,"to":goal,"weight":aim[cell]})
 		for destination in choices:
 			if result.stats.evaluations >= limit: break
 			var candidate_board = placed(projected,cannon_uid,destination)
@@ -229,6 +247,19 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 		for support_info in supports.slice(0,SUPPORT_LIMIT):
 			if result.stats.evaluations >= joint_limit: break
 			var si = by_uid(projected,support_info.uid);var support = projected[si]
+			# A rook is not a disposable cannon screen: compare the joint landing
+			# with its best independent one-stage control on this actual board.
+			var rook_best = -INF;var rook_before = 0.0
+			var barrier_before = general_barrier(projected,player,context)
+			if support.kind == "r":
+				var rook_options = moves(support,projected,player);rook_options.append(support.pos)
+				if result.stats.evaluations+rook_options.size()>=joint_limit: continue
+				for rp in rook_options:
+					var rb = placed(projected,support.uid,rp)
+					var rook_position_score = RT.position_score(rb[si],rb,player,context)
+					rook_best = maxf(rook_best,rook_position_score)
+					if rp==support.pos: rook_before=rook_position_score+RT.distance_cost(support,player)
+					result.stats.evaluations+=1;result.stats.rook_scores+=1
 			for support_first in [true,false]:
 				if result.stats.evaluations >= joint_limit: break
 				var first = support if support_first else cannon
@@ -240,7 +271,7 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 					var second = cannon if support_first else support
 					var second_options = ranked_options(second,intermediate,player,aim,CANNON_BEAM if support_first else SUPPORT_BEAM) if second.uid != cannon_uid or can_move else [cannon.pos]
 					for second_target in second_options:
-						if result.stats.evaluations >= joint_limit: break
+						if result.stats.evaluations+(1 if support.kind=="r" else 0) >= joint_limit: break
 						var cp: Vector2i = first_target if first.uid == cannon_uid else second_target
 						var sp: Vector2i = first_target if first.uid == support.uid else second_target
 						var layout_key = Vector3i(key(cp),support.uid,key(sp))
@@ -249,7 +280,19 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 						var trial = placed(intermediate,second.uid,second_target)
 						var fixed = locked.duplicate();fixed[cannon_uid]=true;fixed[support.uid]=true
 						var v = value(trial[ci],trial,aim,ready,fixed)
-						var score = v + general_barrier(trial,player,context) + setup_value(trial[ci],trial,aim) - movement_penalty(cannon,cp,current,v,player,projected) - movement_penalty(support,sp,current,v,player,projected) - 1.5
+						var barrier_after = general_barrier(trial,player,context)
+						var rook_after = RT.value(trial[si],trial,player,context) if support.kind=="r" else 0.0
+						var support_cost = RT.move_cost(support,sp,rook_before,rook_after,barrier_after>barrier_before) if support.kind=="r" else movement_penalty(support,sp,current,v,player,projected)
+						var score = v + barrier_after + setup_value(trial[ci],trial,aim) - movement_penalty(cannon,cp,current,v,player,projected) - support_cost - 1.5
+						if support.kind == "r":
+							score -= maxf(0.0,rook_best-(rook_after-RT.distance_cost(trial[si],player)))
+							result.stats.evaluations+=1;result.stats.rook_scores+=1
+							# Also retain other real firing formations; the cannon currently
+							# being planned is not the only line a second screen can spoil.
+							if not protected_lines.is_empty():
+								var trial_occ = occupancy(trial,0)
+								for line in protected_lines:
+									if screen(line.from,line.to,trial_occ).is_empty(): score-=float(line.weight)*1.25
 						var steps = []
 						if ready.has(first.uid): steps.append({"uid":first.uid,"pos":first_target})
 						if ready.has(second.uid): steps.append({"uid":second.uid,"pos":second_target})

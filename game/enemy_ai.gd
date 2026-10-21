@@ -1,6 +1,8 @@
 extends RefCounted
 const R = preload("res://rules.gd")
+const GE = preload("res://general_evasion.gd")
 const CP = preload("res://cannon_planner.gd")
+const RT = preload("res://rook_tactics.gd")
 
 static func cannon_line_score(cannon: Dictionary, board: Array, player: Vector2i) -> float:
 	if cannon.pos == player: return 0.0
@@ -52,6 +54,9 @@ static func candidate_score(piece: Dictionary, target: Vector2i, enemies: Array,
 
 static func choose(piece: Dictionary, options: Array, enemies: Array, player: Vector2i, rng: RandomNumberGenerator, context: Dictionary = {}, allow_hold: bool = true) -> Vector2i:
 	if options.is_empty(): return Vector2i(-1, -1)
+	var escape = GE.choose(piece,options,enemies,player,context)
+	if escape != Vector2i(-1,-1): return escape
+	if piece.kind == "r": return choose_rook(piece,options,enemies,player,context,allow_hold)
 	var candidates = options.duplicate()
 	var aim = CP.targets(enemies,player,context)
 	var cannon_value = 0.0
@@ -73,4 +78,32 @@ static func choose(piece: Dictionary, options: Array, enemies: Array, player: Ve
 			if target == piece.pos: score += 1.0
 		if target in piece.get("ai_recent",[]): score -= 1.0
 		if score > best_score: best_score = score;best = target
+	return best
+
+static func choose_rook(piece: Dictionary, options: Array, enemies: Array, player: Vector2i, context: Dictionary = {}, allow_hold: bool = true) -> Vector2i:
+	if options.is_empty(): return Vector2i(-1,-1)
+	var candidates=options.duplicate()
+	if allow_hold: candidates.append(piece.pos)
+	var aim=CP.targets(enemies,player,context)
+	var before=RT.value(piece,enemies,player,context)
+	var old_barrier=CP.general_barrier(enemies,player,context)
+	var cannon_before=0.0
+	for e in enemies:
+		if e.kind=="c": cannon_before+=CP.value(e,enemies,aim,{}, {})
+	var best: Vector2i=options[0];var best_score=-INF
+	for target in candidates:
+		var trial=CP.placed(enemies,piece.uid,target)
+		var rook=trial[CP.by_uid(trial,piece.uid)]
+		var control=RT.value(rook,trial,player,context)
+		var barrier=CP.general_barrier(trial,player,context) if allow_hold else 0.0
+		var score=control-RT.distance_cost(rook,player)+barrier
+		if control<=0.0: score-=float((target-player).length_squared())*0.025
+		score-=RT.move_cost(piece,target,before,control,barrier>old_barrier)
+		var cannon_after=0.0
+		for e in trial:
+			if e.kind=="c": cannon_after+=CP.value(e,trial,aim,{}, {})
+		score+=(cannon_after-cannon_before)*1.25
+		# Stable ordering: no random tie can draw a rook into melee or oscillate.
+		if score>best_score or (is_equal_approx(score,best_score) and CP.key(target)<CP.key(best)):
+			best_score=score;best=target
 	return best

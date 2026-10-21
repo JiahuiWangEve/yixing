@@ -54,3 +54,9 @@ run boss-action-credits --script "$root/tests/boss_action_credit_checks.gd"
 run cannon-planner --script "$root/tests/cannon_planner_checks.gd"
 
 run cannon-fixtures --script "$root/tests/cannon_visual_capture.gd"
+
+run rook-tactics --script "$root/tests/rook_tactics_checks.gd"
+
+run rook-fixtures --script "$root/tests/rook_visual_capture.gd"
+
+run general-cannon-evasion --script "$root/tests/general_cannon_evasion_checks.gd"
