@@ -28,6 +28,7 @@ func run():
 	check_area_and_current_turn()
 	check_sacrifice_priority()
 	check_recovery()
+	check_recovery_bleed()
 	check_persistence_and_reset()
 	check_chapter_window()
 	print("AIRDROP RESULT ", checks - failures, " passed, ", failures, " failed")
@@ -101,6 +102,22 @@ func check_recovery():
 	game.clear_effects();var space = InputEventKey.new();space.pressed = true;space.keycode = KEY_SPACE;game._input(space)
 	check(game.turn == 3 and not game.recovery_active() and game.airdrop_recovery_turn == 0 and game.energy == 3, "space ends exactly one skipped turn; no bonus energy")
 	check(game.basic_legal(Vector2i(4,7)) and game.can_commit_card(1,game.player), "actions return next turn")
+func check_recovery_bleed():
+	fresh();game.add_enemy("e", Vector2i(0, 2), 999)
+	var target = game.enemies.back();target.hp = 5;target.max_hp = 5
+	game.queue_bleed(1, 2);game.play_card(0, Vector2i(4, 6));next_turn()
+	check(game.recovery_active() and target.hp == 4 and game.pending_bleeds.size() == 1 and game.pending_bleeds[0].amount == 1, "airdrop ending deals first tick before restricted recovery begins")
+	var uid = target.uid;var before = game.history.capture()
+	next_turn()
+	check(not game.recovery_active() and target.hp == 3 and game.pending_bleeds.is_empty() and game.turn == 3, "skipped recovery turn still deals exactly the second ending tick")
+	game.undo_action()
+	check(game.history.capture() == before and game.recovery_active(), "undo skipped recovery restores one bleed tick and recovery lock together")
+	next_turn()
+	var restored = {}
+	for enemy in game.enemies:
+		if enemy.uid == uid: restored = enemy
+	check(not restored.is_empty() and restored.hp == 3 and game.pending_bleeds.is_empty(), "replaying recovery ending neither loses nor duplicates remaining tick")
+
 func check_persistence_and_reset():
 	fresh();game.new_expedition();game.route.enter(0)
 	game.hand = ["airdrop"];game.hand_ids = [];game.energy = 3;game.lives = 4

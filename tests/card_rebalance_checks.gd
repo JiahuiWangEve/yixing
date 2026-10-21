@@ -134,18 +134,34 @@ func check_bleed():
 	victim.intent = Vector2i(6, 2)
 	var uid = int(victim.uid)
 	hand(["pierce"]);game.play_card(0, Vector2i(4, 4))
-	check(victim.hp == 5 and game.pending_bleeds.size() == 1 and game.energy == 2, "bleed queues two damage without immediate damage")
-	check(int(game.pending_bleeds[0].enemy_uid) == uid and int(game.pending_bleeds[0].amount) == 2, "bleed records stable enemy identity and amount")
+	check(victim.hp == 5 and game.pending_bleeds.size() == 1 and game.energy == 2, "bleed queues two end-turn ticks without immediate damage")
+	check(int(game.pending_bleeds[0].enemy_uid) == uid and int(game.pending_bleeds[0].amount) == 2, "bleed records stable enemy identity and remaining amount")
 	game.end_turn()
-	check(uid_index(uid) >= 0 and game.enemies[uid_index(uid)].pos == Vector2i(6, 2) and game.enemies[uid_index(uid)].hp == 3, "bleed follows moving enemy and resolves after enemy movement")
-	check(game.pending_bleeds.is_empty() and game.turn == 2, "bleed queue drains at next player start")
+	check(uid_index(uid) >= 0 and game.enemies[uid_index(uid)].pos == Vector2i(6, 2) and game.enemies[uid_index(uid)].hp == 4, "first end-turn tick deals one and surviving target may still move")
+	check(game.pending_bleeds.size() == 1 and int(game.pending_bleeds[0].amount) == 1 and game.turn == 2, "next player start retains one damage instead of ticking twice")
+	game.clear_effects();var after_first = game.history.capture()
+	game.end_turn()
+	check(game.enemies[uid_index(uid)].hp == 3 and game.pending_bleeds.is_empty() and game.turn == 3, "second end-turn tick follows moving uid and exhausts bleed")
 	game.undo_action()
-	check(game.pending_bleeds.size() == 1 and game.enemies[uid_index(uid)].hp == 5 and game.enemies[uid_index(uid)].pos == Vector2i(4, 4), "undo delayed resolution restores queue damage and movement")
+	check(game.history.capture() == after_first, "undo second tick exactly restores remaining tick and moved enemy")
+	game.undo_action()
+	check(game.pending_bleeds.size() == 1 and int(game.pending_bleeds[0].amount) == 2 and game.enemies[uid_index(uid)].hp == 5 and game.enemies[uid_index(uid)].pos == Vector2i(4, 4), "undo first tick restores full duration damage and movement")
 	game.undo_action()
 	check(game.pending_bleeds.is_empty() and game.hand == ["pierce"] and game.energy == 3, "undo bleed restores card and clears scheduled damage")
 	fresh();victim = enemy("e", Vector2i(4, 4), 5)
 	hand(["pierce", "pierce"]);game.play_card(0, victim.pos);game.play_card(0, victim.pos);game.end_turn()
-	check(victim.hp == 1 and game.pending_bleeds.is_empty(), "two bleeds on the same surviving enemy stack to four")
+	check(victim.hp == 3 and game.pending_bleeds.size() == 2 and game.pending_bleeds[0].amount == 1 and game.pending_bleeds[1].amount == 1, "two applications each tick once at current turn end")
+	game.end_turn()
+	check(victim.hp == 1 and game.pending_bleeds.is_empty(), "two applications finish their other two damage next turn end")
+	fresh();victim = enemy("e", Vector2i(4, 4), 5)
+	game.queue_bleed(1, 1);game.queue_bleed(1, 2);game.end_turn()
+	check(victim.hp == 3 and game.pending_bleeds.size() == 1 and game.pending_bleeds[0].amount == 1, "single-tick legacy amount expires independently of two-tick application")
+	game.end_turn();check(victim.hp == 2 and game.pending_bleeds.is_empty(), "mixed durations never repeat expired application")
+	fresh();victim = enemy("e", Vector2i(4, 4), 5)
+	hand(["pierce"]);game.play_card(0, victim.pos);game.end_turn()
+	hand(["pierce"]);game.play_card(0, victim.pos);game.end_turn()
+	check(victim.hp == 2 and game.pending_bleeds.size() == 1 and game.pending_bleeds[0].amount == 1, "staggered applications keep their own two ending windows")
+	game.end_turn();check(victim.hp == 1 and game.pending_bleeds.is_empty(), "only newer staggered application ticks on third ending")
 	fresh();victim = enemy("e", Vector2i(4, 4), 1);uid = victim.uid
 	hand(["pierce", "sword"]);game.play_card(0, victim.pos);game.play_card(0, victim.pos)
 	var replacement = enemy("e", Vector2i(4, 4), 5)
@@ -154,18 +170,52 @@ func check_bleed():
 	check(replacement.hp == 5 and game.pending_bleeds.is_empty(), "dead target bleed never transfers to replacement or stale array index")
 	fresh();victim = enemy("e", Vector2i(4, 4), 1);var later = enemy("e", Vector2i(5, 5), 5)
 	hand(["pierce", "sword"]);game.play_card(0, later.pos);game.play_card(0, victim.pos);game.end_turn()
-	check(later.hp == 3, "array removal before resolution does not retarget another bleed")
+	check(later.hp == 4 and game.pending_bleeds.size() == 1 and game.pending_bleeds[0].enemy_uid == later.uid, "array removal before first tick preserves later target uid")
+	game.end_turn();check(later.hp == 3 and game.pending_bleeds.is_empty(), "remaining tick stays on later target after array removal")
+	fresh();victim = enemy("e", Vector2i(4, 4), 1);later = enemy("e", Vector2i(5, 5), 5)
+	game.queue_bleed(1, 2);game.queue_bleed(2, 2);game.end_turn()
+	check(uid_index(victim.uid) == -1 and later.hp == 4 and game.pending_bleeds.size() == 1 and game.pending_bleeds[0].enemy_uid == later.uid, "death during bleed iteration neither skips nor retargets following application")
+	game.end_turn();check(later.hp == 3 and game.pending_bleeds.is_empty(), "surviving application finishes after another bleeding target dies")
+
+func check_bleed_phase_order():
+	fresh();var victim = enemy("p", Vector2i(4, 4), 1, 1);var uid = victim.uid
+	game.lives = 1;game.shield_charges = 1;game.queue_bleed(1, 2)
+	game.clear_effects();game.end_turn()
+	var attacks = 0;var movements = 0
+	for fx in game.effects:
+		if fx.kind in ["player_hit", "guard"]: attacks += 1
+		if fx.kind == "move" and fx.get("piece", {}).get("uid", -1) == uid: movements += 1
+	check(uid_index(uid) == -1 and game.lives == 1 and game.phase == "play" and game.pending_bleeds.is_empty(), "first tick kills adjacent attacker before it can hurt player")
+	check(attacks == 0 and movements == 0, "bleed-killed enemy neither attacks into shield nor moves")
+	fresh();victim = enemy("e", Vector2i(4, 4), 1, 1);uid = victim.uid
+	game.queue_bleed(1, 2);game.clear_effects();game.end_turn();movements = 0
+	for fx in game.effects:
+		if fx.kind == "move" and fx.get("piece", {}).get("uid", -1) == uid: movements += 1
+	check(uid_index(uid) == -1 and victim.pos == Vector2i(4, 4) and movements == 0, "lethal tick happens before a ready nonattacker's movement")
+	fresh();victim = enemy("p", Vector2i(4, 4), 2, 99);uid = victim.uid
+	game.queue_bleed(1, 2);game.end_turn()
+	check(victim.hp == 1 and game.lives == 4 and game.turn == 2, "nonlethal first tick still allows ordinary enemy attack")
+	game.player = Vector2i(4, 5);game.end_turn()
+	check(uid_index(uid) == -1 and game.lives == 4 and game.turn == 3, "second tick kills before next enemy attack")
 	fresh();game.player = Vector2i(4, 1);game.enemies[0].hp = 2;game.lives = 2
 	hand(["pierce"]);game.play_card(0, Vector2i(4, 0))
-	check(game.phase == "play" and game.enemies[0].hp == 2, "bleeding general does not grant early victory")
+	check(game.phase == "play" and game.enemies[0].hp == 2, "bleeding general does not grant victory when card is played")
 	game.end_turn()
-	check(game.phase == "reward" and game.lives == 1 and game.turn == 2, "general attacks first, then delayed kill settles next-player-start victory")
+	check(game.phase == "play" and game.enemies[0].hp == 1 and game.lives == 1 and game.turn == 2, "general survives first tick and attacks before second player turn")
+	game.end_turn()
+	check(game.phase == "reward" and game.lives == 1 and game.turn == 2 and game.pending_bleeds.is_empty(), "second-tick general kill settles victory before attacks or turn increment")
 	fresh();game.player = Vector2i(4, 1);game.enemies[0].hp = 2;game.lives = 1
 	hand(["pierce"]);game.play_card(0, Vector2i(4, 0));game.end_turn()
-	check(game.phase == "dead" and game.enemies[0].hp == 2, "lethal enemy attack stops delayed victory from reviving a dead player")
+	check(game.phase == "dead" and game.enemies[0].hp == 1 and game.pending_bleeds.is_empty(), "lethal enemy attack after first tick cancels remaining bleed")
+	game.end_turn();check(game.phase == "dead" and game.enemies[0].hp == 1, "cancelled second tick cannot revive a dead player through victory")
+	fresh();game.player = Vector2i(4, 1);game.enemies[0].hp = 1;game.lives = 1
+	victim = enemy("p", Vector2i(0, 0), 5, 1);game.queue_bleed(0, 2);game.queue_bleed(1, 2)
+	game.end_turn()
+	check(game.phase == "reward" and game.lives == 1 and game.turn == 1 and victim.hp == 5 and victim.pos == Vector2i(0, 0), "first-tick general kill stops remaining damage and entire enemy phase")
 	fresh();game.stage = 6;game.player = Vector2i(4, 1);game.enemies[0].hp = 2
 	hand(["pierce", "guard"]);game.play_card(0, Vector2i(4, 0));game.play_card(0, game.player);game.end_turn()
-	check(game.phase == "win" and game.lives == 5, "shield plus delayed general kill produces final victory at the correct boundary")
+	check(game.phase == "play" and game.enemies[0].hp == 1 and game.lives == 5 and game.shield_charges == 0, "shield protects first ending while final general survives one bleed tick")
+	game.end_turn();check(game.phase == "win" and game.lives == 5 and game.turn == 2, "second tick produces final victory before another enemy phase")
 
 func check_displacements():
 	fresh();check(game.active_displacements == 0, "new battle starts with zero active displacements")
@@ -338,7 +388,12 @@ func check_new_save():
 		var next_uid = game.next_enemy_uid;enemy("e", Vector2i(5, 4))
 		check(game.enemies.back().uid == next_uid, identity + " enemy IDs continue after resume")
 		game.end_turn()
-		check(game.active_displacements == 0 and game.shield_charges == 0 and not game.reload_ready and game.pending_bleeds.is_empty(), identity + " resumed effects resolve or expire at correct next-turn boundary")
+		check(game.active_displacements == 0 and game.shield_charges == 0 and not game.reload_ready and game.pending_bleeds.size() == 1 and game.pending_bleeds[0].amount == 1 and game.enemies[uid_index(target_uid)].hp == 4, identity + " resumed buffs expire while bleed retains exactly its second ending")
+
+		var between_ticks = game.history.capture();game.route.save();game.free();make_game()
+		check(game.route.resume() and game.history.capture() == between_ticks, identity + " save and fresh-scene resume preserve one remaining bleed tick")
+		game.end_turn()
+		check(game.enemies[uid_index(target_uid)].hp == 3 and game.pending_bleeds.is_empty(), identity + " resumed one-tick remainder resolves once at next ending")
 
 func check_save_isolation():
 	fresh("horse", true)
@@ -443,6 +498,7 @@ func run():
 	check_profiles()
 	check_guard()
 	check_bleed()
+	check_bleed_phase_order()
 	check_displacements()
 	check_chain()
 	check_sweep_and_shock()

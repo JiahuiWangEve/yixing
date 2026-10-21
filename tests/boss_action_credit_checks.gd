@@ -131,9 +131,16 @@ func check_delayed_bleed():
 	var pawn = pawn_fixture(0, 1)
 	game.queue_bleed(0, 1)
 	turn()
-	check(movement_count(pawn.uid) == 1 and pawn.pos == Vector2i(2, 1), "delayed damage does not add retroactive movement")
-	check(game.encounter_state.retaliated and pawn.action_credits == 1, "bleed at phase end banks retaliation for next phase")
-	turn();check(movement_count(pawn.uid) == 1 and pawn.pos == Vector2i(2, 2) and pawn.action_credits == 0, "late retaliation acts next phase despite reset cooldown")
+	check(movement_count(pawn.uid) == 1 and pawn.pos == Vector2i(2, 1), "end-turn bleed and natural readiness still permit only one boss movement")
+	check(game.encounter_state.retaliated and pawn.action_credits == 0 and game.pending_bleeds.is_empty(), "bleed retaliation is granted and consumed in current enemy phase")
+	turn();check(movement_count(pawn.uid) == 0 and pawn.pos == Vector2i(2, 1) and pawn.cd == 2 and pawn.action_credits == 0, "one-tick bleed cannot bank an extra next-phase retaliation")
+	pawn = pawn_fixture(0, 3)
+	var hp = game.enemies[0].hp
+	game.queue_bleed(0, 2);turn()
+	check(movement_count(pawn.uid) == 1 and pawn.pos == Vector2i(2, 1) and pawn.action_credits == 0 and game.enemies[0].hp == hp - 1, "first split tick accelerates a cooling-down pawn in same phase")
+	turn()
+	check(movement_count(pawn.uid) == 0 and pawn.pos == Vector2i(2, 1) and pawn.cd == 2 and game.enemies[0].hp == hp - 2 and game.pending_bleeds.is_empty(), "second split tick deals one without retriggering once-only retaliation")
+
 func check_control_and_warning():
 	var pawn = pawn_fixture(2)
 	check(E.available_action_credits(game, pawn) == 2 and E.effective_countdown(game, pawn) == 1, "banked credits show imminent action")
@@ -175,13 +182,13 @@ func check_many_phases_and_other_elites():
 	game.enemies = [game.enemies[0]];game.encounter_state.guard_uids = []
 	var pawn = add("p", Vector2i(2, 0), 1)
 	pawn.march_mark = true;pawn.normal_moves = 1
-	turn();check(pawn.pos == Vector2i(2, 2) and movement_count(pawn.uid) == 2, "explicit marked double-step elite remains double movement")
+	turn();check(pawn.pos == Vector2i(2, 1) and movement_count(pawn.uid) == 1 and pawn.action_credits == 1, "marked elite banks extra movement for next phase")
 	fixture()
 	game.encounter_state.config = {"id": "two_wings", "tier": "elite", "rules": ["last_stand"]}
 	game.enemies = [game.enemies[0]];game.encounter_state.guard_uids = []
 	pawn = add("p", Vector2i(2, 0), 1)
 	game.damage_enemy(0, 0, 1);turn()
-	check(pawn.pos == Vector2i(2, 2) and movement_count(pawn.uid) == 2, "non-boss retaliation elite behavior is unchanged")
+	check(pawn.pos == Vector2i(2, 1) and movement_count(pawn.uid) == 1 and pawn.action_credits == 0, "elite retaliation also consumes only one action per phase")
 func run():
 	game = load("res://main.tscn").instantiate();root.add_child(game)
 	check_dual_trigger()

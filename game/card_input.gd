@@ -7,28 +7,31 @@ var active = false
 var dragging = false
 var free_move = false
 var source = ""
+var pass_armed = false
 const DRAG_THRESHOLD = 12.0
 func _init(owner): game = owner
 func cancel():
-	active = false;dragging = false;free_move = false;uid = -1;source = ""
+	active = false;dragging = false;free_move = false;uid = -1;source = "";pass_armed = false
 func press(position: Vector2, kind: String = "mouse") -> bool:
+	if active: return true
 	if game.phase == "play" and game.recovery_active(): return false
 	if game.screen != "game" or game.phase not in ["play", "discard"]: return false
 	if game.freecard.hit_test(position):
 
 
 		if not game.free_card_available() or game.input_lock > 0 or game.navigation_lock > 0: return true
-		uid = game.free_card_uid;free_move = true;down = position;pointer = position;active = true;dragging = false;source = kind
+		uid = game.free_card_uid;free_move = true;down = position;pointer = position;active = true;dragging = false;source = kind;pass_armed = position.x < game.pass_drop_rect().position.x - 12
 		return true
 	var index = game.handui.hit_index(position)
 	if index < 0: return false
 	if game.input_lock > 0 or game.navigation_lock > 0: return true
 	game.sync_hand_ids()
-	uid = game.hand_ids[index];free_move = false;down = position;pointer = position;active = true;dragging = false;source = kind
+	uid = game.hand_ids[index];free_move = false;down = position;pointer = position;active = true;dragging = false;source = kind;pass_armed = position.x < game.pass_drop_rect().position.x - 12
 	return true
 func motion(position: Vector2):
 	if not active: return
 	pointer = position
+	if position.x < game.pass_drop_rect().position.x - 12 or position.x - down.x >= 28: pass_armed = true
 	if position.distance_to(down) >= DRAG_THRESHOLD: dragging = true
 func release(position: Vector2, canceled: bool = false):
 	if not active: return
@@ -36,8 +39,17 @@ func release(position: Vector2, canceled: bool = false):
 	var chosen_uid = uid
 	var chosen_free = free_move
 	var was_dragging = dragging or position.distance_to(down) >= DRAG_THRESHOLD
+	var over_pass = was_dragging and game.pass_drop_rect().has_point(position)
+	var deliberate_pass = pass_armed or position.x - down.x >= 28
 	cancel()
 	if canceled or game.screen != "game" or game.input_lock > 0 or game.navigation_lock > 0: return
+	if over_pass:
+		if not deliberate_pass: return
+		if chosen_free:
+			if chosen_uid == game.free_card_uid: game.pass_card(-1, true)
+		else:
+			game.pass_card(game.hand_ids.find(chosen_uid))
+		return # Invalid side drops never fall through to normal card use.
 	if chosen_free:
 		if chosen_uid != game.free_card_uid or not game.free_card_available(): return
 		if not was_dragging:
@@ -59,6 +71,7 @@ func release(position: Vector2, canceled: bool = false):
 func target_cell() -> Vector2i:
 	return game.board_cell(pointer) if dragging else Vector2i(-1, -1)
 func valid_target() -> bool:
+	if game.pass_drop_rect().has_point(pointer): return false
 	if not dragging or game.phase != "play" or not game.BOARD_RECT.has_point(pointer): return false
 	if free_move:
 		return uid == game.free_card_uid and game.free_card_available() and game.basic_legal(target_cell())
@@ -66,8 +79,24 @@ func valid_target() -> bool:
 	if index < 0: return false
 	var card: String = game.hand[index]
 	return game.can_commit_card(index, game.player if card in game.UNTARGETED else target_cell())
+func draw_pass_zone():
+	if game.phase != "play": return
+	var rect: Rect2 = game.pass_drop_rect()
+	var index: int = game.hand_ids.find(uid)
+	var cost = 0 if free_move else (game.card_cost(game.hand[index]) if index >= 0 else 0)
+	var allowed: bool = game.can_pass_card(index, free_move)
+	var inside = rect.has_point(pointer) and pass_armed
+	var outline: Color = game.GOLD if inside and allowed else (game.RED if inside else game.THEME.BORDER)
+	game.panel(rect, game.THEME.PAPER_SELECTED if inside and allowed else game.THEME.BUTTON, outline)
+	if inside: game.draw_rect(rect.grow(-3), outline, false, 3)
+	var x = rect.position.x + 8
+	game.text_at(Vector2(x, rect.position.y + 36), "过牌", 22, game.THEME.INK)
+	game.text_at(Vector2(x, rect.position.y + 66), "%d费" % cost, 20, game.THEME.INK)
+	game.text_at(Vector2(x, rect.position.y + 100), ("松手弃置" if pass_armed else "向右拖入") if allowed else ("能量不足" if game.energy < cost else "不可过牌"), 14, game.THEME.INK if allowed else game.RED)
+	game.text_at(Vector2(x, rect.position.y + 124), "不补抽", 14, game.THEME.GRID)
 func draw():
 	if not dragging: return
+	draw_pass_zone()
 	if free_move:
 		_draw_free()
 		return
@@ -78,7 +107,7 @@ func draw():
 	t.x = Vector2(scale.x, 0);t.y = Vector2(0, scale.y)
 	t.origin = pointer - game.handui.card_size() * scale * 0.5
 	var over_board = game.BOARD_RECT.has_point(pointer)
-	game.handui.draw_card(index, t, 0.2 if over_board else 0.9)
+	game.handui.draw_card(index, t, 0.2 if over_board or game.pass_drop_rect().has_point(pointer) else 0.9)
 	var polygon = PackedVector2Array()
 	var size = game.handui.card_size()
 	for point in [Vector2.ZERO, Vector2(size.x, 0), size, Vector2(0, size.y), Vector2.ZERO]: polygon.append(t * point)
@@ -95,7 +124,7 @@ func _draw_free():
 	var size = Vector2(transform.x.length(), transform.y.length()) * game.handui.card_size()
 	var rect = Rect2(pointer - size * 0.5, size)
 	var over_board: bool = game.BOARD_RECT.has_point(pointer)
-	game.freecard.draw_card(rect, 0.2 if over_board else 0.9)
+	game.freecard.draw_card(rect, 0.2 if over_board or game.pass_drop_rect().has_point(pointer) else 0.9)
 	var polygon = PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y), rect.position])
 	var legal = valid_target()
 	var color: Color = game.GOLD if legal else Color(0.6, 0.7, 0.7, 0.7)

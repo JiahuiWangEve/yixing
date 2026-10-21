@@ -175,10 +175,21 @@ static func next_ready(e: Dictionary, acted: bool, context: Dictionary) -> bool:
 	if e.get("stun",0) > 0: return false
 	var cd = int(e.get("period",3)) if acted else int(e.get("cd",3))
 	var credits = int(e.get("action_credits",0))
+	var state: Dictionary = context.get("encounter_state",{})
+	if e.get("bonus_pending",false) and int(e.get("bonus_after_phase",0)) <= int(state.get("phases",0))+1: credits += 1
 	if context.get("next_rotation_uid",-1) == e.get("uid",-2): credits += 1
 	return cd <= 1 or (context.get("credit_mode",false) and credits > 0 and int(e.get("action_credit_delay",0)) <= 0)
 static func advance_projection(board: Array, ready: Dictionary, context: Dictionary, player: Vector2i) -> Array:
 	var out = []
+	var state: Dictionary = context.get("encounter_state",{})
+	var rules: Array = state.get("config",{}).get("rules",[])
+	var origins: Dictionary = context.get("projected_origins",{})
+	var signal_crossed = false
+	if context.get("credit_mode",false) and "river_signal" in rules and not state.get("river_triggered",false):
+		var signal_index = by_uid(board,int(state.get("signal_uid",-1)))
+		if signal_index >= 0:
+			var signal_piece = board[signal_index]
+			signal_crossed = origins.has(signal_piece.uid) and origins[signal_piece.uid].y < 5 and signal_piece.pos.y >= 5
 	for actor in board:
 		var e = actor.duplicate()
 		if e.kind == "stake" and not e.get("permanent",false):
@@ -187,6 +198,12 @@ static func advance_projection(board: Array, ready: Dictionary, context: Diction
 		if ready.has(e.get("uid",-1)):
 			e.cd = int(e.get("period",3))
 			if context.get("credit_ready",{}).get(e.uid,false) and (context.get("projected_spent",{}).get(e.uid,false) or not moves(e,board,player).is_empty()): e.action_credits = maxi(0,int(e.get("action_credits",0))-1)
+		if context.get("credit_mode",false):
+			if signal_crossed and e.uid == int(state.get("cannon_uid",-1)):
+				e.action_credits = int(e.get("action_credits",0))+1
+			if "double_step" in rules and e.get("march_mark",false) and origins.has(e.uid) and origins[e.uid] != e.pos and not context.get("credit_ready",{}).get(e.uid,false):
+				if (int(e.get("march_normal_moves",e.get("normal_moves",0)))+1)%2 == 0:
+					e.action_credits = int(e.get("action_credits",0))+1
 		e.stun = maxi(0,int(e.get("stun",0))-1)
 		out.append(e)
 	return out
@@ -314,12 +331,13 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 			if future_candidates.size() >= SECOND_BEAM: break
 		for candidate in future_candidates:
 			if result.stats.evaluations >= limit: break
-			var forecast_context = context.duplicate();var spent = {};var before_steps = projected
+			var forecast_context = context.duplicate();var spent = {};var origins = {};var before_steps = projected
 			for step in candidate.steps:
 				var actor = before_steps[by_uid(before_steps,step.uid)]
+				origins[step.uid] = actor.pos
 				spent[step.uid] = step.pos != actor.pos or not moves(actor,before_steps,player).is_empty()
 				before_steps = placed(before_steps,step.uid,step.pos)
-			forecast_context.projected_spent = spent
+			forecast_context.projected_spent = spent;forecast_context.projected_origins = origins
 			var future = advance_projection(candidate.board,ready,forecast_context,player)
 			var future_defense = GE.guard_state(future,player,context)
 			var fci = by_uid(future,cannon_uid);var future_cannon = future[fci]

@@ -4,7 +4,7 @@ var game
 func _init(owner): game = owner
 func entries() -> Array:
 	match game.screen:
-		"home": return ["开始游戏", "教程", "调试选关", "声音：" + ("静音" if game.audio_system.muted else "开启"), "继续山河棋路存档"]
+		"home": return ["开始游戏", "教程", "声音：" + ("静音" if game.audio_system.muted else "开启"), "继续山河棋路存档"]
 		"skill_selection": return ["将 · 四向一步", "马 · 马步移动" if game.skill_system.is_unlocked("horse") else "马 · 通关后解锁", "炮车 · 行军与驻扎" if game.skill_system.is_unlocked("artillery") else "炮车 · 通关后解锁", "返回首页"]
 		"debug_profile": return ["将 · 2命与恢复", "马 · 1命与机动", "炮车 · 1命与炮击", "返回首页"]
 		"tutorial_menu":
@@ -37,9 +37,8 @@ func activate(i: int):
 			match i:
 				0: game.skill_system.show_selection()
 				1: game.open_tutorial_menu()
-				2: game.screen = "debug_profile"
-				3: game.audio_system.toggle_mute()
-				4:
+				2: game.audio_system.toggle_mute()
+				3:
 					if not game.route.resume(): game.notice = "此存档不可续用，请开始新征途。"
 		"skill_selection":
 			match i:

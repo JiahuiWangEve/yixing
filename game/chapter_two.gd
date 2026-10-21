@@ -113,8 +113,8 @@ static func on_enemy_defeated(game, enemy: Dictionary, before_player_input: bool
 	for ghost in game.encounter_state.ghosts:
 		if ghost.enemy.uid == enemy.uid: return
 	# Most of the current turn was already available when a card kills a unit,
-	# so that partial turn cannot count. Start-of-turn bleed occurs before any
-	# input and therefore the just-starting player turn DOES count in full.
+	# so that partial turn cannot count. End-of-turn bleed also uses this path.
+	# A true before-input death can count its upcoming player turn in full.
 	var completed = int(game.encounter_state.phases)
 	var revival = {"uid": enemy.uid, "kind": enemy.kind, "pos": enemy.original_spawn, "original_spawn": enemy.original_spawn,
 		"hp": 0, "max_hp": enemy.max_hp, "heavy": enemy.get("heavy", false), "unyielding": true,

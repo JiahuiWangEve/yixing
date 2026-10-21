@@ -68,7 +68,7 @@ async def main():
                     await state('map', 0, -1)
                     await page.reload()
                     await boot()
-                    await tap(*( (640,497) if desktop else (240,max(150,uh*.25)+326) ))
+                    await tap(*( (640,425) if desktop else (240,max(150,uh*.25)+252) ))
                     await state('map', 0, -1)
                     # The saved snapshot survives reload even if Continue is broken.
                     # Prove the restored UI is live by entering the next event.

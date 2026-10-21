@@ -69,7 +69,7 @@ func save_fixture(name: String, size: Vector2):
 	var filename = name + "-" + str(int(size.x)) + ".cfg"
 	var file = FileAccess.open(OUT + "fixtures/" + filename, FileAccess.WRITE)
 	file.store_string(FileAccess.get_file_as_string(game.route.SAVE));file.close()
-	game.screen = "home";var resume = point(game.frontend.button_rect(4).get_center());game.screen = "game"
+	game.screen = "home";var resume = point(game.frontend.button_rect(3).get_center());game.screen = "game"
 	return {"name": name, "fixture": filename, "viewport": point(size), "logical_size": point(game.ui_size), "resume": resume, "initial": summary()}
 func survive(size: Vector2):
 	fresh(size)

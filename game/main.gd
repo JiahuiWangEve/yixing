@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.14.1"
+const BUILD_VERSION = "v0.14.2"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -107,7 +107,7 @@ func full_hand_area() -> Rect2:
 func free_card_rect() -> Rect2: return handui.free_bounds()
 func hand_area() -> Rect2: return full_hand_area()
 func free_card_available() -> bool:
-	return screen == "game" and phase == "play" and not basic_used and not recovery_active()
+	return screen == "game" and phase == "play" and not basic_used and free_card_uid > 0 and not recovery_active()
 func refresh_free_card():
 	free_selected = false
 	free_card_uid = next_card_uid;next_card_uid += 1
@@ -130,6 +130,35 @@ func cancel_gesture():
 func undo_action():
 	if tutorial.active: notice = "教学中不可悔棋";return
 	history.undo()
+# Passing is not playing: central guards deliberately ignore target/stance legality.
+func can_pass_card(index: int, free: bool = false) -> bool:
+	if screen != "game" or phase != "play" or recovery_active() or tutorial.active or encounter_info_open: return false
+	if input_lock > 0 or navigation_lock > 0: return false
+	if free: return energy >= 0 and free_card_available()
+	return index >= 0 and index < hand.size() and energy >= card_cost(hand[index])
+func pass_card(index: int, free: bool = false) -> bool:
+	if not can_pass_card(index, free): return false
+	history.record("pass");cancel_gesture()
+	if free:
+		free_card_uid = 0
+	else:
+		sync_hand_ids()
+		var id: String = hand[index]
+		energy -= card_cost(id)
+		discard.append(hand.pop_at(index));hand_ids.remove_at(index)
+		log_line("过牌「%s」" % CARDS[id][0])
+	selected = -1;free_selected = false;handui.sync()
+	notice = "已过牌，不触发效果、不补抽。"
+	queue_redraw()
+	return true
+func pass_button_rect() -> Rect2:
+	if mobile_layout: return Rect2() # Touch uses an intentional side drop, without shrinking the hand.
+	return Rect2(920, 578, 150, 45)
+func pass_drop_rect() -> Rect2:
+	# Overlay only while dragging; inset from OS gesture edges and outside board targets.
+	if compact_landscape: return Rect2(840, 176, 84, 198)
+	if mobile_layout: return Rect2(380, full_hand_area().position.y + 28, 84, 166)
+	return Rect2(1100, 350, 140, 200)
 func confirm_card():
 	if screen != "game" or input_lock > 0 or navigation_lock > 0 or selected < 0 or selected >= hand.size(): return
 	if phase == "discard": discard_hand(selected)
@@ -185,7 +214,7 @@ const CARDS = {
 	"straight": ["疾行", 1, "直线移动至多两格，不穿透；抽1张", "移"],
 	"life": ["续命", 2, "生命+1（上限5，本关消耗）；受击存活时转移安全格", "术", "生命+1（上限5，本关消耗）。受击后若仍有生命，转移到最近的安全空位；同距随机，没有安全空位则失败。转移不抽牌。"],
 	"stake": ["架炮", 1, "两格内空位放木桩，挡路作炮架；持续3回合", "术"],
-	"pierce": ["流血", 1, "正交相邻敌子，下个玩家回合开始时受到2点伤害", "攻", "对一个正交相邻敌子施加延迟2伤。先完整结算敌方阶段，再于下个玩家回合开始生效。跟随同一敌子，不跟随格子；多次施加伤害相加，目标提前死亡则失效。"],
+	"pierce": ["流血", 1, "正交相邻敌子，本回合末和下回合末各受到1点伤害", "攻", "对一个正交相邻敌子施加流血。本回合末和下回合末、敌方攻击前各受到1伤。跟随同一敌子，可叠加；目标死亡则剩余流血失效。"],
 	"suppress": ["镇四方", 3, "抽1张；正交相邻所有敌子移动倒计时+2", "术", "先抽1张，再使正交相邻所有敌子的移动倒计时+2。不造成伤害，不影响敌方攻击；不消耗。手牌超限时效果仍完整结算后再弃牌。"],
 	"guard": ["固守", 2, "抵挡下次受击，至下个玩家回合开始；消耗", "术", "下个玩家回合开始前抵挡1次实际受击，不掉命、不转移。未触发也到期失效；重复使用只刷新1次。"],
 	"chain_assault": ["连袭", 2, "周围3×3内选一个敌子，造成1+本回合主动位移次数伤害", "攻", "在自身周围3×3内选择一个敌子，造成1+本回合此前成功主动位移次数的伤害。免费移动、移动牌与攻击附带位移均计入，每次行动计1次，不按格数；受击转移、失败移动与姿态切换不计。"],
@@ -294,7 +323,9 @@ func resolve_bleeds():
 	for bleed in queued:
 		for i in enemies.size():
 			if enemies[i].get("uid", -1) == bleed.enemy_uid:
-				damage_enemy(i, 0.0, bleed.amount, true)
+				var killed = damage_enemy(i, 0.0, 1, false)
+				if not killed and bleed.amount > 1:
+					pending_bleeds.append({"enemy_uid": bleed.enemy_uid, "amount": bleed.amount - 1})
 				break
 		if not general_alive():
 			settle_victory()
@@ -643,6 +674,7 @@ func handle_click(pos: Vector2):
 		if rewardui.mode != previous_mode: navigation_lock = maxf(navigation_lock, 0.15)
 		return
 	if phase in ["dead", "win"]: return
+	if pass_button_rect().has_point(pos) and (selected >= 0 or free_selected): pass_card(selected, free_selected);return
 	if USE_RECT.has_point(pos) and selected >= 0 and (phase == "discard" or hand[selected] in UNTARGETED): confirm_card();return
 	if phase == "discard": return
 	if END_TURN_RECT.has_point(pos): request_end_turn();return
@@ -738,13 +770,15 @@ func play_card(i: int, p: Vector2i):
 			var killed = damage_enemy(idx, 0.3 if animation == "cannon" else 0.12, amount)
 			if loaded and killed: draw_card()
 		"deploy":
-			artillery_mode = "attack";refresh_free_card()
+			artillery_mode = "attack"
+			if free_card_uid > 0: refresh_free_card()
 			if not deploy_draw_used:
 				deploy_draw_used = true
 				for draw in 3: draw_card()
 			log_line("展开为攻击姿态。")
 		"pack":
-			artillery_mode = "march";refresh_free_card()
+			artillery_mode = "march"
+			if free_card_uid > 0: refresh_free_card()
 			log_line("转进行军，免费移动额度不变。")
 		"tuna":
 			tuna_turns += 3
@@ -807,6 +841,8 @@ func end_turn():
 	if recovery_active(): log_line("空投休整：跳过本回合行动，敌方正常行动。")
 	selected = -1;free_selected = false;reload_ready = false
 	input_lock = 0.3
+	resolve_bleeds()
+	if phase != "play": return
 
 	var timeline = 0.0
 	var hit = false
@@ -833,7 +869,6 @@ func end_turn():
 	# Lock rotation and grant final-battle credits once, before any movement.
 	var credit_mode = ENCOUNTERS.uses_action_credits(self)
 	ENCOUNTERS.prepare_phase(self)
-	var rotating_guard = ENCOUNTERS.selected_guard(self) if ENCOUNTERS.has_rule(self, "palace_rotation") and not credit_mode else -1
 	# Decide readiness once for the whole army, after attacks/recoil. Joint plans
 	# can then choose a legal support-first or cannon-first execution order.
 	var ready = {};var credit_ready_by_uid = {}
@@ -852,10 +887,12 @@ func end_turn():
 		for ally in enemies:
 			if ally.uid in encounter_state.guard_uids: guards.append(ally.uid)
 		if not guards.is_empty(): next_rotation = guards[(int(encounter_state.phases)+1)%guards.size()]
-	var ai_context = {"next_rotation_uid":next_rotation,"player_skill":player_skill,"artillery_mode":artillery_mode,"credit_mode":credit_mode,"credit_ready":credit_ready_by_uid}
+	var ai_context = {"encounter_state":encounter_state,"next_rotation_uid":next_rotation,"player_skill":player_skill,"artillery_mode":artillery_mode,"credit_mode":credit_mode,"credit_ready":credit_ready_by_uid}
 	var coordination = ENEMY_AI.CP.plan(enemies,player,ready,ai_context) if not tutorial.active else {"order":ready.keys(),"targets":{}}
-	var extra_queue = []
+	var acted_uids = {}
 	for uid in coordination.order:
+		if acted_uids.has(uid) or not ready.has(uid): continue
+		acted_uids[uid] = true
 		var index = ENEMY_AI.CP.by_uid(enemies,uid)
 		if index < 0: continue
 		var e = enemies[index]
@@ -872,25 +909,9 @@ func end_turn():
 			var origin: Vector2i = e.pos
 			move_piece(e,cell_pos(origin),cell_pos(target),timeline,e.kind == "h")
 			timeline += 0.28;e.pos = target;ENEMY_AI.CP.remember(e,origin)
-			ENCOUNTERS.after_normal_move(self,e,origin)
+			ENCOUNTERS.after_normal_move(self,e,origin,credit_ready_by_uid.get(uid,false))
 			if credit_ready_by_uid.get(uid,false): e.action_credits -= 1
-			var pending = e.get("bonus_pending",false) and int(e.get("bonus_after_phase",0)) <= int(encounter_state.get("phases",0))
-			var double_move = ENCOUNTERS.has_rule(self,"double_step") and e.get("march_mark",false) and int(e.get("normal_moves",0)) % 2 == 0
-			if not credit_mode and (pending or double_move or (rotating_guard >= 0 and e.uid == rotating_guard)):
-				if pending: e.bonus_pending = false
-				extra_queue.append(uid)
 		e.cd = e.period
-	# Complete coordinated normal moves before evaluating any elite follow-up.
-	for uid in extra_queue:
-		var index = ENEMY_AI.CP.by_uid(enemies,uid)
-		if index < 0: continue
-		var e = enemies[index]
-		var extra_options = R.moves(e,enemies,player)
-		var extra = ENEMY_AI.choose(e,extra_options,enemies,player,rng,ai_context,false)
-		if extra in extra_options:
-			var extra_origin: Vector2i = e.pos
-			move_piece(e,cell_pos(e.pos),cell_pos(extra),timeline,e.kind == "h")
-			timeline += 0.28;e.pos = extra;ENEMY_AI.CP.remember(e,extra_origin)
 	for e in enemies:
 		if e.stun > 0: e.stun -= 1
 	# Chapter-two arrivals inspect the final board, after expiring temporary stakes.
@@ -903,8 +924,6 @@ func end_turn():
 	turn += 1;history.trim()
 	if airdrop_recovery_turn > 0 and turn > airdrop_recovery_turn: airdrop_recovery_turn = 0
 	shield_charges = 0;active_displacements = 0
-	resolve_bleeds()
-	if phase not in ["play", "discard"]: return
 	plan_intents()
 	tuna_active = tuna_turns > 0
 	if tuna_active: tuna_turns -= 1
@@ -1081,6 +1100,11 @@ func _draw():
 	text_at((Vector2(200, 500) if compact_landscape else Vector2(150, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(550, 609), "能量 %d" % energy, 20, THEME.LIGHT)
 	var confirm = selected >= 0 and (phase == "discard" or (phase == "play" and hand[selected] in UNTARGETED))
 	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else (("跳过回合" if mobile_layout else "跳过回合 [空格]") if recovery_active() else ("结束回合" if mobile_layout else "结束回合 [空格]"))), 18, THEME.INK)
+	if not mobile_layout and phase == "play" and (selected >= 0 or free_selected):
+		var cost = 0 if free_selected else card_cost(hand[selected])
+		var allowed = can_pass_card(selected, free_selected)
+		panel(pass_button_rect(), THEME.BUTTON, GOLD if allowed else THEME.BORDER)
+		text_at(pass_button_rect().position + Vector2(12, 30), "过牌 · %d费" % cost, 18, THEME.INK if allowed else THEME.GRID)
 	var statuses: Array[String] = []
 	if tuna_active or tuna_turns > 0: statuses.append(("吐纳 本回合+1" if tuna_active else "吐纳") + " 后续%d回合" % tuna_turns)
 	if shield_charges > 0: statuses.append("固守 1次")
@@ -1230,7 +1254,7 @@ func draw_encounter_panel():
 	text_at(area.position + Vector2(16, 34), ENCOUNTERS.title(encounter_state.config), 24, THEME.INK)
 	var desc = ENCOUNTERS.details(encounter_state.config)
 	if desc.is_empty(): desc = "普通军阵：先攻击，再按倒计时移动。士限九宫，象不过河，急行卒仍按卒的方向走。"
-	if not ENCOUNTERS.uses_action_credits(self) and not ENCOUNTERS.is_chapter_two(self): desc += "\n所有加步均不额外攻击；多种加步同时触发时，最多额外一步。"
+	if not ENCOUNTERS.is_chapter_two(self): desc += "\n每个敌方回合最多移动一次；多余加速顺延，不额外攻击。"
 	wrapped_text(desc, Rect2(area.position + Vector2(16, 53), Vector2(area.size.x - 32, area.size.y - 148)), 18, THEME.INK)
 	panel(encounter_close_rect(), THEME.PAPER_SELECTED)
 	text_at(encounter_close_rect().position + Vector2(16, 32), "关闭 · 返回棋盘", 18, THEME.INK)

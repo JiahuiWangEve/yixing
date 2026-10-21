@@ -122,12 +122,22 @@ func check_full_turn_timing():
 	check(game.next_enemy_uid == next_uid and game.encounter_state.ghosts.is_empty(), "revival preserves stable uid and consumes no new uid")
 	turn();check(target.cd == 2 and target.pos == home, "revived guard counts down only on following phase")
 	expect_valid("revived guard")
-	# Real delayed bleed resolves after phase 3, with player4 not yet accepting input.
+	# Bleed ticks before enemy actions on both endings. A death at the second
+	# ending cannot count that ending as either of the two full following turns.
 	fixture();phase_to(2);target = guard();uid = target.uid
 	game.queue_bleed(index_of(uid), 2);turn()
-	check(game.turn == 4 and actor(uid).is_empty() and game.encounter_state.ghosts[0].ready_phase == 5, "start-bleed4 includes the full upcoming player4")
-	turn();check(actor(uid).is_empty(), "start-bleed waits player4 complete")
-	turn();check(not actor(uid).is_empty() and actor(uid).cd == 3, "start-bleed revives end5 after player4 and5")
+	check(game.turn == 4 and actor(uid).hp == 1 and game.encounter_state.ghosts.is_empty() and game.pending_bleeds[0].amount == 1, "end-player3 first bleed tick leaves guard alive until next ending")
+	turn()
+	check(game.turn == 5 and actor(uid).is_empty() and game.pending_bleeds.is_empty() and game.encounter_state.ghosts[0].ready_phase == 6, "end-player4 bleed death waits complete player5 and player6")
+	check(not game.encounter_state.ghosts[0].before_player_input and game.encounter_state.ghosts[0].defeat_phase == 3 and E.markers(game)[0].label == "归2", "bleed death records pre-enemy-phase boundary rather than next player start")
+	expect_valid("end-turn bleed ghost")
+	turn();check(actor(uid).is_empty() and E.markers(game)[0].label == "归1", "end-turn bleed waits until first full following turn completes")
+	turn();check(not actor(uid).is_empty() and actor(uid).cd == 3 and game.turn == 7, "end-turn bleed revives end6 after two full following turns with no birth action")
+	fixture();phase_to(3);target = guard();uid = target.uid;target.hp = 1
+	game.queue_bleed(index_of(uid), 1);turn()
+	check(actor(uid).is_empty() and game.encounter_state.ghosts[0].ready_phase == 6 and game.pending_bleeds.is_empty(), "one-tick bleed kill uses same two-full-following-turn revival window")
+	turn();check(actor(uid).is_empty(), "one-tick bleed cannot revive after just one following turn")
+	turn();check(not actor(uid).is_empty() and actor(uid).cd == 3, "one-tick bleed revives after second full following turn")
 	# End-of-player4 damage before enemy phase completion follows the same
 	# boundary as any card in player4: only player5 and player6 count in full.
 	fixture();phase_to(3);target = guard();uid = target.uid

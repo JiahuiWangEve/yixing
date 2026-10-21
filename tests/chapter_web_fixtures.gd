@@ -133,7 +133,7 @@ func save_fixture(name: String, size: Vector2):
 	check(file != null, "open fixture " + filename)
 	if file != null: file.store_string(FileAccess.get_file_as_string(game.route.SAVE));file.close()
 	var previous_screen = game.screen;game.screen = "home"
-	var resume = point(game.frontend.button_rect(4).get_center());game.screen = previous_screen
+	var resume = point(game.frontend.button_rect(3).get_center());game.screen = previous_screen
 	return {"fixture": filename, "name": name, "viewport": point(size), "logical_size": point(game.ui_size), "resume": resume, "initial": summary()}
 func transition(size: Vector2):
 	prepare(1, "palace_final")

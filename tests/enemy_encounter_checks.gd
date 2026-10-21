@@ -128,11 +128,11 @@ func check_double_step():
 	game.end_turn()
 	check(pawn.pos == Vector2i(2, 1) and pawn.normal_moves == 1, "first normal movement has no bonus")
 	pawn.intent = Vector2i(2, 2);game.end_turn()
-	check(pawn.pos == Vector2i(2, 3) and pawn.normal_moves == 2, "second successful movement adds one step only")
+	check(pawn.pos == Vector2i(2, 2) and pawn.normal_moves == 2 and pawn.action_credits == 1, "second natural movement banks one future credit")
 	pawn.intent = Vector2i(2, 4);pawn.cd = 2;game.end_turn()
-	check(pawn.pos == Vector2i(2, 3) and pawn.normal_moves == 2, "bonus cannot skip countdown")
+	check(pawn.pos == Vector2i(2, 3) and pawn.normal_moves == 3 and pawn.action_credits == 0, "credit accelerates only the following phase")
 	pawn.stun = 1;pawn.cd = 1;game.end_turn()
-	check(pawn.pos == Vector2i(2, 3) and pawn.normal_moves == 2 and pawn.cd == 1, "stun prevents movement and counter advancement")
+	check(pawn.pos == Vector2i(2, 3) and pawn.normal_moves == 3 and pawn.cd == 1, "stun prevents movement and counter advancement")
 	fixture("rook_pressure", "elite", ["double_step"]);game.enemies = [game.enemies[0]]
 	pawn = add("p", Vector2i(2, 0));pawn.march_mark = true;pawn.normal_moves = 1;pawn.intent = Vector2i(2, 1)
 	add("p", Vector2i(2, 1), 99);game.end_turn()
@@ -147,7 +147,7 @@ func check_double_step():
 	fixture("rook_pressure", "elite", ["double_step"]);game.enemies = [game.enemies[0]]
 	pawn = add("p", Vector2i(2, 0));pawn.march_mark = true;pawn.normal_moves = 1;pawn.intent = Vector2i(2, 1)
 	game.player = Vector2i(2, 3);var old_lives = game.lives;game.end_turn()
-	check(pawn.pos == Vector2i(2, 2) and game.lives == old_lives and R.threatened(game.player, game.enemies), "bonus move creates next-turn threat, never immediate attack")
+	check(pawn.pos == Vector2i(2, 1) and game.lives == old_lives and pawn.action_credits == 1, "march banks future action without second move or attack")
 func check_relay():
 	fixture("horse_cannon", "elite", ["horse_relay"])
 	for i in 4: E.finish_phase(game, 0)
@@ -179,12 +179,12 @@ func check_river():
 	var pawn = game.enemies[index_of(game.encounter_state.signal_uid)]
 	var cannon = game.enemies[index_of(game.encounter_state.cannon_uid)]
 	pawn.pos = Vector2i(2, 5);E.after_normal_move(game, pawn, Vector2i(2, 4))
-	check(game.encounter_state.river_triggered and cannon.bonus_pending, "designated pawn crossing arms paired cannon")
+	check(game.encounter_state.river_triggered and cannon.action_credits == 1, "designated pawn crossing arms paired cannon")
 	check(not E.wants_bonus(game, cannon), "river signal cannot add a move in the same enemy phase")
 	game.encounter_state.phases += 1
-	check(E.wants_bonus(game, cannon), "river bonus becomes eligible from next enemy phase")
-	cannon.bonus_pending = false;E.after_normal_move(game, pawn, Vector2i(2, 4))
-	check(not cannon.bonus_pending, "river signal triggers only once")
+	check(E.available_action_credits(game, cannon) == 1, "river credit remains available next enemy phase")
+	cannon.action_credits = 0;E.after_normal_move(game, pawn, Vector2i(2, 4))
+	check(cannon.action_credits == 0, "river signal triggers only once")
 	fixture("river_cannon", "elite", ["river_signal"])
 	var other = add("p", Vector2i(6, 5));E.after_normal_move(game, other, Vector2i(6, 4))
 	check(not game.encounter_state.river_triggered, "other pawn cannot trigger signal")
@@ -195,7 +195,7 @@ func check_rotation_and_retaliation():
 	fixture("palace_guard", "elite", ["palace_rotation"])
 	var selected = E.selected_guard(game)
 	for enemy in game.enemies:
-		check(E.wants_bonus(game, enemy) == (enemy.uid == selected), "only selected guard receives rotation bonus")
+		check((E.available_action_credits(game, enemy, true) == 1) == (enemy.uid == selected), "only selected guard receives rotation bonus")
 	game.encounter_state.phases += 1;check(E.selected_guard(game) != selected, "rotation advances with completed phase")
 	fixture("two_wings", "elite", ["last_stand"])
 	var general = game.enemies[0];var before = game.enemies.duplicate(true)
@@ -204,10 +204,10 @@ func check_rotation_and_retaliation():
 	for i in game.enemies.size():
 		var enemy = game.enemies[i]
 		check(enemy.pos == before[i].pos, "retaliation never moves during player card")
-		check(enemy.get("bonus_pending", false) == (enemy.kind in ["a", "e", "p", "q"]), "retaliation marks only existing guards and pawns")
-		if enemy.kind in ["a", "e", "p", "q"]: enemy.bonus_pending = false
+		check((enemy.get("action_credits", 0) == 1) == (enemy.kind in ["a", "e", "p", "q"]), "retaliation marks only existing guards and pawns")
+		if enemy.kind in ["a", "e", "p", "q"]: enemy.action_credits = 0
 	game.damage_enemy(0, 0, 1)
-	for enemy in game.enemies: check(not enemy.get("bonus_pending", false), "later hit cannot rearm last stand")
+	for enemy in game.enemies: check(enemy.get("action_credits", 0) == 0, "later hit cannot rearm last stand")
 	var newcomer = add("p", Vector2i(0, 3));check(not newcomer.get("bonus_pending", false), "later spawn does not inherit retaliation")
 	fixture("two_wings", "elite", ["last_stand"]);game.damage_enemy(0, 0, 99)
 	check(not game.encounter_state.retaliated, "lethal general damage grants no retaliation")
@@ -240,24 +240,24 @@ func check_actual_modifiers():
 	check(guard.pos.x >= 3 and guard.pos.x <= 5 and guard.pos.y <= 2, "both guard steps stay within palace")
 	fixture("palace_guard", "elite", ["palace_rotation"])
 	guard = game.enemies[index_of(E.selected_guard(game))];guard.cd = 2;guard.period = 2
-	game.end_turn();check(move_effects(guard.uid) == 0 and guard.cd == 1, "rotation cannot bypass normal countdown")
+	game.end_turn();check(move_effects(guard.uid) == 1 and guard.cd == 2 and guard.action_credits == 0, "rotation accelerates a single action before normal countdown")
 	fixture("two_wings", "elite", ["last_stand"]);game.enemies = [game.enemies[0]]
 	var pawn = add("p", Vector2i(2, 0));pawn.intent = Vector2i(2, 1)
 	game.damage_enemy(0, 0, 1);game.clear_effects();game.end_turn()
-	check(pawn.pos == Vector2i(2, 2) and move_effects(pawn.uid) == 2 and not pawn.bonus_pending, "retaliation consumed by next successful normal action")
+	check(pawn.pos == Vector2i(2, 1) and move_effects(pawn.uid) == 1 and pawn.action_credits == 0, "retaliation consumed by next successful normal action")
 	game.clear_effects();pawn.intent = Vector2i(2, 3);game.end_turn()
-	check(pawn.pos == Vector2i(2, 3) and move_effects(pawn.uid) == 1, "retaliation never repeats")
+	check(pawn.pos == Vector2i(2, 2) and move_effects(pawn.uid) == 1, "retaliation never repeats")
 	fixture("two_wings", "elite", ["last_stand"]);game.enemies = [game.enemies[0]]
 	pawn = add("p", Vector2i(2, 0));pawn.intent = Vector2i(2, 1)
 	game.queue_bleed(0, 1);game.clear_effects();game.end_turn()
-	check(pawn.pos == Vector2i(2, 1) and pawn.bonus_pending and game.encounter_state.retaliated, "delayed general bleed arms after movement, without retroactive bonus")
-	game.clear_effects();pawn.intent = Vector2i(2, 2);game.end_turn()
-	check(pawn.pos == Vector2i(2, 3) and move_effects(pawn.uid) == 2, "bleed retaliation applies next normal action")
+	check(pawn.pos == Vector2i(2, 1) and move_effects(pawn.uid) == 1 and pawn.action_credits == 0 and game.encounter_state.retaliated and game.pending_bleeds.is_empty(), "current-ending bleed arms one accelerated action before enemy movement")
+	game.clear_effects();pawn.intent = Vector2i(2, 3);game.end_turn()
+	check(pawn.pos == Vector2i(2, 2) and move_effects(pawn.uid) == 1 and not pawn.get("bonus_pending", false), "one-tick bleed and its retaliation never repeat next ending")
 	fixture("two_wings", "elite", ["last_stand"]);game.enemies = [game.enemies[0]]
 	pawn = add("p", Vector2i(2, 0));pawn.intent = Vector2i(2, 1)
 	var blocker = add("p", Vector2i(2, 2), 99)
 	game.damage_enemy(0, 0, 1);game.clear_effects();game.end_turn()
-	check(pawn.pos == Vector2i(2, 1) and not pawn.bonus_pending and move_effects(pawn.uid) == 1, "no legal bonus step consumes pending on successful normal action")
+	check(pawn.pos == Vector2i(2, 1) and not pawn.get("bonus_pending", false) and move_effects(pawn.uid) == 1, "no legal bonus step consumes pending on successful normal action")
 	game.enemies.remove_at(index_of(blocker.uid));game.clear_effects();pawn.intent = Vector2i(2, 2);game.end_turn()
 	check(pawn.pos == Vector2i(2, 2) and move_effects(pawn.uid) == 1, "blocked extra step never accumulates")
 	fixture("river_cannon", "elite", ["river_signal"])
@@ -270,12 +270,12 @@ func check_actual_modifiers():
 	cannon.pos = Vector2i(0, 0);cannon.cd = 1;cannon.period = 1;cannon.intent = Vector2i(1, 0)
 	var rear_screen = add("stake", Vector2i(2, 7), 999);rear_screen.permanent = true
 	game.clear_effects();game.end_turn()
-	check(game.encounter_state.river_triggered and move_effects(cannon.uid) == 1 and cannon.bonus_pending, "signal pawn crossing grants pending bonus but no extra cannon move in crossing phase")
+	check(game.encounter_state.river_triggered and move_effects(cannon.uid) == 1 and cannon.action_credits == 1, "signal pawn crossing grants pending bonus but no extra cannon move in crossing phase")
 	# Move away from the formed front line: the rear screen gives the cannon a
 	# useful relocation this phase, so consuming the armed bonus is observable.
 	game.player = Vector2i(4, 7)
 	game.clear_effects();cannon.intent = Vector2i(1, 3);game.end_turn()
-	check(move_effects(cannon.uid) == 2 and not cannon.bonus_pending, "river cannon consumes bonus next phase")
+	check(move_effects(cannon.uid) == 1 and cannon.action_credits == 0, "river cannon consumes credit once next phase")
 	fixture("horse_cannon", "elite", ["horse_relay"]);game.encounter_state.phases = 4;game.encounter_state.spawn_cell = Vector2i(0, 0)
 	var saved = game.history.capture();game.end_turn();var spawned = game.history.capture()
 	check(game.history.undo() and game.history.capture() == saved and count_relay() == 0, "undo wave removes horse and restores forecast/UID")

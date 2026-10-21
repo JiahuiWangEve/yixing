@@ -1,0 +1,116 @@
+extends SceneTree
+# Ordinary production saves and real input coordinates. No runtime QA hooks.
+const OUT = "res://../verification/v0.14.2/pass/"
+const ROUTE_FIELDS = ["chapter", "current", "pending", "visited", "done", "prepared", "reward_debt", "reward_blocked", "pending_homework", "homework_awarded", "victory_recorded"]
+const BATTLE_FIELDS = ["phase", "turn", "lives", "energy", "collection", "deck", "hand", "discard", "rewards", "player", "encounter_state", "airdrop_recovery_turn", "basic_used", "card_move_used", "free_card_uid", "hand_ids", "next_card_uid", "active_displacements", "shield_charges", "pending_bleeds", "reload_ready", "artillery_mode", "deploy_draw_used", "tuna_turns", "tuna_active"]
+var game
+var checks = 0
+var failures = 0
+var reports = []
+var steps = []
+func _initialize(): call_deferred("run")
+func check(ok: bool, label: String):
+	checks += 1
+	if not ok: failures += 1;push_error("PASS WEB: " + label)
+func point(p): return [p.x, p.y]
+func json_value(value):
+	if value is Vector2 or value is Vector2i: return point(value)
+	if value is Array:
+		var result = []
+		for item in value: result.append(json_value(item))
+		return result
+	if value is Dictionary:
+		var result = {}
+		for key in value: result[key] = json_value(value[key])
+		return result
+	return value
+func summary():
+	var result = {"screen": game.screen}
+	for key in ROUTE_FIELDS: result[key] = game.route.state[key]
+	for key in BATTLE_FIELDS: result[key] = game.get(key)
+	result.encounters = []
+	for node in game.route.state.nodes: result.encounters.append(node.encounter)
+	result.enemies = []
+	for enemy in game.enemies:
+		var piece = enemy.duplicate(true);piece.erase("visual");result.enemies.append(piece)
+	return json_value(result)
+func settle():
+	game.clear_effects();game.input_lock = 0;game.navigation_lock = 0;game.initial_threat = 0
+	game.handui.reset();game.sync_hand_ids();game.handui.sync();game.route.save()
+func step(label: String, inputs: Array, kind: String = "action"):
+	settle();steps.append({"kind": kind, "label": label, "inputs": inputs, "wait_ms": 400, "expected": summary()})
+func touch(pos: Vector2, pressed: bool, index: int = 1, canceled: bool = false):
+	var event = InputEventScreenTouch.new();event.position = pos;event.pressed = pressed;event.index = index;event.canceled = canceled
+	game._input(event)
+func move(pos: Vector2, index: int = 1):
+	var event = InputEventScreenDrag.new();event.position = pos;event.index = index
+	game._input(event)
+func tap(pos: Vector2): touch(pos, true);touch(pos, false)
+func input_tap(pos: Vector2): return {"action": "tap", "point": point(pos)}
+func drag(index: int, label: String, mode: String = "release", free: bool = false, allowed: bool = true):
+	var from: Vector2 = game.handui.free_exposed_point() if free else game.handui.exposed_point(index)
+	var to: Vector2 = game.pass_drop_rect().get_center()
+	var preview: Vector2 = Vector2(game.pass_drop_rect().position.x - 50, to.y)
+	var second: Vector2 = game.cell_pos(Vector2i(0, 0))
+	var action = {"action": "drag", "from": point(from), "preview": point(preview), "to": point(to), "second": point(second), "mode": mode, "highlight": "allowed" if allowed else "blocked"}
+	touch(from, true);move(preview);move(to)
+	check(game.gesture.dragging and game.pass_drop_rect().has_point(game.gesture.pointer), label + " holds over side zone")
+	check(game.can_pass_card(index, free) == allowed, label + " eligibility matches highlight")
+	if mode == "multitouch":
+		touch(second, true, 2);touch(second, false, 2)
+		touch(to, false)
+	elif mode == "cancel": touch(to, false, 1, true)
+	else: touch(to, false)
+	step(label, [action], "blocked" if mode == "cancel" or not allowed else "action")
+func pass_input(index: int, label: String, free: bool = false, allowed: bool = true, mode: String = "release"):
+	if game.mobile_layout:
+		drag(index, label, mode, free, allowed)
+	else:
+		var from: Vector2 = game.handui.free_exposed_point() if free else game.handui.exposed_point(index)
+		var button: Vector2 = game.pass_button_rect().get_center()
+		tap(from);tap(button)
+		step(label, [input_tap(from), input_tap(button)], "action" if allowed else "blocked")
+func fresh(size: Vector2):
+	game.configure_layout(size);game.seed_value = 14242;game.player_skill = "king";game.new_expedition();game.route.enter(0)
+	game.enemies = [];game.next_enemy_uid = 1;game.add_enemy("g", Vector2i(4, 0), 999)
+	game.enemies[0].hp = 9;game.enemies[0].max_hp = 9
+	game.collection = ["airdrop", "spear", "breath", "sword"]
+	game.hand = ["airdrop", "spear", "breath"];game.hand_ids = [];game.deck = ["sword"];game.discard = [];game.rewards = []
+	game.energy = 3;game.lives = 3;game.player = Vector2i(4, 9)
+	game.plan_intents();settle();steps = []
+func replay(size: Vector2):
+	fresh(size)
+	var name = "pass_cards"
+	check(game.route.valid_snapshot(game.route.state, game.history.capture(), "game"), "fixture is a valid ordinary save")
+	var filename = name + "-" + str(int(size.x)) + ".cfg"
+	var file = FileAccess.open(OUT + "fixtures/" + filename, FileAccess.WRITE)
+	file.store_string(FileAccess.get_file_as_string(game.route.SAVE));file.close()
+	game.screen = "home";var resume = point(game.frontend.button_rect(3).get_center());game.screen = "game"
+	var zone: Rect2 = game.pass_drop_rect()
+	var report = {"name": name, "fixture": filename, "viewport": point(size), "logical_size": point(game.ui_size), "resume": resume, "zone": [zone.position.x, zone.position.y, zone.size.x, zone.size.y], "initial": summary()}
+	var before = summary()
+	drag(0, "cancel-held-drag-keeps-card", "cancel")
+	check(summary() == before, "touch cancel leaves every compared gameplay field unchanged")
+	pass_input(0, "pass-consumable-no-effect-or-redraw")
+	check(game.hand == ["spear", "breath"] and game.discard == ["airdrop"] and game.deck == ["sword"], "passing consumes just the selected copy and never redraws or exhausts")
+	check(game.energy == 0 and game.lives == 3 and game.player == Vector2i(4, 9) and game.airdrop_recovery_turn == 0 and game.enemies[0].hp == 9, "passing pays normal cost without any airdrop effect")
+	before = summary();pass_input(0, "insufficient-energy-no-change", false, false)
+	check(summary() == before, "insufficient energy changes no compared gameplay field")
+	pass_input(1, "zero-cost-pass-multitouch-once", false, true, "multitouch")
+	check(game.energy == 0 and game.hand == ["spear"] and game.discard == ["airdrop", "breath"] and game.deck == ["sword"], "zero-cost pass does not resolve breath or double-deduct under multitouch")
+	pass_input(-1, "free-card-pass-keeps-basic-quota", true)
+	check(game.free_card_uid == 0 and not game.basic_used and game.energy == 0 and game.hand == ["spear"], "passing free card clears its UID without spending basic quota or drawing")
+	game.route.save();check(game.route.resume(), "post-pass production save resumes")
+	step("reload-preserves-free-card-removal", [], "reload")
+	check(game.free_card_uid == 0 and not game.basic_used and game.discard == ["airdrop", "breath"], "reload does not resurrect passed free or consumed cards")
+	var target = game.cell_pos(Vector2i(5, 9));tap(target)
+	step("basic-move-still-available", [input_tap(target)])
+	check(game.player == Vector2i(5, 9) and game.basic_used and game.hand == ["spear", "sword"] and game.energy == 0, "basic move quota was preserved and draws only when actually used")
+	report.steps = steps.duplicate(true);reports.append(report)
+func run():
+	DirAccess.make_dir_recursive_absolute(OUT + "fixtures")
+	game = load("res://main.tscn").instantiate();root.add_child(game);game.set_process(false)
+	for size in [Vector2(1280, 940), Vector2(390, 844), Vector2(360, 780), Vector2(844, 390)]: replay(size)
+	var file = FileAccess.open(OUT + "replays.json", FileAccess.WRITE);file.store_string(JSON.stringify(reports, "  ") + "\n");file.close()
+	print("PASS WEB FIXTURES ", reports.size(), " replays, ", checks, " checks, ", failures, " failures")
+	game.free();quit(1 if failures else 0)

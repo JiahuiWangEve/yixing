@@ -42,14 +42,14 @@ def summary(battle):
 
 def layout(w, h):
     if w == 1280:
-        return {'scale': 1, 'resume': (640, 497), 'end': (791.5, 600.5),
+        return {'scale': 1, 'resume': (640, 425), 'end': (791.5, 600.5),
                 'board': (417, 74, 863, 568), 'origin': (448, 105), 'cell': 48}
     uh = max(660, 480 * h / w)
     scale = w / 480
     cell = max(24, min(44, (uh - 450) / 9))
     origin = (240 - 4 * cell, 135)
     bottom = 159 + 9 * cell
-    return {'scale': scale, 'resume': (240 * scale, (max(150, uh * .25) + 326) * scale),
+    return {'scale': scale, 'resume': (240 * scale, (max(150, uh * .25) + 252) * scale),
             'end': (386.5 * scale, (bottom + 32) * scale),
             'board': ((origin[0] - 24) * scale, 111 * scale,
                       (origin[0] + 8 * cell + 24) * scale, bottom * scale),

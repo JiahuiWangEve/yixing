@@ -18,11 +18,11 @@ const TEMPLATES = {
 }
 const RULE_NAMES = {"double_step": "连步压线", "horse_relay": "援马驿站", "river_signal": "渡河急炮", "palace_rotation": "九宫轮防", "last_stand": "残阵反扑"}
 const RULE_TEXT = {
-	"double_step": "标记卒每第二次正常行动多走一步，不额外攻击。",
+	"double_step": "标记卒每第二次非加速成功移动积攒1次加速，后续回合使用；加速移动不继续积攒。",
 	"horse_relay": "第5、10、15轮结束后援马；提前预告，场上增援马最多2匹，堵住出生格可取消。",
-	"river_signal": "旗卒过河后，从下轮起配对炮的下一次正常行动多走一步，仅一次。",
-	"palace_rotation": "每轮轮到一名守军；倒计时归零行动时可多走一步。",
-	"last_stand": "敌将首次受伤存活后，现存士象卒下一次行动多走一步，仅一次。"
+	"river_signal": "旗卒过河后，配对炮获得1次加速，从下一敌方回合起使用，仅一次。",
+	"palace_rotation": "每轮轮到一名守军，获得1次加速行动；多余加速顺延。",
+	"last_stand": "敌将首次受伤存活后，现存士象卒各获得1次加速行动，仅一次。"
 }
 const ELITES = ["river_cannon", "rook_pressure", "horse_cannon", "palace_guard", "two_wings"]
 const RULE_FOR = {"river_cannon": "river_signal", "rook_pressure": "double_step", "horse_cannon": "horse_relay", "palace_guard": "palace_rotation", "two_wings": "last_stand"}
@@ -60,7 +60,7 @@ static func setup(game, config: Dictionary):
 	for spec in TEMPLATES[config.id].pieces:
 		game.add_enemy(spec[0], Vector2i(spec[1], spec[2]), 1 if spec[0] == "q" else (2 if spec[0] == "p" else 3))
 		var enemy = game.enemies.back()
-		enemy.normal_moves = 0;enemy.bonus_pending = false
+		enemy.normal_moves = 0;enemy.march_normal_moves = 0;enemy.bonus_pending = false
 		enemy.action_credits = 0;enemy.action_credit_delay = 0
 		if enemy.kind in ["a", "e"]: game.encounter_state.guard_uids.append(enemy.uid)
 		if "double_step" in config.rules and enemy.kind in ["p", "q"]: enemy.march_mark = true
@@ -94,7 +94,7 @@ static func details(config: Dictionary) -> String:
 		elif config.get("tier", "") == "boss" and rule == "last_stand":
 			text += "反扑：敌将首次受伤存活，现存士象卒各获得1次加速行动，仅一次。\n"
 		else: text += RULE_TEXT[rule] + "\n"
-	if config.get("tier", "") == "boss":
+	if config.get("tier", "") in ["elite", "boss"]:
 		text += "每轮最多移动一次，加速叠加顺延。移动或战术留守耗1次；定身、堵路、攻击留位保留。镇四方延迟加速2轮；移动不额外攻击。"
 	return text.strip_edges()
 
@@ -110,21 +110,20 @@ static func on_general_damage(game, enemy: Dictionary):
 	game.encounter_state.retaliated = true
 	for ally in game.enemies:
 		if ally.kind in ["a", "e", "p", "q"]:
-			if uses_action_credits(game): ally.action_credits = int(ally.get("action_credits", 0)) + 1
-			else: ally.bonus_pending = true
-	game.log_line("残阵反扑：守军各获1次加速行动，叠加顺延。" if uses_action_credits(game) else "残阵反扑：守军下次正常行动额外走一步。")
+			ally.action_credits = int(ally.get("action_credits", 0)) + 1
+	game.log_line("残阵反扑：守军各获1次加速行动，叠加顺延。")
 
-# Final battle accelerates future turns, never adds a second move in one phase.
+# Elite and final battles accelerate future turns, never add a second move in one phase.
 # Credits are per-enemy snapshot data. Successful movement spends exactly one;
 # reset of the normal cooldown never discards the remaining credits.
 static func uses_action_credits(game) -> bool:
-	return active(game) and not is_chapter_two(game) and game.encounter_state.config.get("tier", "") == "boss"
+	return active(game) and not is_chapter_two(game) and game.encounter_state.config.get("tier", "") in ["elite", "boss"]
 
 static func available_action_credits(game, enemy: Dictionary, include_rotation: bool = false) -> int:
 	if not uses_action_credits(game): return 0
 	var count = int(enemy.get("action_credits", 0))
 	# Read legacy v0.10.0 pending retaliation without mutating a preview/save.
-	if enemy.get("bonus_pending", false): count += 1
+	if enemy.get("bonus_pending", false) and int(enemy.get("bonus_after_phase", 0)) <= int(game.encounter_state.phases): count += 1
 	if include_rotation and has_rule(game, "palace_rotation") and enemy.uid == selected_guard(game): count += 1
 	return count
 
@@ -134,7 +133,8 @@ static func prepare_phase(game):
 	for enemy in game.enemies:
 		enemy.action_credits = int(enemy.get("action_credits", 0))
 		enemy.action_credit_delay = int(enemy.get("action_credit_delay", 0))
-		if enemy.get("bonus_pending", false):
+		if not enemy.has("march_normal_moves"): enemy.march_normal_moves = int(enemy.get("normal_moves", 0))
+		if enemy.get("bonus_pending", false) and int(enemy.get("bonus_after_phase", 0)) <= int(game.encounter_state.phases):
 			enemy.action_credits += 1
 			enemy.bonus_pending = false # Idempotent old-save pending conversion.
 		if enemy.uid == selected: enemy.action_credits += 1
@@ -143,23 +143,31 @@ static func effective_countdown(game, enemy: Dictionary) -> int:
 	var countdown = maxi(1, int(enemy.cd))
 	if available_action_credits(game, enemy, true) > 0:
 		countdown = mini(countdown, int(enemy.get("action_credit_delay", 0)) + 1)
+	if uses_action_credits(game) and enemy.get("bonus_pending", false):
+		var due = maxi(1, int(enemy.get("bonus_after_phase", 0)) - int(game.encounter_state.phases) + 1)
+		countdown = mini(countdown, maxi(due, int(enemy.get("action_credit_delay", 0)) + 1))
 	return countdown
 
-static func wants_bonus(game, enemy: Dictionary) -> bool:
-	if not active(game) or uses_action_credits(game): return false
-	if enemy.get("bonus_pending", false) and int(enemy.get("bonus_after_phase", 0)) <= int(game.encounter_state.phases): return true
-	if has_rule(game, "double_step") and enemy.get("march_mark", false) and int(enemy.get("normal_moves", 0)) % 2 == 0: return true
-	return has_rule(game, "palace_rotation") and enemy.uid == selected_guard(game)
+static func wants_bonus(_game, _enemy: Dictionary) -> bool:
+	# Kept as a compatibility query: no rule authorizes a second same-phase move.
+	return false
 
-static func after_normal_move(game, enemy: Dictionary, from: Vector2i):
-	enemy.normal_moves = int(enemy.get("normal_moves", 0)) + 1
+static func after_normal_move(game, enemy: Dictionary, from: Vector2i, spent_credit: bool = false):
+	var prior_moves = int(enemy.get("normal_moves", 0))
+	enemy.normal_moves = prior_moves + 1
+	if has_rule(game, "double_step") and enemy.get("march_mark", false) and not spent_credit:
+		# Keep total movement statistics separate from natural march progress.
+		enemy.march_normal_moves = int(enemy.get("march_normal_moves", prior_moves)) + 1
+		if int(enemy.march_normal_moves) % 2 == 0:
+			enemy.action_credits = int(enemy.get("action_credits", 0)) + 1
 	if has_rule(game, "river_signal") and not game.encounter_state.river_triggered and enemy.uid == game.encounter_state.signal_uid and from.y < 5 and enemy.pos.y >= 5:
 		game.encounter_state.river_triggered = true
 		for ally in game.enemies:
 			if ally.uid == game.encounter_state.cannon_uid:
-				ally.bonus_pending = true
-				ally.bonus_after_phase = int(game.encounter_state.phases) + 1
-		game.log_line("旗卒渡河：配对炮下次行动额外走一步。")
+				# Army readiness was snapshotted before movement. A new credit cannot
+				# affect or be spent by this phase, regardless of pawn/cannon order.
+				ally.action_credits = int(ally.get("action_credits", 0)) + 1
+		game.log_line("旗卒渡河：配对炮获得1次加速，下轮起使用。")
 
 static func finish_phase(game, timeline: float):
 	if not active(game): return

@@ -73,7 +73,7 @@ async def main():
             async def tap(x,y,delay=160):
                 await page.touchscreen.tap(ox+x*scale,oy+y*scale); await page.wait_for_timeout(delay)
             async def resume():
-                pos=(640,497) if w==1280 else ((265,313) if w>h else (240,max(150,uh*.25)+326))
+                pos=(640,425) if w==1280 else ((695,241) if w>h else (240,max(150,uh*.25)+252))
                 await tap(*pos,350)
             async def snap(): return parse(await page.evaluate('(key)=>localStorage.getItem(key)',KEY))
             async def screenshot(label): await page.screenshot(path=str(OUT/'browser'/f'{stem}-{label}.png'))

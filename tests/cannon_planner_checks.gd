@@ -118,7 +118,7 @@ func integration_checks():
 	check(game.history.undo() and game.history.capture() == before,"undo restores hold credit and board")
 	game.end_turn()
 	check(game.history.capture() == after,"undo replay produces same hold outcome")
-	# The explicit ordinary-elite double step remains distinct from boss credits.
+	# Elite march now banks a credit instead of executing a second same-phase move.
 	game.tutorial.stop();game.new_run();game.enemies=[];game.player=Vector2i(8,9);game.lives=100
 	game.encounter_state={"config":{"id":"rook_pressure","tier":"elite","rules":["double_step"]},"phases":0,"guard_uids":[],"retaliated":false,"river_triggered":false,"signal_uid":-1,"cannon_uid":-1,"spawn_cell":Vector2i(-1,-1)}
 	game.add_enemy("p",Vector2i(2,3),1);var marcher=game.enemies.back();marcher.cd=1;marcher.march_mark=true;marcher.normal_moves=1
@@ -127,9 +127,7 @@ func integration_checks():
 	var movement=[]
 	for fx in game.effects:
 		if fx.kind=="move" and fx.get("piece",{}).get("uid",-1)==marcher.uid: movement.append(fx)
-	check(marcher.pos==Vector2i(2,5) and marcher.normal_moves==2 and movement.size()==2,"ordinary elite retains explicit normal-plus-bonus moves")
-	if movement.size()==2:
-		check(movement[1].get("delay",0)>movement[0].get("delay",0),"ordinary elite extra motion follows first motion timeline")
+	check(marcher.pos==Vector2i(2,4) and marcher.normal_moves==2 and movement.size()==1 and marcher.action_credits==1,"ordinary elite banks credit with exactly one movement")
 	game.clear_effects();marcher.stun=1;marcher.cd=1;marcher.action_credits=3;var frozen_pos=marcher.pos
 	game.end_turn()
 	movement=[]

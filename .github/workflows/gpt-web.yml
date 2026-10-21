@@ -82,6 +82,7 @@ jobs:
           python3 tests/browser_release_smoke.py 2>&1 | tee build/release-smoke.log
           python3 tests/browser_chapter_checks.py --smoke 2>&1 | tee build/chapter-smoke.log
           python3 tests/browser_airdrop_checks.py 2>&1 | tee build/airdrop-smoke.log
+          python3 tests/browser_pass_checks.py 2>&1 | tee build/pass-smoke.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -94,6 +95,8 @@ jobs:
             build/release-smoke.log
             build/chapter-smoke.log
             build/airdrop-smoke.log
+            build/pass-smoke.log
+            verification/v0.14.2/
             verification/v0.14.1/
             verification/v0.14.0/
             verification/release-smoke/
