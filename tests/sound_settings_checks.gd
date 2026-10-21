@@ -26,6 +26,9 @@ func no_old_toggle(label: String):
 	var muted: bool = game.audio_system.muted
 	game.handle_click(old_sound_rect().get_center())
 	check(game.audio_system.muted == muted, "former top sound hitbox cannot toggle on " + label)
+	# That location can now open the map deck viewer. Dismiss normally before
+	# this fixture directly switches screens for its next independent case.
+	if game.card_picker.active: key(KEY_ESCAPE)
 func run():
 	DirAccess.remove_absolute(SETTINGS.SAVE)
 	start_game()
