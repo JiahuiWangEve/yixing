@@ -1,0 +1,24 @@
+{
+  "source_commit": "ba1fb0a673ecfd534ebfe4cede55e5b627079eb1",
+  "build_run": 39563785299,
+  "pages_marker": "aeab6916457249d7b5359ccf67a621e0d70bb3fe",
+  "pages_runs": [
+    39565170411,
+    39565170725
+  ],
+  "pages_conclusion": "success",
+  "live_version": "v0.10.0",
+  "live_sha256": {
+    "index.pck": "0e8a10257a52a93baf4dd46ddf0f048cb8d061fc3daaa16e6c28e9d2f555f18b",
+    "index.wasm": "26b61ce95247012ab3dca3ff51e96d1cdbff44ee91a8c20a83e150afca83f1b6"
+  },
+  "live_hashes_match": true,
+  "pck_uncompressed_bytes": 914288,
+  "pck_download_bytes": 713674,
+  "wasm_download_bytes": 9575393,
+  "browser_viewports": 4,
+  "browser_state_checks": 40,
+  "browser_touch_scroll_checks": 12,
+  "browser_keyboard_checks": 3,
+  "browser_errors": 0
+}
