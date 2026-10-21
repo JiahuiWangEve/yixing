@@ -1,7 +1,7 @@
 {
   "version": "v0.14.7",
   "source_branch": "gpt",
-  "source_commit": "cc2de7f1bf2dd1c77daa741fcc400358be836028",
+  "source_commit": "7784ee5d0b5f1bb788ed228c7d316a6364f26ad6",
   "godot": "4.6.3",
   "thread_support": false,
   "sha256": {
