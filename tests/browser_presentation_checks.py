@@ -27,17 +27,25 @@ async def main():
                         frames.append(base64.b64decode(event['data']))
                         ack_tasks.append(asyncio.create_task(cdp.send('Page.screencastFrameAck',{'sessionId':event['sessionId']})))
                     cdp.on('Page.screencastFrame',receive_seal_frame)
-                    await cdp.send('Page.startScreencast',{'format':'png','everyNthFrame':1})
-                    await tap(r['skip']);await page.wait_for_timeout(1500)
-                    await cdp.send('Page.stopScreencast');await asyncio.gather(*ack_tasks);await cdp.detach()
-                    s=await state();assert s['phase']=='reward'
+                    await cdp.send('Page.startScreencast',{'format':'jpeg','quality':80,'maxWidth':640,'maxHeight':640,'everyNthFrame':1})
                     def red_pixels(data):
-                        im=Image.open(io.BytesIO(data)).convert('RGB');crop=im.crop((int(w*.25),int(h*.25),int(w*.75),int(h*.75)))
+                        im=Image.open(io.BytesIO(data)).convert('RGB');crop=im.crop((int(im.width*.25),int(im.height*.25),int(im.width*.75),int(im.height*.75)))
                         return sum(1 for rr,g,b in crop.getdata() if rr>110 and rr>g*1.8 and rr>b*1.8)
+                    await tap(r['skip'])
+                    cursor=0;seen_seal=False;finished=False;deadline=time.monotonic()+20
+                    while not finished and time.monotonic()<deadline:
+                        while cursor<len(frames):
+                            count=red_pixels(frames[cursor]);cursor+=1
+                            if count>150:seen_seal=True
+                            elif seen_seal:finished=True
+                        if not finished:await asyncio.sleep(.05)
+                    await cdp.send('Page.stopScreencast');await asyncio.gather(*ack_tasks);await cdp.detach()
+                    assert finished,('victory display did not visibly finish',w,len(frames))
+                    s=await state();assert s['phase']=='reward'
                     assert frames,('no victory compositor frames',w)
                     data=max(frames,key=red_pixels);red=red_pixels(data)
                     assert red>150,('victory seal not visible in any frame',w,red,len(frames))
-                    (output/f"{r['name']}-{mode}-seal-before-reward.png").write_bytes(data)
+                    Image.open(io.BytesIO(data)).save(output/f"{r['name']}-{mode}-seal-before-reward.png")
                     await shot('reward-after-seal');assert await state()==s
                     await page.reload();await boot(page);await tap(r['resume']);await page.wait_for_timeout(450);await shot('reload-no-second-seal');assert await state()==s
                 else:
@@ -49,24 +57,31 @@ async def main():
                         frames.append((event['metadata'].get('timestamp',0),base64.b64decode(event['data'])))
                         ack_tasks.append(asyncio.create_task(cdp.send('Page.screencastFrameAck',{'sessionId':event['sessionId']})))
                     cdp.on('Page.screencastFrame',receive_frame)
-                    await cdp.send('Page.startScreencast',{'format':'png','everyNthFrame':1})
-                    await tap(r['confirm']);await page.wait_for_timeout(2300)
-                    await cdp.send('Page.stopScreencast');await asyncio.gather(*ack_tasks);await cdp.detach()
-                    assert (await state())['collection']==r['after']
+                    await cdp.send('Page.startScreencast',{'format':'jpeg','quality':80,'maxWidth':640,'maxHeight':640,'everyNthFrame':1})
                     # Production card colors identify the two fully expanded
                     # faces, not a flipped sliver or the map after dismissal.
-                    probe=(int(ox+(uw/2+65)*scale),int(oy+(uh/2+75)*scale))
+                    probe=(int(ox+(uw/2+118)*scale),int(oy+(uh/2+90)*scale))
                     selected={};frame_info=[]
-                    for number,(stamp,data) in enumerate(frames):
-                        im=Image.open(io.BytesIO(data)).convert('RGB')
-                        x,y=probe;patch=im.crop((x-3,y-3,x+4,y+4));rgb=ImageStat.Stat(patch).mean
-                        label=next((label for label,target in [('old-card',(242,229,204)),('upgraded-card',(234,213,172))] if max(abs(rgb[i]-target[i]) for i in range(3))<5),None)
-                        frame_info.append({'frame':number,'timestamp':stamp,'probe_rgb':rgb,'phase':label})
-                        if label and (label not in selected or label == 'upgraded-card'):selected[label]=(number,stamp,data)
+                    await tap(r['confirm'])
+                    cursor=0;finished=False;deadline=time.monotonic()+20
+                    while not finished and time.monotonic()<deadline:
+                        while cursor<len(frames):
+                            number=cursor;stamp,data=frames[cursor];cursor+=1
+                            im=Image.open(io.BytesIO(data)).convert('RGB')
+                            x,y=int(probe[0]*im.width/w),int(probe[1]*im.height/h);patch=im.crop((x-1,y-1,x+2,y+2));rgb=ImageStat.Stat(patch).mean
+                            label=next((label for label,target in [('old-card',(242,229,204)),('upgraded-card',(234,213,172))] if max(abs(rgb[i]-target[i]) for i in range(3))<8),None)
+                            frame_info.append({'frame':number,'timestamp':stamp,'probe_rgb':rgb,'phase':label})
+                            if label and (label not in selected or label == 'upgraded-card'):selected[label]=(number,stamp,data)
+                            if 'upgraded-card' in selected and label is None:finished=True
+                        if not finished:await asyncio.sleep(.05)
+                    await cdp.send('Page.stopScreencast');await asyncio.gather(*ack_tasks);await cdp.detach()
+                    assert (await state())['collection']==r['after']
+                    (output/f"{r['name']}-upgrade-frames.json").write_text(json.dumps(frame_info,indent=2))
+                    assert finished,('upgrade display did not visibly finish',w,frame_info)
                     assert set(selected)=={'old-card','upgraded-card'},('missing distinct visible card phases',w,frame_info)
                     assert selected['old-card'][0]<selected['upgraded-card'][0],frame_info
                     for label,(_,stamp,data) in selected.items():
-                        (output/f"{r['name']}-{mode}-{label}.png").write_bytes(data)
+                        Image.open(io.BytesIO(data)).save(output/f"{r['name']}-{mode}-{label}.png")
                     (output/f"{r['name']}-upgrade-frames.json").write_text(json.dumps(frame_info,indent=2))
                     await tap(r['view']);await page.wait_for_timeout(150);await shot('read-only-deck');s=await state();assert s['collection']==r['after']
                     await page.keyboard.press('Enter');await page.keyboard.press('Space');await tap(r['back']);await page.wait_for_timeout(150);assert await state()==s
