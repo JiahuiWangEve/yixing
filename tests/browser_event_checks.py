@@ -27,6 +27,17 @@ async def boot(page):
     await page.wait_for_function("!document.getElementById('status')", timeout=60000)
     await page.wait_for_timeout(500)
 
+async def await_saved_state(snapshot, expected, timeout=12.0):
+    # Keep the caller's existing animation/Continue settle windows. A map
+    # arrival's save can still lag the UI on a busy Web main thread; observe
+    # the complete expected state without replaying input or accepting less.
+    loop=asyncio.get_running_loop(); deadline=loop.time()+timeout
+    actual=await snapshot()
+    while actual!=expected and loop.time()<deadline:
+        await asyncio.sleep(0.08)
+        actual=await snapshot()
+    return actual
+
 async def main():
     (OUT/'browser').mkdir(parents=True,exist_ok=True)
     reports=[]
@@ -71,7 +82,8 @@ async def main():
             await page.goto(URL); await boot(page)
             await page.evaluate('([key,value])=>localStorage.setItem(key,value)',[KEY,fixture])
             await page.reload(); await boot(page); await resume()
-            assert await snap()==replay['initial'],(stem,'initial',await snap(),replay['initial'])
+            initial=await await_saved_state(snap,replay['initial'])
+            assert initial==replay['initial'],(stem,'initial',initial,replay['initial'])
             await screenshot('initial')
             for number,step in enumerate(replay['steps']):
                 if step['kind']=='reload':
@@ -80,7 +92,7 @@ async def main():
                     for pos in step['taps']:
                         await tap(*pos)
                     await page.wait_for_timeout(1800 if step['kind']=='combat' else (1000 if step['kind']=='enter' else 400))
-                actual=await snap()
+                actual=await await_saved_state(snap,step['expected'])
                 if actual!=step['expected']:
                     await screenshot('failure-'+str(number))
                     raise AssertionError((stem,number,step['label'],actual,step['expected']))

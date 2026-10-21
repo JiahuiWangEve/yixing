@@ -4,6 +4,7 @@ Run a server over build/web on 8765 (or set YIXING_TEST_URL).
 import asyncio, json, os, re, shutil
 from pathlib import Path
 from playwright.async_api import async_playwright
+from browser_event_checks import await_saved_state
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'verification/v0.13.0/browser'
 OUT.mkdir(parents=True, exist_ok=True)
@@ -35,10 +36,17 @@ async def main():
    async def tap(x,y,delay=180):
     await page.touchscreen.tap(ox+x*scale,oy+y*scale); await page.wait_for_timeout(delay)
    async def state(screen,current,pending):
-    saved=await page.evaluate("localStorage.getItem('yixing.route_run.v0100')")
-    assert saved, 'No synchronous Web snapshot'
-    got=(re.search(r'^screen="(\w+)"',saved,re.M).group(1),int(re.search(r'"current": (-?\d+)',saved).group(1)),int(re.search(r'"pending": (-?\d+)',saved).group(1)))
+    saved=None
+    async def current_state():
+     nonlocal saved
+     saved=await page.evaluate("localStorage.getItem('yixing.route_run.v0100')")
+     if not saved: return None
+     return (re.search(r'^screen="(\w+)"',saved,re.M).group(1),int(re.search(r'"current": (-?\d+)',saved).group(1)),int(re.search(r'"pending": (-?\d+)',saved).group(1)))
+    # Keep all original settle times and assert the same exact state tuple.
+    # Only observe until an asynchronous map arrival's save has caught up.
+    got=await await_saved_state(current_state,(screen,current,pending))
     if got != (screen,current,pending): await page.screenshot(path=str(OUT/f'failure-{w}.png'))
+    assert saved, 'No synchronous Web snapshot'
     assert got==(screen,current,pending),(w,got,(screen,current,pending))
     assertions.append(list(got))
    async def shot(label):await page.screenshot(path=str(OUT/f'{label}-{w}.png'))
@@ -58,7 +66,8 @@ async def main():
     assert await saved_turn()==before, 'Enter must not end a battle turn'
     keyboard_assertions.append('Enter ignored in battle')
     await page.keyboard.down('Space'); await page.wait_for_timeout(1500)
-    assert await saved_turn()==before+1, 'Space must end one battle turn'
+    actual_turn=await await_saved_state(saved_turn,before+1)
+    assert actual_turn==before+1, 'Space must end one battle turn'
     keyboard_assertions.append('Space ends one turn')
     await page.keyboard.down('Space'); await page.wait_for_timeout(1500)
     await page.keyboard.up('Space')
