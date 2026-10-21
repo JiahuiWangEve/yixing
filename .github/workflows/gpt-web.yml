@@ -98,6 +98,9 @@ jobs:
             build/chapter-smoke.log
             build/airdrop-smoke.log
             build/pass-smoke.log
+            build/picker-smoke.log
+            build/presentation-smoke.log
+            verification/v0.14.3/
             verification/v0.14.2/
             verification/v0.14.1/
             verification/v0.14.0/
@@ -181,6 +184,7 @@ jobs:
           name: yixing-regression-${{ github.sha }}
           path: |
             build/*browser.log
+            verification/v0.14.3/
             verification/v0.14.0/
             verification/v0.13.0/
             verification/v0.12.0/rook/
