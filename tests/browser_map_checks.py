@@ -5,7 +5,7 @@ import asyncio, json, os, re, shutil
 from pathlib import Path
 from playwright.async_api import async_playwright
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'verification/v0.9.0/browser'
+OUT = ROOT / 'verification/v0.9.1/browser'
 OUT.mkdir(parents=True, exist_ok=True)
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
 XS = [.46,.15,.50,.85,.22,.76,.53,.13,.48,.86,.24,.73,.15,.49,.84,.79]

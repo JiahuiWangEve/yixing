@@ -1,7 +1,7 @@
 extends Node
 # Copy this script and its scene into game as _seal_visual_qa.gd/.tscn.
 # Run the scene with a real rendering driver; --headless cannot validate visuals.
-const OUT = "res://../verification/v0.9.0/native/"
+const OUT = "res://../verification/v0.9.1/native/"
 var reports = []
 var assertions = 0
 func _ready(): call_deferred("run")

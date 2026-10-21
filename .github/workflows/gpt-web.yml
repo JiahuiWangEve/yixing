@@ -34,6 +34,8 @@ jobs:
           bin/godot --headless --path game --export-release Web ../build/web/index.html > build/export.log 2>&1
           cat build/export.log
           if grep -Eq 'SCRIPT ERROR:|Parse Error:|(^|[[:space:]])ERROR:' build/export.log; then exit 1; fi
+          python3 scripts/check_web_package.py build/web/index.pck > build/package-audit.log
+          cat build/package-audit.log
           touch build/web/.nojekyll
           python3 - <<'PY'
           import hashlib, json, os, pathlib, re
@@ -62,8 +64,9 @@ jobs:
           path: |
             build/web/
             build/export.log
+            build/package-audit.log
             build/browser.log
-            verification/v0.9.0/browser/
+            verification/v0.9.1/browser/
             verification/latest/
           include-hidden-files: true
       - name: Commit Web export to gh-pages

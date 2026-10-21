@@ -18,6 +18,8 @@ run() {
   echo "PASS $label (exit $rc)"
 }
 "$godot" --version > "$logs/version.txt"
+python3 "$root/tests/font_corpus_checks.py" > "$logs/font-corpus.log" 2>&1 || { cat "$logs/font-corpus.log"; exit 1; }
+python3 "$root/scripts/font_subset.py" > "$logs/font-subset-build.log" 2>&1 || { cat "$logs/font-subset-build.log"; exit 1; }
 run import --editor --import
 for script in "$root"/game/*.gd; do
   run "parse-$(basename "$script" .gd)" --check-only --script "$script"
@@ -40,3 +42,5 @@ run current-tutorials --script "$root/tests/current_tutorial_checks.gd"
 run space-shortcut --script "$root/tests/space_shortcut_checks.gd"
 
 run seal-map --script "$root/tests/seal_map_checks.gd"
+
+run font-subset --script "$root/tests/font_subset_checks.gd"

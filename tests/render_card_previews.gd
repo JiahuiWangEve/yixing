@@ -2,7 +2,7 @@ extends Node
 # Run with a real renderer, never --headless.
 # Copy this script and its scene into game as _card_visual_qa.gd/.tscn;
 # run that scene, then remove those copies. Do not export the QA scene.
-const OUT = "res://../verification/v0.8.0/"
+const OUT = "res://../verification/v0.9.1/cards/"
 const PREVIEWS = ["sweep", "shock", "pierce", "guard", "suppress", "chain_assault", "permanent_stake", "reload", "cannon_shot_march", "cannon_shot_attack"]
 var reports: Array = []
 var screenshots = 0

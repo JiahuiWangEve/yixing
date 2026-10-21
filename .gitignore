@@ -5,3 +5,5 @@ build/
 verification/latest/
 *.tmp
 .DS_Store
+
+__pycache__/

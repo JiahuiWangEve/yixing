@@ -28,4 +28,5 @@ ln -sf "$binary" "$root/bin/godot"
 # Stable command for later shells; do not rely on setup's exported PATH surviving.
 if [[ -w /usr/local/bin ]]; then ln -sf "$binary" /usr/local/bin/godot; fi
 "$root/bin/godot" --version
+python3 -m pip install -r "$root/scripts/font-requirements.txt"
 bash "$root/scripts/verify.sh"

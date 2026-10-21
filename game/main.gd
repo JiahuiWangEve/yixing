@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.9.0"
+const BUILD_VERSION = "v0.9.1"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -22,7 +22,7 @@ const FRONTEND = preload("res://frontend.gd")
 const AUDIO = preload("res://pixel_audio.gd")
 var SOUND_RECT = Rect2(913, 20, 88, 40)
 const R = preload("res://rules.gd")
-const FONT = preload("res://assets/font.ttc")
+const FONT = preload("res://assets/font-subset.otf")
 var O = Vector2(412, 105)
 var BOARD_RECT = Rect2(377, 70, 526, 583)
 var RESTART_RECT = Rect2(773, 20, 130, 40)
