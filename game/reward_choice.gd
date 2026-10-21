@@ -99,12 +99,14 @@ func title_position() -> Vector2:
 	if not game.mobile_layout: return Vector2(320, 185) if mode == "remove" else Vector2(220, 245)
 	if game.compact_landscape: return Vector2(24, 112)
 	return Vector2(24, 85)
+func advances_chapter() -> bool:
+	return game.route.active() and game.route.chapter() == 1 and game.route.state.pending >= 0 and game.route.state.nodes[game.route.state.pending].kind == "boss"
 func title() -> String:
 	if game.route.rewards_blocked(): return "破阵成功 · 本战收益抵消"
 	if mode == "add": return "加牌 · 选择 1 张新牌"
 	if mode == "remove": return "删牌 · 永久移除 1 张"
 	if game.debug_remaining > 0: return "预选奖励 %d / %d" % [game.debug_reward_total - game.debug_remaining + 1, game.debug_reward_total]
-	return "破阵成功 · 选择本关奖励"
+	return "第一章突破 · 结算后进军坚城" if advances_chapter() else "破阵成功 · 选择本关奖励"
 func _button(rect: Rect2, label: String, enabled: bool = true, danger: bool = false):
 	game.panel(rect, game.THEME.BUTTON if enabled else game.THEME.BOARD, game.THEME.DANGER if danger and enabled else game.THEME.BORDER)
 	var font_size = 18 if game.mobile_layout else 20
@@ -124,7 +126,7 @@ func draw():
 		var pos = title_position() + Vector2(0, 50)
 		game.wrapped_text("课后作业：本战不获得加牌、删牌等常规战后奖励。行军进度照常推进。", Rect2(pos, Vector2(game.ui_size.x - pos.x - 24, 110)), 18, game.THEME.LIGHT)
 		game.wrapped_text(game.route.homework_summary(), Rect2(pos + Vector2(0, 130), Vector2(game.ui_size.x - pos.x - 24, 100)), 18, game.THEME.HEADING)
-		_button(confirm_rect(), "返回山河图")
+		_button(confirm_rect(), "进军第二章 · 坚城" if advances_chapter() else "返回山河图")
 		return
 	match mode:
 		"choice": _draw_choice()
@@ -136,7 +138,7 @@ func _draw_choice():
 	game.text_at(title_position() + Vector2(0, 28 if game.mobile_layout else 32), intro, 16, game.THEME.LIGHT)
 	var labels = ["加牌", "删牌", "跳过"]
 	var subtitles = ["从 3 张奖励牌中选 1 张", "从整副牌组中永久删 1 张", "保持牌组，继续下一关"]
-	if game.route.active(): subtitles[2] = "保持牌组，返回山河图"
+	if game.route.active(): subtitles[2] = "保持牌组，进军第二章" if advances_chapter() else "保持牌组，返回山河图"
 	if game.debug_remaining > 0: subtitles[2] = "保持牌组，继续预选流程"
 	if game.collection.is_empty(): subtitles[1] = "牌组为空，暂无可删牌"
 	for i in 3:

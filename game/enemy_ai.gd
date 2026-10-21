@@ -25,6 +25,7 @@ static func candidate_score(piece: Dictionary, target: Vector2i, enemies: Array,
 	if index < 0: return -INF
 	board[index].pos = target
 	var moved: Dictionary = board[index]
+	if piece.kind == "g": return GE.position_score(moved, board, player)
 	var score = -float((target - player).length_squared()) * 0.025
 	if R.attacks(moved, player, board): score += 4.0
 	if piece.kind == "c":
@@ -54,6 +55,7 @@ static func candidate_score(piece: Dictionary, target: Vector2i, enemies: Array,
 
 static func choose(piece: Dictionary, options: Array, enemies: Array, player: Vector2i, rng: RandomNumberGenerator, context: Dictionary = {}, allow_hold: bool = true) -> Vector2i:
 	if options.is_empty(): return Vector2i(-1, -1)
+	if piece.kind == "g": return GE.defend(piece, options, enemies, player, context, allow_hold)
 	var escape = GE.choose(piece,options,enemies,player,context)
 	if escape != Vector2i(-1,-1): return escape
 	if piece.kind == "r": return choose_rook(piece,options,enemies,player,context,allow_hold)
@@ -63,12 +65,16 @@ static func choose(piece: Dictionary, options: Array, enemies: Array, player: Ve
 	for ally in enemies:
 		if ally.kind == "c": cannon_value += CP.value(ally,enemies,aim,{}, {})
 	var barrier = CP.general_barrier(enemies,player,context) if allow_hold else 0.0
+	var defense = GE.guard_state(enemies,player,context) if allow_hold else []
 	if allow_hold and (cannon_value > 0.0 or barrier > 0.0): candidates.append(piece.pos)
-	var best: Vector2i = options[0]
+	# A guard can stay only as the safety fallback if every moving option
+	# exposes the king; do not change ordinary distant guard movement.
+	var best: Vector2i = piece.pos if allow_hold and not defense.is_empty() else options[0]
 	var best_score = -INF
 	for target in candidates:
 		var score = candidate_score(piece, target, enemies, player) + rng.randf_range(0.0, 0.35)
 		var trial = CP.placed(enemies,piece.uid,target)
+		if not GE.preserves_guard_state(defense,trial,player,context): continue
 		if allow_hold: score += CP.general_barrier(trial,player,context)-barrier
 		if cannon_value > 0.0:
 			var after = 0.0
@@ -87,12 +93,14 @@ static func choose_rook(piece: Dictionary, options: Array, enemies: Array, playe
 	var aim=CP.targets(enemies,player,context)
 	var before=RT.value(piece,enemies,player,context)
 	var old_barrier=CP.general_barrier(enemies,player,context)
+	var defense=GE.guard_state(enemies,player,context) if allow_hold else []
 	var cannon_before=0.0
 	for e in enemies:
 		if e.kind=="c": cannon_before+=CP.value(e,enemies,aim,{}, {})
 	var best: Vector2i=options[0];var best_score=-INF
 	for target in candidates:
 		var trial=CP.placed(enemies,piece.uid,target)
+		if not GE.preserves_guard_state(defense,trial,player,context): continue
 		var rook=trial[CP.by_uid(trial,piece.uid)]
 		var control=RT.value(rook,trial,player,context)
 		var barrier=CP.general_barrier(trial,player,context) if allow_hold else 0.0

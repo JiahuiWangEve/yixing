@@ -1,6 +1,7 @@
 extends RefCounted
 # A generated node fixes its army and rule once. Combat state is snapshotted by undo.
 const R = preload("res://rules.gd")
+const CHAPTER_TWO = preload("res://chapter_two.gd")
 const TEMPLATES = {
 	"three_pawns": {"name": "三卒拦路", "pieces": [["p", 2, 3], ["p", 4, 3], ["p", 6, 3]]},
 	"quick_pawns": {"name": "急卒突进", "pieces": [["q", 2, 3], ["p", 4, 3], ["q", 6, 3]]},
@@ -26,7 +27,8 @@ const RULE_TEXT = {
 const ELITES = ["river_cannon", "rook_pressure", "horse_cannon", "palace_guard", "two_wings"]
 const RULE_FOR = {"river_cannon": "river_signal", "rook_pressure": "double_step", "horse_cannon": "horse_relay", "palace_guard": "palace_rotation", "two_wings": "last_stand"}
 
-static func node_config(kind: String, row: int, random: RandomNumberGenerator) -> Dictionary:
+static func node_config(kind: String, row: int, random: RandomNumberGenerator, chapter: int = 1) -> Dictionary:
+	if chapter == 2: return CHAPTER_TWO.node_config(kind, row, random)
 	var id = ""
 	var modifiers: Array = []
 	if kind == "boss":
@@ -40,6 +42,8 @@ static func node_config(kind: String, row: int, random: RandomNumberGenerator) -
 	return {} if id.is_empty() else {"id": id, "tier": kind, "rules": modifiers}
 
 static func valid_config(config) -> bool:
+	if config is Dictionary and config.get("id", "") in CHAPTER_TWO.TEMPLATES: return CHAPTER_TWO.valid_config(config)
+	if config is Dictionary and config.get("chapter", 1) != 1: return false
 	if not config is Dictionary or config.get("id", "") not in TEMPLATES: return false
 	if config.get("tier", "") not in ["battle", "elite", "boss"] or not config.get("rules") is Array: return false
 	for rule in config.rules:
@@ -49,6 +53,8 @@ static func valid_config(config) -> bool:
 	return config.id not in ["horse_cannon", "palace_guard", "two_wings", "palace_final"] and config.rules.is_empty()
 
 static func setup(game, config: Dictionary):
+	if config.get("id", "") in CHAPTER_TWO.TEMPLATES:
+		CHAPTER_TWO.setup(game, config);return
 	game.encounter_state = {"config": config.duplicate(true), "phases": 0, "retaliated": false, "river_triggered": false, "signal_uid": -1, "cannon_uid": -1, "guard_uids": [], "spawn_cell": Vector2i(-1, -1)}
 	game.add_enemy("g", Vector2i(4, 0), 3)
 	for spec in TEMPLATES[config.id].pieces:
@@ -64,12 +70,23 @@ static func setup(game, config: Dictionary):
 
 static func active(game) -> bool: return not game.tutorial.active and not game.encounter_state.is_empty()
 static func has_rule(game, rule: String) -> bool: return active(game) and rule in game.encounter_state.config.rules
-static func title(config: Dictionary) -> String: return TEMPLATES.get(config.get("id", ""), {}).get("name", "")
+static func is_chapter_two(game) -> bool: return active(game) and game.encounter_state.config.get("chapter", 1) == 2
+static func on_enemy_defeated(game, enemy: Dictionary, before_player_input: bool = false):
+	if is_chapter_two(game): CHAPTER_TWO.on_enemy_defeated(game, enemy, before_player_input)
+static func cancel_pending(game):
+	if is_chapter_two(game): CHAPTER_TWO.cancel_pending(game)
+static func markers(game) -> Array: return CHAPTER_TWO.markers(game) if is_chapter_two(game) else []
+static func enemy_tags(enemy: Dictionary) -> String: return CHAPTER_TWO.enemy_tags(enemy)
+static func title(config: Dictionary) -> String:
+	if config.get("id", "") in CHAPTER_TWO.TEMPLATES: return CHAPTER_TWO.title(config)
+	return TEMPLATES.get(config.get("id", ""), {}).get("name", "")
 static func summary(config: Dictionary) -> String:
+	if config.get("id", "") in CHAPTER_TWO.TEMPLATES: return CHAPTER_TWO.summary(config)
 	var labels: Array[String] = []
 	for rule in config.get("rules", []): labels.append(RULE_NAMES[rule])
 	return " · ".join(labels)
 static func details(config: Dictionary) -> String:
+	if config.get("id", "") in CHAPTER_TWO.TEMPLATES: return CHAPTER_TWO.details(config)
 	var text = ""
 	for rule in config.get("rules", []):
 		if config.get("tier", "") == "boss" and rule == "palace_rotation":
@@ -101,7 +118,7 @@ static func on_general_damage(game, enemy: Dictionary):
 # Credits are per-enemy snapshot data. Successful movement spends exactly one;
 # reset of the normal cooldown never discards the remaining credits.
 static func uses_action_credits(game) -> bool:
-	return active(game) and game.encounter_state.config.get("tier", "") == "boss"
+	return active(game) and not is_chapter_two(game) and game.encounter_state.config.get("tier", "") == "boss"
 
 static func available_action_credits(game, enemy: Dictionary, include_rotation: bool = false) -> int:
 	if not uses_action_credits(game): return 0
@@ -146,6 +163,8 @@ static func after_normal_move(game, enemy: Dictionary, from: Vector2i):
 
 static func finish_phase(game, timeline: float):
 	if not active(game): return
+	if is_chapter_two(game):
+		CHAPTER_TWO.finish_phase(game, timeline);return
 	game.encounter_state.phases += 1
 	var completed = int(game.encounter_state.phases)
 	if not has_rule(game, "horse_relay") or not game.general_alive(): return
@@ -169,6 +188,7 @@ static func finish_phase(game, timeline: float):
 
 static func status(game) -> String:
 	if not active(game): return ""
+	if is_chapter_two(game): return CHAPTER_TWO.status(game)
 	var label = summary(game.encounter_state.config)
 	if has_rule(game, "horse_relay"):
 		var completed = int(game.encounter_state.phases)
@@ -177,6 +197,7 @@ static func status(game) -> String:
 	return label
 
 static func valid_state(value) -> bool:
+	if value is Dictionary and value.get("config") is Dictionary and value.config.get("id", "") in CHAPTER_TWO.TEMPLATES: return CHAPTER_TWO.valid_state(value)
 	if not value is Dictionary or not valid_config(value.get("config")): return false
 	for key in ["phases", "signal_uid", "cannon_uid"]:
 		if not value.get(key) is int: return false

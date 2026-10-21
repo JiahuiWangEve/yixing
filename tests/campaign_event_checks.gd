@@ -199,7 +199,10 @@ func check_reward_debt():
 		deck = game.collection.duplicate();game.debug_skip();deck.append_array(["spear_plus", "deploy"])
 		check(game.collection == deck and route.state.reward_debt == 0 and route.state.pending_homework.is_empty() and route.rewards_blocked(), "debug homework delivers each queued copy once in " + tier)
 		game.debug_skip();check(game.collection == deck, "duplicate debug cannot deliver again in " + tier)
-		if tier == "boss": check(game.phase == "win" and route.state.done, "boss homework delivery coexists with chapter completion")
+		if tier == "boss":
+			check(game.phase == "reward" and not route.state.done, "first boss homework receipt precedes chapter transition")
+			game.choose_reward(-1)
+			check(route.chapter() == 2 and game.collection == deck, "boss copied cards survive chapter transition")
 		else: check(route.resume() and game.collection == deck, "debug homework reward receipt survives reload in " + tier)
 func fatigue_fixture(identity: String = "king"):
 	fresh(identity);route.enter(0);game.enemies = [];game.add_enemy("g", Vector2i(4,0), 9)

@@ -194,14 +194,14 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 	var result = {"order":[],"targets":{},"stats":{"evaluations":0,"joint":0,"lookahead":0,"rook_scores":0}}
 	if ready.is_empty(): return result
 	var projected = board.duplicate(true);var locked = {}
-	# Reserve an eligible general's legal escape before cannon support planning.
-	# This uses its existing action, never grants a second movement or readiness.
+	# The general owns its defensive decision, including a deliberate hold. It is
+	# never a disposable cannon screen, and uses only its existing ready action.
 	for general in board:
-		if general.kind != "g" or not ready.has(general.uid) or not GE.threatened(general,projected,player,context): continue
-		var escape = GE.choose(general,moves(general,projected,player),projected,player,context)
-		if escape == NONE: continue
-		result.order.append(general.uid);result.targets[general.uid]=escape
-		locked[general.uid]=true;projected=placed(projected,general.uid,escape)
+		if general.kind != "g" or not ready.has(general.uid): continue
+		var destination = GE.defend(general,moves(general,projected,player),projected,player,context)
+		if destination == NONE: continue
+		result.order.append(general.uid);result.targets[general.uid]=destination
+		locked[general.uid]=true;projected=placed(projected,general.uid,destination)
 	var aim = targets(projected,player,context)
 	var cannons = []
 	for e in board:
@@ -215,6 +215,7 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 		var cannon = projected[ci]
 		var can_move = ready.has(cannon_uid)
 		var current = value(cannon,projected,aim,ready,locked)
+		var defense_before = GE.guard_state(projected,player,context)
 		var choices = moves(cannon,projected,player) if can_move else []
 		choices.append(cannon.pos)
 		var candidates = [];var seen_pairs = {}
@@ -228,6 +229,7 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 		for destination in choices:
 			if result.stats.evaluations >= limit: break
 			var candidate_board = placed(projected,cannon_uid,destination)
+			if not GE.preserves_guard_state(defense_before,candidate_board,player,context): continue
 			var fixed = locked.duplicate();fixed[cannon_uid] = true
 			var v = value(candidate_board[ci],candidate_board,aim,ready,fixed)
 			var score = v + general_barrier(candidate_board,player,context) + setup_value(candidate_board[ci],candidate_board,aim) - movement_penalty(cannon,destination,current,v,player,projected)
@@ -236,7 +238,7 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 		# Combine with a single independently ready support, in BOTH legal orders.
 		var supports = [];var future_supports = []
 		for e in projected:
-			if e.uid == cannon_uid or e.kind in ["stake","c"] or locked.has(e.uid): continue
+			if e.uid == cannon_uid or e.kind in ["stake","c","g"] or locked.has(e.uid): continue
 			var priority = 20 if e.kind in ["p","q"] else (0 if e.kind in ["a","g"] else 10)
 			priority -= absi(e.pos.x-cannon.pos.x)+absi(e.pos.y-cannon.pos.y)
 			future_supports.append({"uid":e.uid,"score":priority})
@@ -268,6 +270,7 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 					if result.stats.evaluations >= joint_limit: break
 					if first.uid == cannon_uid and not can_move and first_target != cannon.pos: continue
 					var intermediate = placed(projected,first.uid,first_target)
+					if not GE.preserves_guard_state(defense_before,intermediate,player,context): continue
 					var second = cannon if support_first else support
 					var second_options = ranked_options(second,intermediate,player,aim,CANNON_BEAM if support_first else SUPPORT_BEAM) if second.uid != cannon_uid or can_move else [cannon.pos]
 					for second_target in second_options:
@@ -278,6 +281,7 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 						if seen_pairs.has(layout_key): continue
 						seen_pairs[layout_key]=true
 						var trial = placed(intermediate,second.uid,second_target)
+						if not GE.preserves_guard_state(defense_before,trial,player,context): continue
 						var fixed = locked.duplicate();fixed[cannon_uid]=true;fixed[support.uid]=true
 						var v = value(trial[ci],trial,aim,ready,fixed)
 						var barrier_after = general_barrier(trial,player,context)
@@ -317,6 +321,7 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 				before_steps = placed(before_steps,step.uid,step.pos)
 			forecast_context.projected_spent = spent
 			var future = advance_projection(candidate.board,ready,forecast_context,player)
+			var future_defense = GE.guard_state(future,player,context)
 			var fci = by_uid(future,cannon_uid);var future_cannon = future[fci]
 			var future_ready = {}
 			for actor in future:
@@ -328,6 +333,7 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 			for p in options:
 				if result.stats.evaluations >= limit: break
 				var future_board = placed(future,cannon_uid,p)
+				if not GE.preserves_guard_state(future_defense,future_board,player,context): continue
 				best_future = maxf(best_future,value(future_board[fci],future_board,aim,future_ready,future_fixed,0))
 				result.stats.evaluations += 1;result.stats.lookahead += 1
 			# One support can establish the second-stage screen while cannon waits.
@@ -340,6 +346,7 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 				for p in ranked_options(support,future,player,aim,2):
 					if result.stats.evaluations >= limit: break
 					var future_board = placed(future,support.uid,p)
+					if not GE.preserves_guard_state(future_defense,future_board,player,context): continue
 					var support_fixed = future_fixed.duplicate();support_fixed[support.uid]=true
 					best_future = maxf(best_future,value(future_board[fci],future_board,aim,future_ready,support_fixed,0))
 					result.stats.evaluations += 1;result.stats.lookahead += 1
@@ -350,6 +357,7 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 		for candidate in future_candidates.slice(0,3):
 			if result.stats.evaluations >= limit or not candidate.has("future"): break
 			var future = candidate.future;var future_ready = candidate.future_ready
+			var future_defense = GE.guard_state(future,player,context)
 			var fci = by_uid(future,cannon_uid);var future_cannon = future[fci]
 			var best_future = candidate.best_future
 			# A bounded second-stage joint pair, again checking BOTH sequential orders.
@@ -367,9 +375,11 @@ static func plan(board: Array, player: Vector2i, ready: Dictionary, context: Dic
 						for first_target in ranked_options(first,future,player,aim,3):
 							if result.stats.evaluations >= limit: break
 							var intermediate = placed(future,first.uid,first_target)
+							if not GE.preserves_guard_state(future_defense,intermediate,player,context): continue
 							for second_target in ranked_options(second,intermediate,player,aim,3):
 								if result.stats.evaluations >= limit: break
 								var trial = placed(intermediate,second.uid,second_target)
+								if not GE.preserves_guard_state(future_defense,trial,player,context): continue
 								var fixed = {cannon_uid:true,support.uid:true}
 								best_future = maxf(best_future,value(trial[fci],trial,aim,future_ready,fixed,0)-5.0)
 								result.stats.evaluations += 1;result.stats.lookahead += 1

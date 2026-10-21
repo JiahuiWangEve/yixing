@@ -80,6 +80,7 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           python3 tests/browser_release_smoke.py 2>&1 | tee build/release-smoke.log
+          python3 tests/browser_chapter_checks.py --smoke 2>&1 | tee build/chapter-smoke.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -90,6 +91,8 @@ jobs:
             build/export.log
             build/package-audit.log
             build/release-smoke.log
+            build/chapter-smoke.log
+            verification/v0.14.0/
             verification/release-smoke/
             verification/v0.13.0/events/
             verification/v0.12.0/rook/
@@ -156,7 +159,7 @@ jobs:
           trap 'kill "$server_pid"' EXIT
           # Run every suite even after an earlier failure; retain the overall red result.
           failed=0
-          for suite in map cannon rook event; do
+          for suite in map cannon rook event chapter; do
             if ! python3 "tests/browser_${suite}_checks.py" > "build/${suite}-browser.log" 2>&1; then failed=1; fi
             cat "build/${suite}-browser.log"
           done
@@ -168,6 +171,7 @@ jobs:
           name: yixing-regression-${{ github.sha }}
           path: |
             build/*browser.log
+            verification/v0.14.0/
             verification/v0.13.0/
             verification/v0.12.0/rook/
             verification/v0.11.0/cannon/

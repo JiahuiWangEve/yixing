@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.13.0"
+const BUILD_VERSION = "v0.14.0"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -290,13 +290,13 @@ func resolve_bleeds():
 	for bleed in queued:
 		for i in enemies.size():
 			if enemies[i].get("uid", -1) == bleed.enemy_uid:
-				damage_enemy(i, 0.0, bleed.amount)
+				damage_enemy(i, 0.0, bleed.amount, true)
 				break
 		if not general_alive():
 			settle_victory()
 			return
 
-func damage_enemy(idx: int, impact_delay: float = 0.12, amount: int = 1) -> bool:
+func damage_enemy(idx: int, impact_delay: float = 0.12, amount: int = 1, before_player_input: bool = false) -> bool:
 	if idx < 0 or idx >= enemies.size() or enemies[idx].kind == "stake": return false
 	var e = enemies[idx]
 	e.hp = e.get("hp", enemy_health(e.kind)) - amount
@@ -305,6 +305,8 @@ func damage_enemy(idx: int, impact_delay: float = 0.12, amount: int = 1) -> bool
 	if e.hp <= 0:
 		effect("death", cell_pos(e.pos), cell_pos(e.pos), 0.42, impact_delay + 0.08, {"symbol": piece_name(e.kind), "impact": impact_delay})
 		enemies.remove_at(idx)
+		pending_bleeds = pending_bleeds.filter(func(bleed): return bleed.enemy_uid != e.uid)
+		ENCOUNTERS.on_enemy_defeated(self, e, before_player_input)
 		return true
 	return false
 
@@ -744,13 +746,15 @@ func play_card(i: int, p: Vector2i):
 func settle_victory():
 	if screen != "game" or phase not in ["play", "discard"]: return
 	cancel_gesture();clear_effects();rewardui.reset();clear_battle_card_effects()
+	ENCOUNTERS.cancel_pending(self)
 	if route.active():
 		history.clear()
 		route.battle_victory()
 	selected = -1;free_selected = false;reinforcement_pending = 0;input_lock = 0;navigation_lock = 0
-	if stage == CAMPAIGN.LAST_STAGE:
+	var chapter_boss = route.active() and route.state.pending >= 0 and route.state.nodes[route.state.pending].kind == "boss"
+	if (chapter_boss or stage == CAMPAIGN.LAST_STAGE) and not tutorial.active: skill_system.unlock_horse()
+	if (chapter_boss and route.chapter() == 2) or (not route.active() and stage == CAMPAIGN.LAST_STAGE):
 		phase = "win";log_line("章节突破！" if route.active() else "六关突破！")
-		if not tutorial.active: skill_system.unlock_horse()
 		if route.active(): route.state.done = true;route.save()
 	else:
 		phase = "reward";roll_rewards()
@@ -788,9 +792,9 @@ func end_turn():
 			effect("player_hit", cell_pos(e.pos), cell_pos(player), 0.26)
 			timeline = 0.26
 			lives -= 1;hit = true;attacker = e;log_line("被%s击中，失去一命。" % piece_name(e.kind))
-			if lives <= 0: phase = "dead";clear_battle_card_effects();notice = "命数耗尽。";return
+			if lives <= 0: phase = "dead";clear_battle_card_effects();ENCOUNTERS.cancel_pending(self);notice = "命数耗尽。";return
 			var safe = R.safe_recoil(player, enemies)
-			if safe.is_empty(): phase = "dead";clear_battle_card_effects();notice = "无安全位置可撤退。";return
+			if safe.is_empty(): phase = "dead";clear_battle_card_effects();ENCOUNTERS.cancel_pending(self);notice = "无安全位置可撤退。";return
 			var destination = safe[rng.randi_range(0, safe.size() - 1)]
 			effect("recoil", cell_pos(player), cell_pos(destination), 0.34, timeline)
 			timeline += 0.34
@@ -859,9 +863,13 @@ func end_turn():
 			timeline += 0.28;e.pos = extra;ENEMY_AI.CP.remember(e,extra_origin)
 	for e in enemies:
 		if e.stun > 0: e.stun -= 1
+	# Chapter-two arrivals inspect the final board, after expiring temporary stakes.
+	# Keep the original chapter-one reinforcement ordering unchanged.
+	var chapter_two = ENCOUNTERS.is_chapter_two(self)
+	if chapter_two: TACTICS.expire_stakes(self, maxf(timeline, input_lock))
 	if ENCOUNTERS.active(self): ENCOUNTERS.finish_phase(self, timeline)
 	else: resolve_reinforcements(timeline)
-	TACTICS.expire_stakes(self, maxf(timeline, input_lock))
+	if not chapter_two: TACTICS.expire_stakes(self, maxf(timeline, input_lock))
 	turn += 1;history.trim()
 	shield_charges = 0;active_displacements = 0
 	resolve_bleeds()
@@ -899,6 +907,10 @@ func text_at(p: Vector2, s: String, size: int = 20, color: Color = INK): draw_st
 func wrapped_text(value: String, rect: Rect2, font_size: int = 16, color: Color = INK):
 	var line = ""; var y = rect.position.y + font_size
 	for letter in value:
+		if letter == "\n":
+			if y > rect.end.y: return
+			text_at(Vector2(rect.position.x, y), line, font_size, color);line = "";y += font_size + 3
+			continue
 		if not line.is_empty() and FONT.get_string_size(line + letter, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > rect.size.x:
 			if y > rect.end.y: return
 			text_at(Vector2(rect.position.x, y), line, font_size, color);line = "";y += font_size + 3
@@ -925,7 +937,7 @@ func context_hint() -> String:
 		var credit_label = ""
 		var credits = ENCOUNTERS.available_action_credits(self, e, true)
 		if credits > 0: credit_label = " · 加速%d次" % credits
-		return "%s · %d/%d血 · 倒计时%d%s%s" % [("急行卒" if e.kind == "q" else piece_name(e.kind)), e.hp, e.max_hp, ENCOUNTERS.effective_countdown(self, e), credit_label, " · 定身中" if e.stun > 0 else ""]
+		return "%s · %d/%d血 · 倒计时%d%s%s" % [(ENCOUNTERS.enemy_tags(e) + piece_name(e.kind) if ENCOUNTERS.enemy_tags(e) != "" else ("急行卒" if e.kind == "q" else piece_name(e.kind))), e.hp, e.max_hp, ENCOUNTERS.effective_countdown(self, e), credit_label, " · 定身中" if e.stun > 0 else ""]
 	return ENCOUNTERS.status(self)
 func _draw():
 	if screen in ["map", "route_choice"]:
@@ -1006,6 +1018,10 @@ func _draw():
 			text_at(v + Vector2(-hp_width * 0.5, CELL * 0.34 + 13), hp_label, hp_size, RED)
 		elif max_hp > 1:
 			for h in max_hp: draw_circle(v + Vector2((h - (max_hp - 1) * 0.5) * 9, CELL * 0.46 if mobile_layout else 29), 3, RED if h < e.get("hp", max_hp) else THEME.BORDER)
+		if e.get("unyielding", false):
+			text_at(v + Vector2(-CELL * 0.48, CELL * 0.18), "复", 12, GOLD)
+		elif e.get("heavy", false):
+			text_at(v + Vector2(-CELL * 0.48, CELL * 0.18), "重", 12, GOLD)
 		if e.kind == "q" or e.get("signal", false):
 			var rule_badge = v + Vector2(-CELL * 0.36, -CELL * 0.36)
 			draw_circle(rule_badge, 10, RED)
@@ -1049,7 +1065,7 @@ func _draw():
 	gesture.draw()
 	if phase == "reward" and input_lock <= 0: rewardui.draw()
 	if phase in ["dead", "win"] and input_lock <= 0:
-		draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.OVERLAY);text_at(Vector2(24, ui_size.y * 0.4) if mobile_layout else Vector2(410, 380), ("山河已定 · 第一章通关" if route.active() else "六关突破 · 原型通关") if phase == "win" else "此局已尽 · 再弈一局", 28 if mobile_layout else 36, THEME.HEADING)
+		draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.OVERLAY);text_at(Vector2(24, ui_size.y * 0.4) if mobile_layout else Vector2(410, 380), ("山河已定 · 两章通关" if route.active() else "六关突破 · 原型通关") if phase == "win" else "此局已尽 · 再弈一局", 28 if mobile_layout else 36, THEME.HEADING)
 		text_at(Vector2(24, ui_size.y * 0.4 + 50) if mobile_layout else Vector2(430, 435), "重新开局，再行山河" if phase == "win" else "可悔棋，或重新开局", 20, THEME.LIGHT)
 		if phase == "win" and route.rewards_blocked():
 			text_at(Vector2(24, ui_size.y * 0.4 + 90) if mobile_layout else Vector2(410, 480), route.homework_summary(), 18, THEME.LIGHT)
@@ -1146,6 +1162,11 @@ func draw_effects():
 func draw_mobile_hand_controls(): pass
 
 func draw_encounter_signals():
+	for marker in ENCOUNTERS.markers(self):
+		var point = cell_pos(marker.pos)
+		var color = GOLD if marker.kind == "revival" else RED
+		draw_arc(point, CELL * 0.34, 0, TAU, 20, Color(color, 0.55), 1.5)
+		text_at(point + Vector2(-CELL * 0.38, CELL * 0.40), marker.label, 11, color)
 	var spawn: Vector2i = encounter_state.get("spawn_cell", Vector2i(-1, -1))
 	if R.inside(spawn):
 		draw_rect(Rect2(cell_pos(spawn) - Vector2.ONE * CELL * 0.42, Vector2.ONE * CELL * 0.84), Color(RED, 0.2))
@@ -1155,11 +1176,13 @@ func draw_encounter_signals():
 		for enemy in enemies:
 			if enemy.uid == guard_uid: draw_arc(cell_pos(enemy.pos), CELL * 0.46, 0, TAU, 28, GOLD, 2)
 	if not mobile_layout:
-		var area = Rect2(24, 144, 350, 220)
+		var area = Rect2(24, 144, 350, 244)
 		panel(area, THEME.PAPER)
 		text_at(area.position + Vector2(16, 30), ENCOUNTERS.title(encounter_state.config), 24, THEME.INK)
-		wrapped_text(ENCOUNTERS.details(encounter_state.config) if not encounter_state.config.rules.is_empty() else "普通军阵：棋子按象棋规则行动。先攻击，再按倒计时移动。", Rect2(area.position + Vector2(16, 43), Vector2(318, 130)), 17, THEME.INK)
-		wrapped_text(ENCOUNTERS.status(self), Rect2(area.position + Vector2(16, 171), Vector2(318, 40)), 15, RED)
+		var desc = ENCOUNTERS.details(encounter_state.config)
+		if desc.is_empty(): desc = "普通军阵：棋子按象棋规则行动。先攻击，再按倒计时移动。"
+		wrapped_text(desc, Rect2(area.position + Vector2(16, 43), Vector2(318, 150)), 15, THEME.INK)
+		wrapped_text(ENCOUNTERS.status(self), Rect2(area.position + Vector2(16, 195), Vector2(318, 40)), 15, RED)
 
 func encounter_rules_rect() -> Rect2:
 	return Rect2(540, 440, 124, 44) if compact_landscape else Rect2(240, BOARD_RECT.end.y + 8, 56, 48)
@@ -1175,7 +1198,7 @@ func draw_encounter_panel():
 	text_at(area.position + Vector2(16, 34), ENCOUNTERS.title(encounter_state.config), 24, THEME.INK)
 	var desc = ENCOUNTERS.details(encounter_state.config)
 	if desc.is_empty(): desc = "普通军阵：先攻击，再按倒计时移动。士限九宫，象不过河，急行卒仍按卒的方向走。"
-	if not ENCOUNTERS.uses_action_credits(self): desc += "\n所有加步均不额外攻击；多种加步同时触发时，最多额外一步。"
+	if not ENCOUNTERS.uses_action_credits(self) and not ENCOUNTERS.is_chapter_two(self): desc += "\n所有加步均不额外攻击；多种加步同时触发时，最多额外一步。"
 	wrapped_text(desc, Rect2(area.position + Vector2(16, 53), Vector2(area.size.x - 32, area.size.y - 148)), 18, THEME.INK)
 	panel(encounter_close_rect(), THEME.PAPER_SELECTED)
 	text_at(encounter_close_rect().position + Vector2(16, 32), "关闭 · 返回棋盘", 18, THEME.INK)

@@ -70,6 +70,8 @@ func ensure_road_cache():
 			road_cache[Vector2i(node.id, next)] = {"solid": solid, "dashed": dashed, "from": from, "to": to, "bounds": Rect2(from, Vector2.ZERO).expand(to).grow(8)}
 const SAVE = "user://route_run_v0100.cfg"
 const WEB_SAVE_KEY = "yixing.route_run.v0100"
+const LAST_CHAPTER = 2
+const CHAPTER_SEED_SALT = 0x5bd1e995
 const UPGRADES = preload("res://card_upgrades.gd")
 const EVENT_IDS = ["herbalist", "merchant", "manual"]
 const EVENT_TITLES = {"herbalist": "药庐", "merchant": "行商", "manual": "兵书"}
@@ -202,10 +204,17 @@ func input_event(event) -> bool:
 	return false
 func _init(owner): game = owner
 func active() -> bool: return not state.is_empty()
-func generate(seed_number: int):
+func chapter() -> int: return state.get("chapter", 1)
+func chapter_title() -> String: return "第二章 · 坚城" if chapter() == 2 else "第一章 · 朱印行军"
+func chapter_seed(run_seed: int, chapter_number: int) -> int:
+	# XOR retains the whole run seed and guarantees a different map identity.
+	return run_seed ^ (CHAPTER_SEED_SALT * (chapter_number - 1))
+func generate(seed_number: int, chapter_number: int = 1):
+	chapter_number = clampi(chapter_number, 1, LAST_CHAPTER)
+	var map_seed = chapter_seed(seed_number, chapter_number)
 	var random = RandomNumberGenerator.new()
-	random.seed = seed_number
-	state = {"seed": seed_number, "nodes": [], "current": -1, "visited": [], "pending": -1, "prepared": false, "reward_debt": 0, "pending_homework": [], "homework_awarded": [], "reward_blocked": false, "victory_recorded": false, "last_result": "", "done": false}
+	random.seed = map_seed
+	state = {"chapter": chapter_number, "run_seed": seed_number, "seed": map_seed, "nodes": [], "current": -1, "visited": [], "pending": -1, "prepared": false, "reward_debt": 0, "pending_homework": [], "homework_awarded": [], "reward_blocked": false, "victory_recorded": false, "last_result": "", "done": false}
 	var rows = [[1], [0, 1, 2], [0, 2], [1], [0, 1, 2], [0, 2], [0, 1, 2], [1]]
 	var types = [["battle"], ["event", "elite", "camp"], ["battle", "battle"], ["workshop"], ["battle", "camp", "elite"], ["event", "battle"], ["workshop", "battle", "camp"], ["boss"]]
 	for row in rows.size():
@@ -213,7 +222,7 @@ func generate(seed_number: int):
 			var loot = game.PROFILES.draw_rewards(game.player_skill, random)
 			state.nodes.append({"id": state.nodes.size(), "row": row, "lane": rows[row][col], "kind": types[row][col], "next": [], "loot": loot, "layout": clampi(row + random.randi_range(0, 1), 1, 5)})
 	for node in state.nodes:
-		node.encounter = game.ENCOUNTERS.node_config(node.kind, node.row, random)
+		node.encounter = game.ENCOUNTERS.node_config(node.kind, node.row, random, chapter_number)
 		if node.kind == "event":
 			node.event_id = EVENT_IDS[random.randi_range(0, EVENT_IDS.size() - 1)]
 			node.offers = game.PROFILES.draw_rewards(game.player_skill, random)
@@ -221,7 +230,9 @@ func generate(seed_number: int):
 	for node in state.nodes:
 		for target in state.nodes:
 			if target.row == node.row + 1 and (abs(target.lane - node.lane) <= 1 or rows[node.row].size() == 1 or rows[target.row].size() == 1): node.next.append(target.id)
-	choices = [];deck_view = false;reset_view()
+	choices = [];deck_view = false;choice_mode = "root";pending_choice = {};merchant_offer = -1;page = 0;reset_view()
+	# Chapter geometry and scenery must never reuse the previous map's cache.
+	road_cache_key = 0;road_cache.clear();decoration_key = "";decoration_cache.clear();redraw_key = 0
 func legal() -> Array:
 	if not active() or state.done or state.pending >= 0: return []
 	return [0] if state.current < 0 else state.nodes[state.current].next
@@ -355,7 +366,12 @@ func homework_summary() -> String:
 func rewards_blocked() -> bool:
 	return active() and state.get("reward_blocked", false)
 func complete():
-	if not active() or state.pending < 0: return
+	if not active() or state.pending < 0 or state.done: return
+	var completed_boss = state.nodes[state.pending].kind == "boss"
+	if completed_boss and chapter() == LAST_CHAPTER:
+		state.done = true;game.phase = "win"
+		game.history.clear();game.cancel_gesture();game.rewardui.reset();save()
+		return
 	if state.nodes[state.pending].kind in ["battle", "elite", "boss"]:
 		state.last_result = "战斗胜利；本场无常规奖励。" if state.reward_blocked else "战斗胜利，继续行军。"
 		if not state.homework_awarded.is_empty(): state.last_result += homework_summary()
@@ -366,7 +382,16 @@ func complete():
 	game.clear_battle_card_effects();game.encounter_state = {}
 	game.selected = -1;game.free_selected = false;game.handui.reset();game.reinforcement_pending = 0
 	game.phase = "play";game.screen = "map";choices = [];page = 0;reset_view()
-	stamp_node = state.current;stamp_elapsed = 0.0
+	if completed_boss:
+		# The boss reward is resolved before this boundary. Keep the expedition
+		# itself intact: no healing, no deck reset and no lost future commitments.
+		var carry = {"prepared": state.prepared, "reward_debt": state.reward_debt, "pending_homework": state.pending_homework.duplicate(), "last_result": state.last_result}
+		var run_seed = state.get("run_seed", state.seed)
+		generate(run_seed, chapter() + 1)
+		for key in ["prepared", "reward_debt", "pending_homework"]: state[key] = carry[key]
+		state.last_result = "第一章已突破，进入第二章 · 坚城。" + carry.last_result
+	else:
+		stamp_node = state.current;stamp_elapsed = 0.0
 	save()
 func save():
 	if not active(): return
@@ -396,6 +421,9 @@ func resume() -> bool:
 	if not valid_snapshot(saved, battle, saved_screen): return false
 	game.tutorial.stop();game.history.clear();game.cancel_gesture();game.clear_effects()
 	state = saved.duplicate(true)
+	# v0.13 / version-5 saves had a single chapter and used seed directly.
+	state.chapter = state.get("chapter", 1)
+	state.run_seed = state.get("run_seed", state.seed)
 	for key in game.HISTORY.FIELDS: game.set(key, battle[key])
 	game.rng.state = battle.rng_state
 	game.screen = config.get_value("run", "screen", "map")
@@ -413,6 +441,11 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 	if not saved.nodes is Array or saved.nodes.size() != 16 or not saved.visited is Array: return false
 	if not saved.current is int or not saved.pending is int or not saved.seed is int: return false
 	if saved.current < -1 or saved.current >= 16 or saved.pending < -1 or saved.pending >= 16: return false
+	var saved_chapter = saved.get("chapter", 1)
+	if not saved_chapter is int or saved_chapter not in [1, 2]: return false
+	if saved_chapter > 1 and not saved.has("run_seed"): return false
+	if saved.has("run_seed"):
+		if not saved.run_seed is int or saved.seed != chapter_seed(saved.run_seed, saved_chapter): return false
 	for key in ["prepared", "reward_blocked", "victory_recorded", "done"]:
 		if not saved[key] is bool: return false
 	if not saved.reward_debt is int or saved.reward_debt < 0 or not saved.last_result is String: return false
@@ -433,6 +466,7 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 		if not node.next is Array or not node.loot is Array or not node.layout is int or node.layout < 1 or node.layout > 5: return false
 		if node.kind in ["battle", "elite", "boss"]:
 			if not game.ENCOUNTERS.valid_config(node.encounter) or node.encounter.tier != node.kind: return false
+			if node.encounter.get("chapter", 1) != saved_chapter: return false
 		elif node.encounter != {}: return false
 		if node.kind == "event":
 			if node.get("event_id", "") not in EVENT_IDS or not node.get("upgrade_seed") is int: return false
@@ -487,6 +521,27 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 			for position_value in enemy.ai_recent:
 				if not position_value is Vector2i or not game.R.inside(position_value): return false
 		ids[enemy.uid] = true
+	if not battle.encounter_state.is_empty() and battle.encounter_state.config.get("chapter", 1) == 2:
+		# Encounter-local validation cannot see the live army or UID allocator.
+		# Dead unyielding defenders retain identity; waves may already be dead.
+		var reserved = {}
+		for ghost in battle.encounter_state.ghosts:
+			var uid = ghost.enemy.uid
+			if uid >= battle.next_enemy_uid or ids.has(uid) or reserved.has(uid): return false
+			reserved[uid] = true
+		var wave_uids = {}
+		var templates = game.ENCOUNTERS.CHAPTER_TWO.TEMPLATES
+		for wave in battle.encounter_state.waves:
+			if wave.status != "arrived": continue
+			if wave.uid >= battle.next_enemy_uid or reserved.has(wave.uid) or wave_uids.has(wave.uid): return false
+			wave_uids[wave.uid] = true
+			var spec = templates[battle.encounter_state.config.id].waves[wave.index][1]
+			for enemy in battle.enemies:
+				if enemy.uid != wave.uid: continue
+				if not enemy.get("reinforcement", false) or enemy.kind != spec[0] or enemy.get("max_hp") != spec[3]: return false
+				if enemy.get("original_spawn") != Vector2i(spec[1] - 1, spec[2] - 1) or enemy.get("heavy") != spec[4] or enemy.get("unyielding") != spec[5]: return false
+		for enemy in battle.enemies:
+			if enemy.get("reinforcement", false) and not wave_uids.has(enemy.uid): return false
 	for bleed in battle.pending_bleeds:
 		if not bleed is Dictionary or not bleed.get("enemy_uid") is int or not bleed.get("amount") is int: return false
 		if bleed.enemy_uid < 1 or bleed.amount < 1: return false
@@ -680,8 +735,8 @@ func draw_map():
 func draw_header():
 	button(home_rect(), "‹ 首页")
 	var title_x = 146.0 if game.compact_landscape else 150.0
-	game.text_at(Vector2(title_x, 47), "弈 行", 33, INK)
-	var subtitle = "第一章 · 朱印行军"
+	var subtitle = chapter_title()
+	game.text_at(Vector2(title_x, 47), subtitle if game.mobile_layout and not game.compact_landscape else "弈 行", 20 if game.mobile_layout and not game.compact_landscape else 33, INK)
 	if game.compact_landscape:
 		game.text_at(Vector2(265, 45), subtitle, 21, INK)
 		game.text_at(Vector2(16, 78), "已行 %d / 8  ·  %s  ·  拖动军图查看前路" % [state.visited.size(), "决战敌将9血"], 16, MUTED)
@@ -695,6 +750,16 @@ func draw_header():
 	if not game.mobile_layout:
 		game.text_at(Vector2(290, 45), "一子入山河，百战成归途", 18, MUTED)
 		game.text_at(Vector2(1050, 45), game.BUILD_VERSION + " · 朱印军符", 16, MUTED)
+func node_detail(node: Dictionary) -> String:
+	var detail = DETAILS[node.kind]
+	if node.kind == "elite" and chapter() == 2: detail = "关隘精英守军；敌将6血，战胜后选择战利品。"
+	if node.kind in ["battle", "elite", "boss"]:
+		var tags = game.ENCOUNTERS.summary(node.encounter)
+		if not tags.is_empty():
+			var health = ""
+			if node.kind in ["boss", "elite"]: health = "敌将%d血 · " % (9 if node.kind == "boss" else (6 if chapter() == 2 else 5))
+			detail = health + tags + "：" + game.ENCOUNTERS.details(node.encounter)
+	return detail
 func draw_info():
 	var info = info_rect()
 	game.panel(info, PAPER_LIGHT, Color("c4c1b5"))
@@ -707,9 +772,7 @@ func draw_info():
 		var status = "可出发" if reachable else ("已行经" if selected_node in state.visited else "当前不可达")
 		var combat = node.kind in ["battle", "elite", "boss"]
 		game.text_at(Vector2(x, y), (("关隘 · " if node.kind == "elite" else "") + game.ENCOUNTERS.title(node.encounter) if combat else event_title(node)) + " · " + status, 18, INK)
-		var detail = DETAILS[node.kind]
-		if combat and not node.encounter.rules.is_empty(): detail = game.ENCOUNTERS.summary(node.encounter) + "：" + game.ENCOUNTERS.details(node.encounter)
-		game.wrapped_text(detail, Rect2(x, y + 8, width, 48), 13 if combat else 16, MUTED)
+		game.wrapped_text(node_detail(node), Rect2(x, y + 8, width, 48), 13 if combat else 16, MUTED)
 		if side_layout():
 			game.wrapped_text("选择只作查看。确认后，棋子沿真实道路行进；抵达才会进入节点。" if reachable else "只能沿当前地标相连的深墨箭头前进，不能跳关或回头。", Rect2(x, y + 86, width, 90), 17, MUTED)
 			if info.size.y > 600:
