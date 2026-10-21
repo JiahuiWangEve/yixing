@@ -37,6 +37,7 @@ async def main():
     saved=await page.evaluate("localStorage.getItem('yixing.route_run.v1')")
     assert saved, 'No synchronous Web snapshot'
     got=(re.search(r'^screen="(\w+)"',saved,re.M).group(1),int(re.search(r'"current": (-?\d+)',saved).group(1)),int(re.search(r'"pending": (-?\d+)',saved).group(1)))
+    if got != (screen,current,pending): await page.screenshot(path=str(OUT/f'failure-{w}.png'))
     assert got==(screen,current,pending),(w,got,(screen,current,pending))
     assertions.append(list(got))
    async def shot(label):await page.screenshot(path=str(OUT/f'{label}-{w}.png'))
@@ -51,8 +52,9 @@ async def main():
    resume=(640,497) if w==1280 else ((265,313) if side else (240,max(150,uh*.25)+326))
    await tap(*resume,500); await state('game',-1,0); await shot('resume')
    skip=(1098,102) if w==1280 else ((468,462) if side else (410,84))
-   await tap(*skip,500)
-   skip_reward=(640,555) if w==1280 else ((480,399) if side else (240,uh-51))
+   await tap(*skip,500); await shot('reward')
+   # v0.6.0 reward selector: third choice is Skip, not the older add-card footer.
+   skip_reward=(920,405) if w==1280 else ((792,257) if side else (240,442))
    await tap(*skip_reward,500); await state('map',0,-1); await shot('returned')
    await tap(*node(1)); await tap(*confirm,350); await shot('march')
    await page.wait_for_timeout(700); await state('route_choice',0,1); await shot('event')
