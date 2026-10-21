@@ -1,6 +1,6 @@
 {
-  "version": "v0.7.0",
+  "version": "v0.8.0",
   "source_branch": "gpt",
-  "source_commit": "092a358e0fa9bd7f6d852ccc4f2aae5161baafa9",
-  "build_run": "39549841869"
+  "source_commit": "1d5d33cc342a0c78926c44d12d094d31b5fc6003",
+  "build_run": "39552947787"
 }
