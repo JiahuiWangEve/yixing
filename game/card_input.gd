@@ -96,9 +96,9 @@ func draw_pass_zone():
 	game.text_at(Vector2(x, rect.position.y + 124), "不补抽", 14, game.THEME.GRID)
 func draw():
 	if not dragging: return
-	draw_pass_zone()
 	if free_move:
 		_draw_free()
+		draw_pass_zone()
 		return
 	var index = game.hand_ids.find(uid)
 	if index < 0: return
@@ -117,6 +117,8 @@ func draw():
 		if p.x >= 0:
 			var danger = game.target_danger(game.hand[index], p)
 			game.draw_arc(game.cell_pos(p), game.CELL * 0.42 + sin(game.tick * 8) * 2, 0, TAU, 32, game.RED if danger else game.GOLD, 3)
+
+	draw_pass_zone() # Keep drop instructions legible above the translucent dragged card.
 
 func _draw_free():
 	if uid != game.free_card_uid or not game.free_card_available(): return
