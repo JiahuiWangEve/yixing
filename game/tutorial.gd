@@ -178,7 +178,7 @@ func _build_steps() -> Array:
 		0:
 			return [
 				_step("move", "0张普通牌；点亮格或用帅步移动，固定抽短剑。", 0, {"target": Vector2i(4, 7), "label": "固定抽牌练习"}), 
-				_step("end_turn", "基础移动已用；结束回合，观察手牌。", 0), 
+				_step("end_turn", "基础移动已用；点结束回合（电脑空格），观察手牌。", 0),
 				_step("move", "回合不自动抽牌；移动恢复，再走亮格。", 0, {"target": Vector2i(5, 7)})]
 		1:
 			return [

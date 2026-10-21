@@ -17,7 +17,7 @@ async def main():
   browser=await p.chromium.launch(**({'executable_path':executable} if executable else {}),headless=True,args=['--no-sandbox'])
   for w,h in [(1280,940),(390,844),(844,390),(360,640)]:
    context=await browser.new_context(viewport={'width':w,'height':h},has_touch=True)
-   page=await context.new_page(); errors=[]; assertions=[]
+   page=await context.new_page(); errors=[]; assertions=[]; keyboard_assertions=[]
    page.on('pageerror',lambda e:errors.append(str(e)))
    page.on('console',lambda m: errors.append(m.text) if m.type=='error' and ('SCRIPT ERROR' in m.text or 'Parse Error' in m.text) else None)
    await page.goto(URL); await page.wait_for_timeout(4500)
@@ -48,6 +48,22 @@ async def main():
    await state('map',-1,-1); await shot('cancel')
    await tap(*node(0)); await tap(*confirm,120); await tap(*confirm,1000)
    await state('game',-1,0); await shot('battle')
+   if w == 1280:
+    async def saved_turn():
+     saved=await page.evaluate("localStorage.getItem('yixing.route_run.v080')")
+     return int(re.search(r'"turn": (\d+)',saved).group(1))
+    before=await saved_turn()
+    await page.keyboard.press('Enter'); await page.wait_for_timeout(1200)
+    assert await saved_turn()==before, 'Enter must not end a battle turn'
+    keyboard_assertions.append('Enter ignored in battle')
+    await page.keyboard.down('Space'); await page.wait_for_timeout(1500)
+    assert await saved_turn()==before+1, 'Space must end one battle turn'
+    keyboard_assertions.append('Space ends one turn')
+    await page.keyboard.down('Space'); await page.wait_for_timeout(1500)
+    await page.keyboard.up('Space')
+    assert await saved_turn()==before+1, 'Held Space repeat must not end another turn'
+    keyboard_assertions.append('Held Space echo ignored')
+    await shot('space-shortcut')
    await page.reload(); await page.wait_for_timeout(4500)
    resume=(640,497) if w==1280 else ((265,313) if side else (240,max(150,uh*.25)+326))
    await tap(*resume,500); await state('game',-1,0); await shot('resume')
@@ -63,7 +79,7 @@ async def main():
    await shot('event-return'); await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
    await state('map',1,-1); await shot('map-resume')
    assert not errors,(w,errors)
-   reports.append({'viewport':[w,h],'errors':errors,'state_assertions':assertions,'note':'Actual Web export: touch preview/cancel/confirm, duplicate suppression, battle reload, debug reward return, curved march, event reload/resolve, map refresh.'})
+   reports.append({'viewport':[w,h],'errors':errors,'state_assertions':assertions,'keyboard_assertions':keyboard_assertions,'note':'Actual Web export: touch preview/cancel/confirm, duplicate suppression, battle reload, debug reward return, curved march, event reload/resolve, map refresh.'})
    await context.close()
   await browser.close()
  (OUT/'browser-flow.json').write_text(json.dumps(reports,indent=2))

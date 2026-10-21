@@ -632,7 +632,7 @@ func _input(event):
 	audio_system.unlock()
 	if event.keycode == KEY_Z and (event.ctrl_pressed or event.meta_pressed): undo_action();get_viewport().set_input_as_handled()
 	elif event.keycode == KEY_ESCAPE: cancel_gesture();cancel_selection()
-	elif event.keycode in [KEY_ENTER, KEY_KP_ENTER]: request_end_turn()
+	elif event.keycode == KEY_SPACE: request_end_turn()
 
 func request_end_turn():
 
@@ -935,7 +935,7 @@ func _draw():
 	text_at((Vector2(24, 500) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(397, 609), "命 %s" % "●".repeat(lives), 20, THEME.LIGHT)
 	text_at((Vector2(200, 500) if compact_landscape else Vector2(150, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(550, 609), "能量 %d" % energy, 20, THEME.LIGHT)
 	var confirm = selected >= 0 and (phase == "discard" or (phase == "play" and hand[selected] in UNTARGETED))
-	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else ("结束回合" if mobile_layout else "结束回合 [Enter]")), 18, THEME.INK)
+	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else ("结束回合" if mobile_layout else "结束回合 [空格]")), 18, THEME.INK)
 	var statuses: Array[String] = []
 	if tuna_active or tuna_turns > 0: statuses.append(("吐纳 本回合+1" if tuna_active else "吐纳") + " 后续%d回合" % tuna_turns)
 	if shield_charges > 0: statuses.append("固守 1次")
