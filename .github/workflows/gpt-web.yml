@@ -36,20 +36,34 @@ jobs:
           if grep -Eq 'SCRIPT ERROR:|Parse Error:|(^|[[:space:]])ERROR:' build/export.log; then exit 1; fi
           touch build/web/.nojekyll
           python3 - <<'PY'
-          import json, os, pathlib, re
+          import hashlib, json, os, pathlib, re
           pathlib.Path('build/web/build-info.json').write_text(json.dumps({
               'version': re.search(r'const BUILD_VERSION = "([^"]+)"', pathlib.Path('game/main.gd').read_text()).group(1), 'source_branch': 'gpt',
               'source_commit': os.environ['GITHUB_SHA'], 'godot': '4.6.3',
-              'thread_support': False
+              'thread_support': False,
+              'sha256': {name: hashlib.sha256(pathlib.Path('build/web', name).read_bytes()).hexdigest() for name in ['index.pck', 'index.wasm']}
           }, ensure_ascii=False, indent=2) + '\n')
           PY
+      - name: Install browser test runtime
+        run: |
+          python3 -m pip install playwright==1.55.0
+          python3 -m playwright install --with-deps chromium
+      - name: Verify real Web map flows at four sizes
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory build/web > build/http.log 2>&1 &
+          trap 'kill $!' EXIT
+          if ! python3 tests/browser_map_checks.py > build/browser.log 2>&1; then cat build/browser.log; exit 1; fi
+          cat build/browser.log
       - name: Upload verification and exported site
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: yixing-web-${{ github.sha }}
           path: |
             build/web/
             build/export.log
+            build/browser.log
+            verification/v0.7.0/browser/
             verification/latest/
           include-hidden-files: true
       - name: Commit Web export to gh-pages

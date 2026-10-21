@@ -1,0 +1,50 @@
+[
+  {
+    "logical_size": [
+      1280.0,
+      940.0
+    ],
+    "rendered_screens": 8,
+    "state_assertions": 5,
+    "viewport": [
+      1280,
+      940
+    ]
+  },
+  {
+    "logical_size": [
+      480.0,
+      1038.76928710938
+    ],
+    "rendered_screens": 8,
+    "state_assertions": 5,
+    "viewport": [
+      390,
+      844
+    ]
+  },
+  {
+    "logical_size": [
+      960.0,
+      540.0
+    ],
+    "rendered_screens": 8,
+    "state_assertions": 5,
+    "viewport": [
+      844,
+      390
+    ]
+  },
+  {
+    "logical_size": [
+      480.0,
+      853.333312988281
+    ],
+    "rendered_screens": 8,
+    "state_assertions": 5,
+    "viewport": [
+      360,
+      640
+    ]
+  }
+]

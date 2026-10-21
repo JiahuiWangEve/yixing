@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.6.0"
+const BUILD_VERSION = "v0.7.0"
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
@@ -115,6 +115,7 @@ func sync_hand_ids():
 func drag_card_uid() -> int: return gesture.uid if gesture.dragging else -1
 func cancel_gesture():
 	if gesture != null: gesture.cancel()
+	if route != null: route.cancel_pointer()
 	active_touch = -1;touch_dragged = true
 func undo_action():
 	if tutorial.active: notice = "教学中不可悔棋";return
@@ -410,6 +411,7 @@ func log_line(s: String):
 	if logs.size() > 7: logs.pop_back()
 func _process(delta):
 	update_window_layout()
+	route.tick(delta)
 	tick += delta
 	if input_lock <= 0: initial_threat = maxf(0, initial_threat - delta)
 	input_lock = maxf(0, input_lock - delta)
@@ -522,6 +524,7 @@ func draw_card():
 	if hand.size() > 6: phase = "discard";selected = -1;free_selected = false;notice = "选一张牌，再确认弃置。"
 func hand_rect(i: int) -> Rect2: return hand_visual_rect(i)
 func _gui_input(event):
+	if screen in ["map", "route_choice"] and route.input_event(event): return
 	if event is InputEventMouse and event.device == -1 and touch_seen and not delivering_touch: return
 	if event is InputEventMouseMotion and not (gesture.active and gesture.source == "touch"):
 		hover = board_cell(event.position);mouse_pos = event.position;gesture.motion(event.position)
@@ -566,6 +569,8 @@ func handle_click(pos: Vector2):
 	elif free_selected and not full_hand_area().has_point(pos): cancel_selection()
 
 func _input(event):
+	if screen in ["map", "route_choice"] and (event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventKey):
+		if route.input_event(event): get_viewport().set_input_as_handled();return
 	if event is InputEventScreenTouch:
 		touch_seen = true
 		if event.canceled:

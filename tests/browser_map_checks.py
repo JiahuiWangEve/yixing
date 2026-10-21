@@ -1,0 +1,69 @@
+"""Real Web smoke test; native rendering checks are not a substitute for this.
+Run a server over build/web on 8765 (or set YIXING_TEST_URL).
+"""
+import asyncio, json, os, re, shutil
+from pathlib import Path
+from playwright.async_api import async_playwright
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / 'verification/v0.7.0/browser'
+OUT.mkdir(parents=True, exist_ok=True)
+URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
+XS = [.46,.15,.50,.85,.22,.76,.53,.13,.48,.86,.24,.73,.15,.49,.84,.79]
+YS = [.94,.82,.79,.83,.69,.66,.56,.45,.43,.46,.33,.31,.20,.18,.21,.075]
+async def main():
+ reports=[]
+ async with async_playwright() as p:
+  executable = os.environ.get('CHROMIUM_PATH') or shutil.which('chromium')
+  browser=await p.chromium.launch(**({'executable_path':executable} if executable else {}),headless=True,args=['--no-sandbox'])
+  for w,h in [(1280,940),(390,844),(844,390),(360,640)]:
+   context=await browser.new_context(viewport={'width':w,'height':h},has_touch=True)
+   page=await context.new_page(); errors=[]; assertions=[]
+   page.on('pageerror',lambda e:errors.append(str(e)))
+   page.on('console',lambda m: errors.append(m.text) if m.type=='error' and ('SCRIPT ERROR' in m.text or 'Parse Error' in m.text) else None)
+   await page.goto(URL); await page.wait_for_timeout(4500)
+   uw,uh=(1280,940) if w==1280 else ((960,540) if w>h else (480,max(660,480*h/w)))
+   scale=min(w/uw,h/uh); ox=(w-uw*scale)/2; oy=(h-uh*scale)/2
+   side=w==1280 or w>h
+   mx,my,mw,mh,ch,margin=(24,116,850,800,1240,42) if w==1280 else ((14,90,626,436,1160,28) if side else (14,112,452,uh-282,(uh-282)*2.4,28))
+   def content(i):return (mx+margin+XS[i]*(mw-margin*2),my+32+YS[i]*(ch-80))
+   def focus(i):return max(0,min(ch-mh,content(i)[1]-my-mh*.73))
+   def node(i,current=0):x,y=content(i);return (x,y-focus(current)-15)
+   info_x=mx+mw+20; info_w=uw-(mx+mw)-44
+   confirm=(info_x+info_w/2,my+mh-48) if side else (uw-107,uh-48)
+   cancel=(info_x+info_w/2,my+mh-121) if side else (87,uh-48)
+   async def tap(x,y,delay=180):
+    await page.touchscreen.tap(ox+x*scale,oy+y*scale); await page.wait_for_timeout(delay)
+   async def state(screen,current,pending):
+    saved=await page.evaluate("localStorage.getItem('yixing.route_run.v1')")
+    assert saved, 'No synchronous Web snapshot'
+    got=(re.search(r'^screen="(\w+)"',saved,re.M).group(1),int(re.search(r'"current": (-?\d+)',saved).group(1)),int(re.search(r'"pending": (-?\d+)',saved).group(1)))
+    assert got==(screen,current,pending),(w,got,(screen,current,pending))
+    assertions.append(list(got))
+   async def shot(label):await page.screenshot(path=str(OUT/f'{label}-{w}.png'))
+   menu=(640,209) if w==1280 else ((265,169) if side else (240,max(150,uh*.25)+30))
+   await tap(*menu); await tap(*menu,500)
+   await shot('map'); await tap(*node(0)); await state('map',-1,-1); await shot('preview')
+   await tap(*cancel); await page.keyboard.press('Enter'); await page.wait_for_timeout(950)
+   await state('map',-1,-1); await shot('cancel')
+   await tap(*node(0)); await tap(*confirm,120); await tap(*confirm,1000)
+   await state('game',-1,0); await shot('battle')
+   await page.reload(); await page.wait_for_timeout(4500)
+   resume=(640,497) if w==1280 else ((265,313) if side else (240,max(150,uh*.25)+326))
+   await tap(*resume,500); await state('game',-1,0); await shot('resume')
+   skip=(1098,102) if w==1280 else ((468,462) if side else (410,84))
+   await tap(*skip,500)
+   skip_reward=(640,555) if w==1280 else ((480,399) if side else (240,uh-51))
+   await tap(*skip_reward,500); await state('map',0,-1); await shot('returned')
+   await tap(*node(1)); await tap(*confirm,350); await shot('march')
+   await page.wait_for_timeout(700); await state('route_choice',0,1); await shot('event')
+   await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
+   await state('route_choice',0,1); await tap(uw/2,297,500); await state('map',1,-1)
+   await shot('event-return'); await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
+   await state('map',1,-1); await shot('map-resume')
+   assert not errors,(w,errors)
+   reports.append({'viewport':[w,h],'errors':errors,'state_assertions':assertions,'note':'Actual Web export: touch preview/cancel/confirm, duplicate suppression, battle reload, debug reward return, curved march, event reload/resolve, map refresh.'})
+   await context.close()
+  await browser.close()
+ (OUT/'browser-flow.json').write_text(json.dumps(reports,indent=2))
+ print(json.dumps(reports))
+asyncio.run(main())
