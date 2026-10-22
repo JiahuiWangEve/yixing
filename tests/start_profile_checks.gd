@@ -71,7 +71,7 @@ func check_profiles_and_rewards():
 	for identity in INITIAL:
 		game.player_skill = identity
 		game.new_run()
-		check(game.lives == (2 if identity == "king" else 1), identity + " initial health")
+		check(game.lives == (5 if identity == "king" else 3), identity + " initial health")
 		check(same_cards(game.collection, INITIAL[identity]) and same_cards(game.deck, INITIAL[identity]), identity + " exact four-card starting deck")
 		check(game.hand.is_empty() and game.discard.is_empty() and game.energy == 3, identity + " retains empty opening hand and three energy")
 		var all_legal = COMMON + DEDICATED[identity]
@@ -104,10 +104,12 @@ func check_profiles_and_rewards():
 		game.navigation_lock = 0.0
 		game.roll_rewards()
 		game.phase = "reward"
-		var removed_card = game.collection[0]
-		var previous_count = game.collection.count(removed_card)
+		var previous_cards = game.collection.duplicate()
+		var previous_rewards = game.rewards.duplicate()
 		game.delete_reward(0)
-		check(game.stage == 3 and game.collection.size() == 3 and game.collection.count(removed_card) == previous_count - 1 and same_cards(game.deck, game.collection), identity + " removing reward deletes one permanent copy")
+		check(game.stage == 2 and game.phase == "reward" and game.collection == previous_cards and game.rewards == previous_rewards, identity + " obsolete battle deletion cannot change cards or consume reward")
+		game.choose_reward(-1)
+		check(game.stage == 3 and game.collection == previous_cards and same_cards(game.deck, game.collection), identity + " valid skip still advances after blocked deletion")
 	reset("artillery")
 	game.artillery_mode = "attack"
 	check(same_cards(game.reward_pool(), COMMON + DEDICATED.artillery), "artillery rewards depend on identity rather than stance")

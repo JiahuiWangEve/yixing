@@ -55,13 +55,13 @@ func enter(id: int):
 func victory():
 	game.debug_skip();step("tap","debug victory",[point(game.debug_skip_rect().get_center())])
 func reward_return():
-	var pos = game.rewardui.confirm_rect().get_center() if game.route.rewards_blocked() else game.rewardui.choice_rect(2).get_center()
+	var pos = game.rewardui.confirm_rect().get_center() if game.route.rewards_blocked() else game.rewardui.choice_rect(1).get_center()
 	game.navigation_lock = 0;game.choose_reward(-1);step("tap","return from victory",[point(pos)])
 func setup(name: String, size: Vector2):
 	game.player_skill="king";game.seed_value=1313;game.new_expedition();game.configure_layout(size)
 	game.route.enter(0);game.route.complete()
 	game.collection=["sword_plus","sword","spear","life","sword_plus"];game.lives=4
-	if name=="workshop":
+	if name.begins_with("workshop"):
 		T.enter_next(game, "workshop")
 	elif name.begins_with("camp"): T.enter_next(game, "camp")
 	else:
@@ -75,7 +75,7 @@ func setup(name: String, size: Vector2):
 		game.new_expedition();game.route.enter(0)
 		game.collection=["sword","fatigue","fatigue"];game.deck=["sword","fatigue","fatigue"];game.hand=[];game.hand_ids=[];game.discard=[]
 		game.energy=0 if name=="fatigue_zero" else 1
-	if name in ["manual_focus", "manual_homework", "camp_prepare"]:
+	if name in ["manual_focus", "manual_homework", "camp_card"]:
 		var cursor = game.route.state.pending
 		var kinds = ["battle", "workshop", "battle"] if name.begins_with("manual") else ["battle"]
 		for kind in kinds:
@@ -87,7 +87,7 @@ func run():
 	game=load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true);FileAccess.open(OUT+"fixtures/settings.cfg",FileAccess.WRITE).store_string(FileAccess.get_file_as_string(game.settings.SAVE))
 	var reports=[]
 	for size in [Vector2(1280,940),Vector2(390,844),Vector2(844,390),Vector2(360,640)]:
-		for name in ["herb_heal","herb_breath","herb_full","merchant","manual_focus","manual_homework","manual_mnemonic","manual_ineligible","camp_prepare","camp_remove","workshop","fatigue_zero","fatigue_one"]:
+		for name in ["herb_heal","herb_breath","herb_full","merchant","manual_focus","manual_homework","manual_mnemonic","manual_ineligible","camp_card","camp_remove","camp_heal","workshop","workshop_remove","fatigue_zero","fatigue_one"]:
 			setup(name,size)
 			var filename=name+"-"+str(int(size.x))+".cfg"
 			check(game.route.valid_snapshot(game.route.state,game.history.capture(),game.screen),filename+" valid")
@@ -104,8 +104,9 @@ func run():
 					enter(game.route.legal()[0]);victory();reload_step();reward_return();enter(game.route.legal()[0]);choose("leave");enter(game.route.legal()[0]);victory();reward_return()
 				"manual_mnemonic": choose("random_upgrade");choose("back");reload_step();choose("random_upgrade");choose("confirm")
 				"manual_ineligible": choose("disabled");choose("leave")
-				"camp_prepare": choose("prepare");choose("back");choose("prepare");choose("confirm");reload_step();enter(game.route.legal()[0])
-				"camp_remove": choose("select_remove");choose("remove",0);choose("back");choose("select_remove");choose("remove",0);choose("confirm")
+				"camp_card": choose("prepare");choose("back");reload_step();choose("prepare");choose("confirm");reload_step();enter(game.route.legal()[0])
+				"camp_heal": choose("heal");choose("back");choose("heal");choose("confirm");reload_step()
+				"camp_remove", "workshop_remove": choose("select_remove");choose("remove",0);choose("back");choose("select_remove");choose("remove",0);choose("confirm")
 				"fatigue_zero","fatigue_one":
 					for target in [Vector2i(4,8),Vector2i(4,7)]:
 						game.input_lock=0;game.navigation_lock=0;game.basic_move(target)

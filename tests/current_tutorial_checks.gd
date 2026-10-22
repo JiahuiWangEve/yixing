@@ -20,7 +20,7 @@ func run_checks():
 	game = load("res://main.tscn").instantiate()
 	root.add_child(game)
 	for lesson in 5:
-		for reward_mode in (["add", "remove", "skip"] if lesson == 4 else ["skip"]):
+		for reward_mode in (["add", "skip"] if lesson == 4 else ["skip"]):
 			game.start_tutorial(lesson)
 			check(game.tutorial.step_count() > 0, "lesson %d has fixed steps" % lesson)
 			var count = game.tutorial.step_count()
@@ -55,8 +55,10 @@ func run_checks():
 					"discard": game.discard_hand(0)
 					"pass": game.pass_card(game.hand.find(spec.card))
 					"reward":
-						if reward_mode == "remove": game.delete_reward(0)
-						else: game.choose_reward(0 if reward_mode == "add" else -1)
+						var before_cards = game.collection.duplicate()
+						game.delete_reward(0)
+						check(game.phase == "reward" and game.collection == before_cards, "tutorial rejects retired permanent reward deletion")
+						game.choose_reward(0 if reward_mode == "add" else -1)
 					"end_turn": game.end_turn()
 				if lesson == 1 and step in [4, 5]:
 					var elephant = RULES.occupied(Vector2i(5, 3), game.enemies)

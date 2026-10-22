@@ -15,7 +15,7 @@ func entries() -> Array:
 					"sound": result.append(option.label + "：" + ("关闭" if game.audio_system.muted else "开启"))
 			result.append("返回首页");return result
 		"skill_selection": return ["将 · 四向一步", "马 · 马步移动" if game.skill_system.is_unlocked("horse") else "马 · 通关后解锁", "炮车 · 行军与驻扎" if game.skill_system.is_unlocked("artillery") else "炮车 · 通关后解锁", "返回首页", "查看全部卡牌"]
-		"debug_profile": return ["将 · 2命与恢复", "马 · 1命与机动", "炮车 · 1命与炮击", "返回首页"]
+		"debug_profile": return ["将 · 5命与恢复", "马 · 3命与机动", "炮车 · 3命与炮击", "返回首页"]
 		"tutorial_menu":
 			var result = ["继续上次小节：%d" % (game.tutorial_resume_lesson + 1)]
 			for i in 5: result.append("%d · %s" % [i + 1, LESSON_NAMES[i]])
@@ -122,7 +122,7 @@ func draw():
 		var profile_entry = game.screen in ["skill_selection", "debug_profile"] and i < 3
 		game.text_at(rect.position + Vector2(20, 26 if profile_entry else 35), entries()[i], 20, Palette.INK_SECONDARY if locked else Palette.INK)
 		if profile_entry:
-			var summaries = ["2 命 · 凯旋：胜利回1命（上限5）", "1 命 · 马步与进退攻击 · 击杀切入", "1 命 · 行军走 1–2 格 · 展开抽 3 张"]
+			var summaries = ["5/5命 · 凯旋：胜利回1命", "3/3命 · 马步与进退攻击 · 击杀切入", "3/3命 · 行军走 1–2 格 · 展开抽 3 张"]
 			game.text_at(rect.position + Vector2(20, 47), summaries[i], 14, Palette.INK_SECONDARY if locked else Palette.LEGAL)
 	if game.screen == "home":
 		game.text_at(button_rect(4).position + Vector2(0, button_rect(4).size.y + 24), "关闭：整局悔棋3次；开启：不限次，可跳关", 14, game.THEME.LIGHT)

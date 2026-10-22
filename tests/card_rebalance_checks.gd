@@ -33,7 +33,7 @@ func fresh(identity: String = "king", expedition: bool = false):
 	game.add_enemy("g", Vector2i(4, 0), 99)
 	game.enemies[0].hp = 99
 	game.player = Vector2i(4, 5)
-	game.lives = 5
+	game.lives = 5 if identity == "king" else 3
 	game.deck = ["sword", "spear", "diagonal", "sword", "spear", "sword", "sword", "spear"]
 	game.discard = [];game.hand = [];game.hand_ids = []
 	game.energy = 3;game.phase = "play"

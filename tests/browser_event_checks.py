@@ -48,15 +48,17 @@ async def main():
         assert parse((OUT/'fixtures'/replay['fixture']).read_text()) == replay['initial'], replay['fixture']
     # Fail closed if a missing fixture or viewport would silently shrink coverage.
     names = {'herb_heal', 'herb_breath', 'herb_full', 'merchant', 'manual_focus',
-             'manual_homework', 'manual_mnemonic', 'manual_ineligible', 'camp_prepare',
-             'camp_remove', 'workshop', 'fatigue_zero', 'fatigue_one'}
+             'manual_homework', 'manual_mnemonic', 'manual_ineligible', 'camp_card',
+             'camp_remove', 'camp_heal', 'workshop_remove', 'workshop', 'fatigue_zero', 'fatigue_one'}
     full_widths = {1280, 390, 844, 360}
     full_matrix = {(name, width) for name in names for width in full_widths}
     actual_matrix = {(replay['name'], int(replay['viewport'][0])) for replay in replays}
     assert actual_matrix == full_matrix and len(replays) == len(full_matrix), 'Incomplete/duplicate event fixture matrix'
     # Validate every fixture envelope above, even when duplicate viewports are omitted.
-    widths = full_widths if os.environ.get('YIXING_FULL_REGRESSION') == '1' else {1280, 390}
-    replays = [replay for replay in replays if int(replay['viewport'][0]) in widths]
+    smoke = os.environ.get('YIXING_EVENT_SMOKE') == '1'
+    widths = full_widths if os.environ.get('YIXING_FULL_REGRESSION') == '1' and not smoke else {1280, 390}
+    if smoke: names = {'camp_heal', 'camp_card', 'workshop_remove', 'workshop'}
+    replays = [replay for replay in replays if int(replay['viewport'][0]) in widths and replay['name'] in names]
     expected_matrix = {(name, width) for name in names for width in widths}
     assert {(r['name'], int(r['viewport'][0])) for r in replays} == expected_matrix
     assert len(replays) == len(expected_matrix), 'Wrong selected event coverage'
@@ -97,7 +99,7 @@ async def main():
                 if actual!=step['expected']:
                     await screenshot('failure-'+str(number))
                     raise AssertionError((stem,number,step['label'],actual,step['expected']))
-                if step['label'] in ['confirm','debug victory','select_exchange','select_focus','select_homework','draw fatigue','retained fatigue next turn'] or step['kind']=='reload':
+                if replay['name'] in {'camp_heal', 'camp_card', 'workshop_remove', 'workshop'} or step['label'] in ['confirm','debug victory','select_exchange','select_focus','select_homework','draw fatigue','retained fatigue next turn'] or step['kind']=='reload':
                     await screenshot(str(number)+'-'+step['label'].replace(' ','-'))
             assert not errors,(stem,errors)
             reports.append({'fixture':replay['fixture'],'viewport':[w,h],'state_assertions':len(replay['steps'])+1,'errors':errors,'final':await snap()})

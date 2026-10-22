@@ -282,6 +282,8 @@ func check_snapshots_and_save_validation():
 	for enemy in game.enemies: enemy.cd = 999;enemy.period = 999
 	game.player = Vector2i(8, 9);game.lives = 100
 	phase_to(3);uid = guard().uid;defeat(guard());phase_to(4)
+	# Normalize the damage-isolation fixture before testing exact persistence.
+	game.lives = game.life_limit()
 	before = game.history.capture();var saved_route = game.route.state.duplicate(true)
 	game.route.save();game.show_home()
 	check(game.route.resume() and game.history.capture() == before and game.route.state == saved_route, "chapter2 save/resume retains pending ghost announced wave and exact identity")

@@ -59,7 +59,7 @@ func fresh(name: String, size: Vector2):
 		check(game.route.choose_treasure("battle_tassel"),"ordinary chapter-two treasure claim")
 	game.route.enter(0)
 	game.enemies = [];game.next_enemy_uid = 1;add(Vector2i(4,0),"g")
-	game.player = Vector2i(4,5);game.energy = 6;game.lives = 4;game.basic_used = true
+	game.player = Vector2i(4,5);game.energy = 6;game.lives = mini(4, game.life_limit());game.basic_used = true
 	game.phase = "play";game.screen = "game";game.free_selected = false;game.selected = -1
 	var id = "sword" if name.begins_with("sword") else ("blood_edge" if name.begins_with("blood_") and name != "blood_break" else ("chain_assault" if name == "chain_bonus" else name))
 	game.hand = [id];game.hand_ids = [];game.deck = ["life", "breath"];game.discard = [];game.rewards = [];game.collection = [id,"life","breath"]

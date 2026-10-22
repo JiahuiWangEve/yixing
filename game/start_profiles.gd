@@ -3,16 +3,19 @@ extends RefCounted
 # Retired cards are removed. This demo version starts a new run-save namespace.
 const COMMON = ["sword", "spear", "diagonal", "breath"]
 const DATA = {
-	"king": {"name": "帅", "lives": 2,
+	"king": {"name": "帅", "lives": 5, "max_lives": 5,
 		"deck": ["sword", "sword", "spear", "life"],
 		"rewards": ["life", "sweep", "pierce", "shock", "tuna", "suppress", "guard", "horse", "airdrop", "blood_edge", "blood_break", "last_stand"]},
-	"horse": {"name": "马", "lives": 1,
+	"horse": {"name": "马", "lives": 3, "max_lives": 3,
 		"deck": ["sword", "sword", "spear", "advance"],
 		"rewards": ["straight", "pursuit", "advance", "retreat_strike", "knight_assault", "chain_assault"]},
-	"artillery": {"name": "炮车", "lives": 1,
+	"artillery": {"name": "炮车", "lives": 3, "max_lives": 3,
 		"deck": ["sword", "stake", "cannon_shot", "deploy"],
 		"rewards": ["stake", "cannon_shot", "deploy", "pack", "permanent_stake", "reload"]}
 }
+static func life_limit(identity: String) -> int:
+	return int(DATA.get(identity, DATA.king).max_lives)
+
 static func reward_weight(identity: String, id: String) -> int:
 	# Pure horse movement appears half as often per draw as its attack cards.
 	return 1 if identity == "horse" and id == "straight" else 2

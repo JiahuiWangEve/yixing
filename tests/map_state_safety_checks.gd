@@ -286,7 +286,7 @@ func check_battle_phase_round_trips():
 func check_reward_return():
 	for identity in ["king", "horse", "artillery"]:
 		for use_debug in [false, true]:
-			for reward_action in ["add", "remove", "skip"]:
+			for reward_action in ["add", "blocked_remove_then_skip", "skip"]:
 				fresh(Vector2(390, 844), identity)
 				route.enter(0)
 				if use_debug: game.debug_skip()
@@ -298,8 +298,10 @@ func check_reward_return():
 				var cards = game.collection.duplicate()
 				if reward_action == "add":
 					game.choose_reward(0);cards.append(expected_loot[0])
-				elif reward_action == "remove":
-					game.delete_reward(0);cards.remove_at(0)
+				elif reward_action == "blocked_remove_then_skip":
+					game.delete_reward(0)
+					check(game.collection == cards and game.phase == "reward" and game.screen == "game", "obsolete battle deletion cannot consume reward or remove a card")
+					game.choose_reward(-1)
 				else: game.choose_reward(-1)
 				route.tick(0)
 				check(game.screen == "map" and route.state.current == 0 and route.state.pending == -1 and route.state.visited == [0], "each reward mode returns to completed node exactly once")

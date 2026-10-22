@@ -83,7 +83,7 @@ jobs:
           for suite in chapter airdrop pass board_info card_catalog map_single_tap treasure attack; do
             python3 "tests/browser_${suite}_checks.py" --validate-only
           done
-          python3 tests/browser_map_single_tap_checks.py 2>&1 | tee build/map-single-tap-smoke.log
+          YIXING_EVENT_SMOKE=1 python3 tests/browser_event_checks.py 2>&1 | tee build/camp-workshop-smoke.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -95,7 +95,7 @@ jobs:
             build/package-audit.log
             build/release-smoke.log
             build/merchant-ui-smoke.log
-            build/map-single-tap-smoke.log
+            build/camp-workshop-smoke.log
             build/card-catalog-smoke.log
             build/treasure-smoke.log
             build/attack-smoke.log

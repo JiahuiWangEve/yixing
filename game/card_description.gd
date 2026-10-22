@@ -197,7 +197,7 @@ func _utility(id: String, battle: bool) -> Array:
 		"permanent_stake":
 			return ["木桩；曼哈顿2格内空位\n挡路作炮架；持续本场", "曼哈顿1–2格空位放木桩（含斜角相邻），挡路作炮架；不按回合消失，战斗结束清除。"]
 		"life":
-			var cap = "无上限" if battle and game.unlimited_lives() else "上限5"
+			var cap = ("无上限" if game.unlimited_lives() else "上限%d" % game.life_limit()) if battle else "上限5"
 			return ["命+1（%s）" % cap, "命+1（%s）。%s" % [cap, "" if cap == "无上限" else "满命时不可使用。"]]
 		"breath": return ["本回合能量+1", "立即获得1能量；不增加后续回合的起始能量。"]
 		"tuna":

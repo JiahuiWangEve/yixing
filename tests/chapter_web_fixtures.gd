@@ -50,7 +50,7 @@ func end_turn(label: String):
 func victory(label: String):
 	game.debug_skip();step("tap", label, [point(game.debug_skip_rect().get_center())], 1600)
 func reward_return():
-	var target = game.rewardui.confirm_rect().get_center() if game.route.rewards_blocked() else game.rewardui.choice_rect(2).get_center()
+	var target = game.rewardui.confirm_rect().get_center() if game.route.rewards_blocked() else game.rewardui.choice_rect(1).get_center()
 	game.input_lock = 0;game.navigation_lock = 0;game.choose_reward(-1)
 	step("tap", "skip-reward-treasure-choice", [point(target)])
 func enter(id: int):

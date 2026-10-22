@@ -116,12 +116,10 @@ func check_no_extra_rewards():
 	game.choose_reward(-1)
 	check(game.screen == "map" and game.collection == before, "blocked victory advances with no extra reward")
 	fresh_reward(Vector2(390, 844));game.collection = ["sword", "sword", "sword_plus"]
-	game.rewardui.click(game.rewardui.choice_rect(1).get_center())
-	check(game.card_picker.active and game.card_picker.indices == [0, 1, 2], "deletion eligibility still includes all physical copies")
-	game.card_picker.selected = 1;game.card_picker.confirm()
-	check(game.collection == ["sword", "sword_plus"] and game.screen == "map", "delete alternative remains one exact copy and no extra card")
-	fresh_reward(Vector2(390, 844));before = game.collection.duplicate();game.rewardui.click(game.rewardui.choice_rect(2).get_center())
-	check(game.collection == before and game.screen == "map", "skip remains no card or other extra reward")
+	game.delete_reward(1)
+	check(game.collection == ["sword", "sword", "sword_plus"] and game.phase == "reward" and not game.card_picker.active, "elite cannot delete any physical copy")
+	before = game.collection.duplicate();game.rewardui.click(game.rewardui.choice_rect(1).get_center())
+	check(game.collection == before and game.screen == "map", "second and final reward choice is skip")
 func run():
 	game = load("res://main.tscn").instantiate();root.add_child(game);game.set_process(false)
 	check_draws();check_route_generation();check_layout_and_claims();check_no_extra_rewards()

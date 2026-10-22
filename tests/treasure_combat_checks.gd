@@ -93,12 +93,12 @@ func check_horse():
 	game.energy = 3;game.deck = ["spear"];settle();game.pass_card(0);check(game.treasure_battle.tassel_ready,"passing attack does not consume")
 	settle();game.end_turn();check(not game.treasure_battle.tassel_ready,"unused buff expires on turn end")
 func check_spring():
-	fresh("spring_bit",[],5);var enemy = add("p",Vector2i(1,1),1)
-	game.damage_enemy(game.enemies.find(enemy));check(game.lives == 5 and game.treasure_battle.spring_kills == 1,"full health consumes true defeat")
+	fresh("spring_bit",[],3);var enemy = add("p",Vector2i(1,1),1)
+	game.damage_enemy(game.enemies.find(enemy));check(game.lives == 3 and game.treasure_battle.spring_kills == 1,"full health consumes true defeat")
 	enemy = add("p",Vector2i(1,2),1);enemy.unyielding = true;game.damage_enemy(game.enemies.find(enemy))
 	check(game.treasure_battle.spring_kills == 1,"unyielding fall not true defeat")
-	game.lives = 3;enemy = add("p",Vector2i(1,3),1);game.damage_enemy(game.enemies.find(enemy));check(game.lives == 4 and game.treasure_battle.spring_kills == 2,"second true defeat heals")
-	enemy = add("p",Vector2i(1,4),1);game.damage_enemy(game.enemies.find(enemy));check(game.lives == 4,"third defeat no heal")
+	game.lives = 2;enemy = add("p",Vector2i(1,3),1);game.damage_enemy(game.enemies.find(enemy));check(game.lives == 3 and game.treasure_battle.spring_kills == 2,"second true defeat heals")
+	enemy = add("p",Vector2i(1,4),1);game.damage_enemy(game.enemies.find(enemy));check(game.lives == 3,"third defeat no heal")
 	fresh("spring_bit",["sword"],2);game.enemies=[];add("g",Vector2i(4,4),1);play("sword",Vector2i(4,4))
 	check(game.lives == 3 and game.phase == "reward","terminal general heals before victory carry")
 func check_cannon():

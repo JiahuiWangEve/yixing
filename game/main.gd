@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.15.2"
+const BUILD_VERSION = "v0.15.3"
 const PASS_CARD_COST = 3
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
@@ -374,11 +374,13 @@ func record_active_displacement(origin: Vector2i):
 		active_displacements += 1
 		treasures.on_displacement()
 func unlimited_lives() -> bool: return treasures.has("longevity_seal")
-func life_limit() -> int: return -1 if unlimited_lives() else 5
+func life_limit() -> int: return -1 if unlimited_lives() else PROFILES.life_limit(player_skill)
+func clamp_lives_to_limit():
+	if not tutorial.active and life_limit() >= 0: lives = mini(lives, life_limit())
 func can_heal() -> bool: return unlimited_lives() or lives < life_limit()
 func heal_lives(amount: int) -> int:
 	var before = lives
-	if amount > 0: lives = lives + amount if unlimited_lives() else mini(life_limit(), lives + amount)
+	if amount > 0 and can_heal(): lives = lives + amount if unlimited_lives() else mini(life_limit(), lives + amount)
 	return lives - before
 func lose_lives(amount: int):
 	lives -= maxi(0, amount)
@@ -519,13 +521,10 @@ func choose_reward(index: int = -1):
 	if route.rewards_blocked() and index >= 0: return
 	if index >= 0: collection.append(rewards[index])
 	finish_reward(data)
-func delete_reward(index: int):
-	if route.rewards_blocked(): return
-	if screen != "game" or phase != "reward" or input_lock > 0 or navigation_lock > 0 or index < 0 or index >= collection.size(): return
-	var data = {"index": index, "mode": "remove"}
-	if not tutorial_allows("reward", data): return
-	collection.remove_at(index)
-	finish_reward(data)
+func delete_reward(_index: int):
+	# Retired reward action: stale UI/saves/callers cannot delete a card or
+	# advance settlement. Permanent removal belongs to camp/workshop only.
+	return
 func finish_reward(data: Dictionary):
 
 	history.clear();cancel_gesture();rewardui.reset()
@@ -1251,7 +1250,7 @@ func _draw():
 	if mobile_layout: draw_set_transform(pv, 0, Vector2.ONE * minf(1.0, CELL / 54.0));pv = Vector2.ZERO
 	draw_circle(pv, 24, THEME.DANGER.lerp(Color.WHITE, player_flash));draw_arc(pv, 20, 0, TAU, 32, GOLD, 2);text_at(pv + Vector2(-14, 9), ("炮" if artillery_mode == "attack" else "行") if player_skill == "artillery" else ("马" if player_skill == "horse" else "帅"), 28, Palette.WHITE)
 	draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
-	text_at((Vector2(24, 500) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(397, 609), ("命 %d%s" % [lives, "/∞" if unlimited_lives() else "/5"]), 20, THEME.LIGHT)
+	text_at((Vector2(24, 500) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(397, 609), ("命 %d%s" % [lives, "/∞" if unlimited_lives() else "/%d" % life_limit()]), 20, THEME.LIGHT)
 	text_at((Vector2(200, 500) if compact_landscape else Vector2(150, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(550, 609), "能量 %d" % energy, 20, THEME.LIGHT)
 	var confirm = selected >= 0 and (phase == "discard" or (phase == "play" and hand[selected] in UNTARGETED))
 	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else (("跳过回合" if mobile_layout else "跳过回合 [空格]") if recovery_active() else ("结束回合" if mobile_layout else "结束回合 [空格]"))), 18, THEME.INK)

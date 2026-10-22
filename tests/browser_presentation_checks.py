@@ -76,7 +76,7 @@ async def main():
                                 seen_seal=True
                                 if not blocked_checked:
                                     settled=await state()
-                                    await tap((920,405) if w==1280 else (240,442))
+                                    await tap((790,405) if w==1280 else (240,322))
                                     assert await state()==settled,'Reward input leaked through visible victory seal'
                                     blocked_checked=True
                             elif seen_seal and count==0:finished=True

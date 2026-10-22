@@ -234,7 +234,7 @@ async def main():
    skip=(1098,102) if w==1280 else ((468,462) if side else (410,84))
    await tap(*skip,1200); await shot('reward')
    # v0.6.0 reward selector: third choice is Skip, not the older add-card footer.
-   skip_reward=(920,405) if w==1280 else ((792,257) if side else (240,442))
+   skip_reward=(790,405) if w==1280 else ((640,257) if side else (240,322))
    await tap(*skip_reward,500); await state('map',0,-1); await shot('returned')
    # Idle map frames must stay visually stable; touch drag must scroll without selecting.
    baseline=await page.screenshot()

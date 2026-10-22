@@ -73,8 +73,11 @@ func run():
 	picker.confirm();check(game.collection == ["sword", "sword_plus", "sword_plus"], "workshop only second copy changes")
 	fresh(Vector2(390,844));game.collection = ["fatigue"];game.route.refresh_choices();action("select_remove");picker.selected = 0;picker.confirm()
 	check(game.collection.is_empty(), "existing zero-card lower bound preserved")
-	fresh(Vector2(390,844));game.screen = "game";game.phase = "reward";game.rewardui.reset();game.navigation_lock = 0;game.input_lock = 0
-	game.rewardui.click(game.rewardui.choice_rect(1).get_center());check(picker.active, "battle reward uses same picker")
-	var turn_before = game.turn;key(KEY_SPACE);check(game.turn == turn_before, "reward picker space safe")
-	picker.cancel();check(game.rewardui.mode == "choice" and not picker.active, "reward cancel returns reward choices")
+	fresh(Vector2(390,844));T.configure_node(game, game.route.state.pending, "workshop");game.route.refresh_choices()
+	var before = game.collection.duplicate();var pending = game.route.state.pending
+	action("select_remove");check(picker.active and picker.title.contains("工坊"), "workshop deletion uses same picker")
+	var turn_before = game.turn;key(KEY_SPACE);check(game.turn == turn_before, "workshop picker space safe")
+	picker.cancel();check(game.route.choice_mode == "root" and not picker.active and game.collection == before and game.route.state.pending == pending, "workshop cancel returns choices without consuming node")
+	action("select_remove");picker.selected = 1;picker.confirm();before.remove_at(1)
+	check(game.collection == before and game.screen == "map", "workshop confirms exact physical copy")
 	game.queue_free();print("CARD PICKER RESULT %d checks, %d failures" % [checks, failures]);quit(1 if failures else 0)

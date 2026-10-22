@@ -18,7 +18,7 @@ func run_checks():
 	game = load("res://main.tscn").instantiate(); root.add_child(game)
 	check(game.screen == "home", "main scene opens home screen")
 	game.new_run()
-	check(game.lives == 2 and game.energy == 3 and game.hand.is_empty() and game.deck.size() == 4, "king initial resources")
+	check(game.lives == 5 and game.energy == 3 and game.hand.is_empty() and game.deck.size() == 4, "king initial resources")
 	check(game.CARDS.size() == 34 and game.CAMPAIGN.LAST_STAGE == 6, "34 current cards including two temporary treasure moves, and six debug stages")
 	check(game.enemies[0].hp == 3, "general has three HP")
 	reset(); game.basic_move(Vector2i(4,8))

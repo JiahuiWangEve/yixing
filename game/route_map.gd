@@ -107,7 +107,7 @@ var layout_size = Vector2.ZERO
 var layout_content_height = 0.0
 var layout_view_height = 0.0
 const TITLES = {"battle": "军旗阵地", "elite": "关隘", "camp": "休整", "workshop": "工坊", "event": "奇遇", "boss": "终点城寨"}
-const DETAILS = {"battle": "战胜守军后选择战利品。", "elite": "精英战斗；战胜后4张候选选1。", "camp": "轻装上阵：删一张牌；养精蓄锐：下一战初始多抽2张。", "workshop": "强化一张可强化的永久牌。", "event": "药庐、行商、兵书各有三分之一概率，生成后固定。", "boss": "敌将9血；击败敌将即完成本章。"}
+const DETAILS = {"battle": "战胜守军后选择战利品。", "elite": "精英战斗；战胜后4张候选选1。", "camp": "轻装上阵：删一张牌；休养：回1命；养精蓄锐：随机获得一张牌。", "workshop": "强化一张可强化的永久牌，或删除一张永久牌。", "event": "药庐、行商、兵书各有三分之一概率，生成后固定。", "boss": "敌将9血；击败敌将即完成本章。"}
 
 func reset_view():
 	selected_node = -1;travel_target = -1;travel_elapsed = 0.0
@@ -288,6 +288,20 @@ func random_upgrade_index() -> int:
 	var random = RandomNumberGenerator.new()
 	random.seed = state.nodes[state.pending].upgrade_seed
 	return eligible[random.randi_range(0, eligible.size() - 1)]
+func camp_card() -> String:
+	# A node-local roll never advances combat RNG, including previews and reloads.
+	if state.pending < 0 or state.nodes[state.pending].kind != "camp": return ""
+	var pool: Array = []
+	for id in game.PROFILES.COMMON + game.PROFILES.DATA[game.player_skill].rewards:
+		if id in game.CARDS and id not in game.TREASURES.TEMPORARY and id != "fatigue" and id not in pool: pool.append(id)
+	if pool.is_empty(): return ""
+	var random = RandomNumberGenerator.new()
+	random.seed = int(state.seed) ^ (int(state.pending + 1) * 0x45d9f3b)
+	return pool[random.randi_range(0, pool.size() - 1)]
+func heal_label(prefix: String) -> String:
+	var cap = game.life_limit()
+	if not game.can_heal(): return "生命已达上限%d · 无需疗养" % cap
+	return prefix + (" · 生命+1（无上限）" if cap < 0 else " · 生命+1（上限%d）" % cap)
 func options() -> Array:
 	var node = state.nodes[state.pending]
 	var result = []
@@ -306,11 +320,13 @@ func options() -> Array:
 		return result
 	if node.kind == "workshop":
 		result.append({"label": "强化卡牌" if not UPGRADES.eligible_indices(game.collection).is_empty() else "没有可强化的牌", "action": "select_upgrade" if not UPGRADES.eligible_indices(game.collection).is_empty() else "disabled"})
+		result.append({"label": "删除一张永久牌" if not game.collection.is_empty() else "牌组已空 · 无法删牌", "action": "select_remove" if not game.collection.is_empty() else "disabled"})
 	elif node.kind == "camp":
 		result.append({"label": "轻装上阵 · 删除一张永久牌" if not game.collection.is_empty() else "轻装上阵 · 牌组已空", "action": "select_remove" if not game.collection.is_empty() else "disabled"})
-		result.append({"label": "养精蓄锐 · 下一战初始多抽2张" if not state.prepared else "已养精蓄锐 · 额外抽牌不叠加", "action": "prepare" if not state.prepared else "disabled"})
+		result.append({"label": heal_label("休养生息"), "action": "heal" if game.can_heal() else "disabled"})
+		result.append({"label": "养精蓄锐 · 随机获得一张永久牌", "action": "prepare" if not camp_card().is_empty() else "disabled"})
 	elif node.event_id == "herbalist":
-		result.append({"label": ("药庐疗养 · 生命+1（无上限）" if game.unlimited_lives() else "药庐疗养 · 生命+1（上限5）") if game.can_heal() else "生命已达上限5 · 无需疗养", "action": "heal" if game.can_heal() else "disabled"})
+		result.append({"label": heal_label("药庐疗养"), "action": "heal" if game.can_heal() else "disabled"})
 		result.append({"label": "取调息方 · 获得一张调息", "action": "breath"})
 	elif node.event_id == "merchant":
 		for i in node.offers.size():
@@ -351,8 +367,9 @@ func resolve(index: int):
 			upgraded_from = game.collection[i];upgraded_to = UPGRADES.upgraded_id(upgraded_from)
 			game.collection[i] = upgraded_to;outcome = "口诀领悟：已强化" + card_label(i)
 		"prepare":
-			if state.prepared: return
-			state.prepared = true;outcome = "已养精蓄锐：下一战初始多抽2张"
+			var card = camp_card()
+			if card.is_empty(): return
+			game.collection.append(card);outcome = "养精蓄锐：已获得「%s」×1" % game.CARDS[card][0]
 		"remove":
 			if game.collection.is_empty(): return
 			outcome = "已删除" + card_label(i);game.collection.remove_at(i)
@@ -369,7 +386,7 @@ func resolve(index: int):
 			game.collection[i] = state.nodes[state.pending].offers[choice.offer];outcome = "换得" + game.CARDS[game.collection[i]][0]
 		"heal":
 			if not game.can_heal(): return
-			game.heal_lives(1);outcome = "药庐疗养：生命+1，现有%d" % game.lives
+			game.heal_lives(1);outcome = "疗养：生命+1，现有%d" % game.lives
 		"breath": game.collection.append("breath");outcome = "已获得一张调息"
 	state.last_result = outcome
 	complete()
@@ -377,6 +394,7 @@ func resolve(index: int):
 func open_card_picker():
 	var eligible: Array = UPGRADES.eligible_indices(game.collection) if choice_mode == "upgrade" else range(game.collection.size())
 	var heading = {"upgrade": "工坊 · 强化卡牌", "remove": "休整 · 轻装上阵", "focus": "兵书 · 专注抄写", "homework": "兵书 · 课后作业", "exchange": "行商 · 选择交出的牌"}[choice_mode]
+	if choice_mode == "remove" and state.nodes[state.pending].kind == "workshop": heading = "工坊 · 删除卡牌"
 	if choice_mode == "exchange" and merchant_offer >= 0:
 		heading = "行商 · 换取" + game.CARDS[state.nodes[state.pending].offers[merchant_offer]][0]
 	game.card_picker.open(choice_mode, heading, eligible, picker_confirm, picker_cancel, state.nodes[state.pending].offers[merchant_offer] if choice_mode == "exchange" else "")
@@ -485,6 +503,8 @@ func resume() -> bool:
 	game.tutorial.stop();game.history.clear();game.cancel_gesture();game.clear_effects()
 	state = saved.duplicate(true)
 	for key in game.HISTORY.FIELDS: game.set(key, battle[key])
+	# Role, treasure and all battle fields must be restored before applying the cap.
+	game.clamp_lives_to_limit()
 	game.rng.state = battle.rng_state
 	game.screen = config.get_value("run", "screen", "map")
 	game.input_lock = 0;game.navigation_lock = 0;game.selected = -1;game.free_selected = false
@@ -826,7 +846,7 @@ func inspect_at(pos: Vector2) -> Dictionary:
 	if id < 0: return {}
 	var node = state.nodes[id]
 	var names = {"battle": "战斗", "elite": "关隘", "camp": "休整", "workshop": "工坊", "event": "奇遇", "boss": "决战"}
-	var nature = {"battle": "普通战斗，检验当前构筑。", "elite": "精英战斗，奖励选择更多。", "camp": "休整节点，可选择轻装或备战。", "workshop": "强化节点，打磨可升级的卡牌。", "event": "未知遭遇，抵达后揭晓选项与代价。", "boss": "本章最终战斗，击败守将前进。"}
+	var nature = {"battle": "普通战斗，检验当前构筑。", "elite": "精英战斗，奖励选择更多。", "camp": "休整节点，可删牌、回1命或随机获得一张牌。", "workshop": "工坊节点，可强化或删除一张永久牌。", "event": "未知遭遇，抵达后揭晓选项与代价。", "boss": "本章最终战斗，击败守将前进。"}
 	return {"key": "node-%d" % node.id, "node_id": node.id, "title": names[node.kind], "lines": [nature[node.kind]], "anchor": hit_rect(node)}
 func draw_deck():
 	var area = map_rect().grow(-12)
@@ -857,10 +877,12 @@ func draw():
 			var fatigue = game.CARDS.fatigue
 			game.wrapped_text("疲惫 · %d费\n%s\n复制牌与疲惫均加入永久牌组。" % [fatigue[1], fatigue[2]], Rect2(32, row_rect(2).position.y + 8, game.ui_size.x - 64, 140), 17, INK)
 		elif choice_mode == "confirm" and pending_choice.action == "homework":
-			game.wrapped_text("下一场胜利不提供常规加牌或删牌奖励。胜利后交付选定的复制牌，保留其强化效果。", Rect2(32, row_rect(2).position.y + 8, game.ui_size.x - 64, 140), 17, INK)
+			game.wrapped_text("下一场胜利不提供常规加牌奖励。胜利后交付选定的复制牌，保留其强化效果。", Rect2(32, row_rect(2).position.y + 8, game.ui_size.x - 64, 140), 17, INK)
 		button(footer_rect(0), "上一页")
 		button(footer_rect(1), "下一页 %d" % (page + 1))
 		return
 	draw_map();draw_header()
+	if str(state.last_result).begins_with("养精蓄锐："):
+		game.wrapped_text(state.last_result, Rect2(map_rect().position + Vector2(14, 12), Vector2(map_rect().size.x - 28, 60)), 18, INK)
 	if deck_view: draw_deck()
 	if save_error != OK: game.text_at(Vector2(24, game.ui_size.y - 2), "本地存档失败，请勿关闭页面", 14, RED)

@@ -13,7 +13,7 @@ func run():
 			if game.card_picker.active: game.card_picker.close()
 			game.configure_layout(size);game.player_skill = "king";game.seed_value = 14343;game.new_expedition()
 			game.route.enter(0);game.route.complete()
-			T.enter_next(game, "camp" if action == "remove" else ("workshop" if action == "upgrade" else "event"), "manual");game.collection = []
+			T.enter_next(game, "workshop" if action in ["remove", "upgrade"] else "event", "manual");game.collection = []
 			for i in 24: game.collection.append("sword" if action == "upgrade" else (["sword", "sword_plus", "fatigue", "airdrop"][i % 4]))
 			game.route.refresh_choices();game.route.save()
 			assert(game.route.valid_snapshot(game.route.state, game.history.capture(), "route_choice"))

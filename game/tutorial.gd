@@ -118,7 +118,7 @@ func allows(action: String, data: Dictionary = {}) -> bool:
 			allowed = not _card_at(data).is_empty()
 		elif action == "reward":
 			var index = int(data.get("index", -2))
-			allowed = (index >= 0 and index < game.collection.size()) if str(data.get("mode", "add")) == "remove" else (index == -1 or (index >= 0 and index < game.rewards.size()))
+			allowed = str(data.get("mode", "add")) != "remove" and (index == -1 or (index >= 0 and index < game.rewards.size()))
 	if not allowed:
 		game.notice = "教学目标：" + str(spec.hint)
 		return false
@@ -218,7 +218,7 @@ func _build_steps() -> Array:
 				_step("play", "预置三张短剑；将有三血，先出一剑。", 0, {"card": "sword", "target": Vector2i(4, 0), "label": "三血将与破阵奖励"}),
 				_step("play", "将剩两血；再用短剑击中亮格。", 0, {"card": "sword", "target": Vector2i(4, 0)}),
 				_step("play", "将剩一血；最后一剑真正破阵。", 0, {"card": "sword", "target": Vector2i(4, 0)}),
-				_step("reward", "破阵奖励：加一张新牌或永久删一张，也可跳过。", 0),
+				_step("reward", "破阵奖励：选择一张新牌加入牌组，也可跳过。", 0),
 				_step("pass", "选短剑点右侧弃置，或长按拖入松手：3费抽1张。", 1, {"card": "sword", "label": "付费弃牌重抽"})]
 	return []
 
@@ -364,7 +364,8 @@ func _observed_success(action: String, data: Dictionary) -> bool:
 		"discard":
 			return _before.hand.size() == 7 and game.hand.size() == 6 and game.phase == "play" and game.energy == _before.energy
 		"reward":
-			var added = -1 if str(_before.get("reward_mode", "add")) == "remove" else (0 if int(_before.reward_index) == -1 else 1)
+			if str(_before.get("reward_mode", "add")) == "remove": return false
+			var added = 0 if int(_before.reward_index) == -1 else 1
 			return game.stage == int(_before.stage) + 1 and game.collection.size() == int(_before.collection_size) + added
 		"end_turn":
 			if game.phase != "play" or game.turn != int(_before.turn) + 1 or game.energy != 3 or game.basic_used or game.card_move_used: return false

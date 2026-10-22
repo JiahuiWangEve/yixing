@@ -82,6 +82,12 @@ func check_upgrade_registry():
 	confirmed("upgrade", 1)
 	check(game.collection == ["sword", "sword_plus", "spear", "life"], "workshop upgrades exactly selected physical card")
 	check(route.resume() and game.collection[1] == "sword_plus", "workshop result resumes exactly")
+	workshop_fixture();game.collection = ["sword", "sword_plus", "sword"];route.refresh_choices()
+	before = game.collection.duplicate();act("select_remove");game.card_picker.selected = 1;game.card_picker.cancel()
+	check(game.collection == before and route.state.pending == fixture_node and route.choice_mode == "root", "workshop cancel consumes neither card nor node")
+	act("select_remove");game.card_picker.selected = 1;game.card_picker.confirm();game.card_picker.confirm()
+	check(game.collection == ["sword", "sword"] and route.state.visited.count(fixture_node) == 1, "workshop deletes exact upgraded copy and completes once")
+	check(route.resume() and game.collection == ["sword", "sword"], "workshop deletion persists")
 func check_herbalist():
 	event_fixture("herbalist");game.lives = 4;route.refresh_choices()
 	act("heal");check(game.lives == 4, "heal preview does not mutate health")
@@ -165,15 +171,29 @@ func check_rest():
 	act("back");check(game.collection == before, "rest deletion cancel keeps card")
 	act("select_remove");confirmed("remove", 1);before.remove_at(1)
 	check(game.collection == before and not route.state.prepared, "lighten load deletes just one permanent card")
-	camp_fixture();confirmed("prepare")
-	check(route.state.prepared and route.resume() and route.state.prepared, "preparation survives map resume")
-	T.enter_next(game, "battle")
-	check(game.hand.size() == 2 and not route.state.prepared, "rest gives exactly two opening cards in next battle")
-	var hand = game.hand.duplicate();route.save();check(route.resume() and game.hand == hand and not route.state.prepared, "battle reload cannot consume preparation twice")
-	undo_after_effects(game);check(game.hand == hand and not route.state.prepared, "opening prep cannot be undone into extra draws")
+	for identity in ["king", "horse", "artillery"]:
+		camp_fixture();game.player_skill = identity;game.lives = 1;route.refresh_choices()
+		before = game.collection.duplicate();var random_state = game.rng.state;var card = route.camp_card()
+		for sample in 100:
+			var old_seed = route.state.seed;route.state.seed = sample
+			var sample_card = route.camp_card()
+			check(sample_card in game.PROFILES.COMMON + game.PROFILES.DATA[identity].rewards and sample_card not in game.TREASURES.TEMPORARY and sample_card != "fatigue", "camp uses legal role permanent pool " + identity)
+			route.state.seed = old_seed
+		act("prepare");act("back")
+		check(game.collection == before and route.camp_card() == card and game.rng.state == random_state, "camp preview/cancel preserves roll and combat RNG")
+		route.save();check(route.resume() and route.camp_card() == card, "camp random card survives reload without reroll")
+		confirmed("prepare");before.append(card)
+		check(game.collection == before and not route.state.prepared and route.state.last_result.contains(game.CARDS[card][0]), "camp grants exactly one named card without new draw buff")
+		route.resolve(0);check(route.resume() and game.collection == before, "camp claim and node completion persist atomically once")
+	camp_fixture();game.lives = 3;route.refresh_choices();confirmed("heal")
+	check(game.lives == 4 and route.resume() and game.lives == 4, "camp heals exactly one and saves")
 	camp_fixture();route.state.prepared = true;route.refresh_choices()
-	check(action_index("prepare") == -1 and action_index("select_remove") >= 0, "prepared state visibly disables stacking, leaves removal available")
-	act("leave");check(route.state.prepared, "leaving rest preserves earlier preparation")
+	check(action_index("prepare") >= 0, "legacy preparation does not disable new card reward")
+	confirmed("prepare");check(route.state.prepared and route.resume() and route.state.prepared, "new card reward preserves legacy prepared save")
+	T.enter_next(game, "battle")
+	check(game.hand.size() == 2 and not route.state.prepared, "legacy preparation still redeems two opening cards once")
+	var hand = game.hand.duplicate();route.save();check(route.resume() and game.hand == hand and not route.state.prepared, "legacy battle reload cannot consume preparation twice")
+	undo_after_effects(game);check(game.hand == hand and not route.state.prepared, "legacy prep cannot be undone into extra draws")
 	camp_fixture();game.collection = ["sword"];route.refresh_choices();act("select_remove");confirmed("remove", 0)
 	check(game.collection.is_empty(), "existing delete-to-empty policy retained")
 func check_reward_debt():
@@ -255,9 +275,19 @@ func check_save_validation():
 	var legacy = ConfigFile.new();legacy.parse(good.encode_to_text());legacy.set_value("run", "version", 5);legacy.save(route.SAVE)
 	check(not route.resume() and route.state == original_route, "old demo map schema is rejected without modifying live state")
 	good.save(route.SAVE);check(route.resume(), "valid save survives rejection tests")
+func check_loaded_caps_and_reward_rejection():
+	for identity in ["king", "horse", "artillery"]:
+		fresh(identity);game.lives = 9;route.save()
+		game.player_skill = "king"
+		check(route.resume() and game.lives == (5 if identity == "king" else 3), "load clamps after restoring role " + identity)
+	for tier in ["battle", "elite", "boss"]:
+		fresh();var target = T.kind_id(route, tier);T.before(route, target);route.enter(target);game.debug_skip()
+		var before = game.collection.duplicate();var pending = route.state.pending
+		game.delete_reward(0)
+		check(game.collection == before and game.phase == "reward" and route.state.pending == pending, "battle deletion backend rejected for " + tier)
 func run():
 	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true);game.set_process(false);route = game.route
-	check_generation();check_upgrade_registry();check_herbalist();check_merchant();check_manual_copy();check_manual_random();check_rest();check_reward_debt();check_fatigue();check_save_validation()
+	check_generation();check_upgrade_registry();check_herbalist();check_merchant();check_manual_copy();check_manual_random();check_rest();check_reward_debt();check_fatigue();check_save_validation();check_loaded_caps_and_reward_rejection()
 	print("CAMPAIGN EVENT RESULT ", checks, " checks, ", failures, " failures")
 	game.free();quit(1 if failures else 0)
 
