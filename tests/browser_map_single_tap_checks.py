@@ -62,7 +62,7 @@ async def main(full=False, validate_only=False):
                 scale = min(w / uw, h / uh);ox = (w - uw * scale) / 2;oy = (h - uh * scale) / 2
                 context = await browser.new_context(viewport={'width': w, 'height': h}, has_touch=True)
                 page = await context.new_page();await install_debug_settings(page)
-                cdp = await context.new_cdp_session(page);errors = [];checks = [];shots = [];frame_timelines = []
+                cdp = await context.new_cdp_session(page);errors = [];checks = [];shots = [];frame_timelines = [];blur_evidence = []
                 page.on('pageerror', lambda e: errors.append(str(e)))
                 page.on('console', lambda m: errors.append(m.text) if m.type == 'error' and ('SCRIPT ERROR' in m.text or 'Parse Error' in m.text) else None)
                 fixture = (OUT / 'fixtures' / replay['fixture']).read_text();initial = state(fixture)
@@ -129,6 +129,43 @@ async def main(full=False, validate_only=False):
                     finally:
                         await cdp.send('Page.stopScreencast')
                         cdp.remove_listener('Page.screencastFrame', captured)
+                async def blur_window():
+                    # Headless tabs are separate targets, not necessarily separate
+                    # focused OS windows. Prove the DOM event was delivered before
+                    # testing its cancellation guarantee. No game API is invoked.
+                    before_focus = await page.evaluate("""() => {
+                        window.__qaMapBlurEvents = [];
+                        window.__qaMapBlurObserver = event => {
+                            if (event.target === window) window.__qaMapBlurEvents.push({
+                                type: event.type, trusted: event.isTrusted,
+                                timestamp: event.timeStamp, target: 'window',
+                                hasFocus: document.hasFocus(), visibility: document.visibilityState
+                            });
+                        };
+                        window.addEventListener('blur', window.__qaMapBlurObserver, true);
+                        return document.hasFocus();
+                    }""")
+                    try:
+                        other = await context.new_page();await other.bring_to_front();await page.wait_for_timeout(100)
+                        await other.close();await page.bring_to_front()
+                        natural = await page.evaluate('window.__qaMapBlurEvents.slice()')
+                        source = 'tab-switch' if natural else 'explicit-dom-event'
+                        if not natural:
+                            # Exercise the same registered DOM cancellation entry
+                            # point when headless bring_to_front emits no blur.
+                            await page.evaluate("window.dispatchEvent(new Event('blur'))")
+                        evidence = {'source': source, 'focus_before': before_focus,
+                                    'focus_after': await page.evaluate('document.hasFocus()'),
+                                    'tab_switch_events': natural,
+                                    'delivered_events': await page.evaluate('window.__qaMapBlurEvents.slice()')}
+                        blur_evidence.append(evidence)
+                        (output / f'map-{w}-blur-events.json').write_text(json.dumps(evidence, indent=2))
+                        print('MAP BLUR EVIDENCE', w, json.dumps(evidence), flush=True)
+                        assert evidence['delivered_events'], 'Blur cancellation was not exercised: no window DOM event received'
+                        assert all(event['type'] == 'blur' and event['target'] == 'window'
+                                   for event in evidence['delivered_events'])
+                    finally:
+                        await page.evaluate("window.removeEventListener('blur', window.__qaMapBlurObserver, true)")
                 async def hold():
                     await dispatch('touchStart', [pt(node)])
                     await page.wait_for_timeout(500)
@@ -171,8 +208,7 @@ async def main(full=False, validate_only=False):
                         elif gesture == 'second-finger':
                             await dispatch('touchStart', [pt(node), pt(blank, 1)]);await dispatch('touchEnd', [])
                         else:
-                            other = await context.new_page();await other.bring_to_front();await page.wait_for_timeout(100)
-                            await other.close();await page.bring_to_front();await dispatch('touchEnd', [])
+                            await blur_window();await dispatch('touchEnd', [])
                         await no_departure(gesture+' prevents travel')
                         await baseline_restored(baseline, gesture+'-cleared')
                     await tap(replay['unavailable']);await no_departure('Single nonlegal tap does not depart')
@@ -203,7 +239,7 @@ async def main(full=False, validate_only=False):
                     assert await await_saved_state(entered, ('game', -1, 0)) == ('game', -1, 0), 'One physical mouse click did not enter'
                     await shot('single-mouse-arrival');checks.append('One physical mouse click enters without prior selection')
                     assert not errors, errors
-                    results.append({'viewport': [w, h], 'checks': checks, 'screenshots': shots, 'frame_timelines': frame_timelines, 'errors': errors})
+                    results.append({'viewport': [w, h], 'checks': checks, 'screenshots': shots, 'frame_timelines': frame_timelines, 'blur_evidence': blur_evidence, 'errors': errors})
                     print('PASS map single-tap', w, h, len(checks), 'real-UI checks', flush=True)
                 except Exception:
                     await page.screenshot(path=str(output / f'map-{w}-failure.png'));raise
