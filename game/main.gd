@@ -1,9 +1,10 @@
 extends Control
-const BUILD_VERSION = "v0.15.3"
+const BUILD_VERSION = "v0.15.4"
 const PASS_CARD_COST = 3
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
+var battle_restart = preload("res://battle_restart.gd").new(self)
 const PROFILES = preload("res://start_profiles.gd")
 const THEME = preload("res://theme.gd")
 const Palette = preload("res://palette.gd")
@@ -452,7 +453,10 @@ func new_expedition():
 	screen = "map"
 	route.save()
 
+func restart_battle() -> bool:
+	return battle_restart.restart()
 func new_run(preserve_tutorial: bool = false):
+	battle_restart.clear()
 	normal_undos_remaining = NORMAL_UNDO_LIMIT
 	presentation.clear();card_picker.close()
 	route.state = {}
@@ -603,6 +607,7 @@ func start_stage():
 	phase = "play";initial_threat = 2.0;notice = "向前一步，抽取你的第一张牌。"
 	log_line("第%d关 · %s" % [stage, ENCOUNTERS.title(encounter_state.config) if ENCOUNTERS.active(self) else CAMPAIGN.stage_name(stage)])
 	board_info.begin_battle()
+	battle_restart.capture()
 func log_line(s: String):
 	board_info.note_log(s)
 	logs.push_front(s)
@@ -780,10 +785,11 @@ func handle_click(pos: Vector2):
 	if home_rect().has_point(pos): show_home();return
 	if UNDO_RECT.has_point(pos): undo_action();return
 	if RESTART_RECT.has_point(pos):
-		cancel_gesture()
 		if tutorial.active: screen = "tutorial_pause"
-		elif route.active(): new_expedition()
-		else: new_run()
+		elif phase == "win" and input_lock <= 0 and navigation_lock <= 0:
+			if route.active(): new_expedition()
+			else: new_run()
+		else: restart_battle()
 		return
 	if settings.debug_mode and debug_skip_rect().has_point(pos) and not tutorial.active: debug_skip();return
 	if input_lock > 0 or navigation_lock > 0: return
@@ -1146,6 +1152,7 @@ func box(color: Color, border: Color) -> StyleBoxFlat:
 	var b = StyleBoxFlat.new();b.bg_color = color;b.border_color = border;b.set_border_width_all(1);b.set_corner_radius_all(10);return b
 func context_hint() -> String:
 	if tutorial.active: return tutorial.hint()
+	if notice == "旧战斗无开场记录，从下一场起可重开。": return notice
 	if phase == "discard": return "手牌超限：请选择1张普通牌弃置"
 	if phase != "play": return ""
 	if recovery_active(): return "空投休整：不能移动或出牌，请结束回合。"
@@ -1170,7 +1177,7 @@ func _draw():
 	if settings.debug_mode and not tutorial.active and phase in ["play", "discard"]:
 		panel(debug_skip_rect(), THEME.BUTTON);text_at(debug_skip_rect().position + Vector2(8, 24), "调试跳过", 18)
 	if not mobile_layout or compact_landscape: text_at(mobile_title_pos(), "弈 行", 28, THEME.HEADING)
-	panel(RESTART_RECT, THEME.BUTTON);text_at(RESTART_RECT.position + Vector2(16, 32 if mobile_layout else 27), "教学菜单" if tutorial.active else "重新开局", 18)
+	panel(RESTART_RECT, THEME.BUTTON);text_at(RESTART_RECT.position + Vector2(16, 32 if mobile_layout else 27), "教学菜单" if tutorial.active else "重开本战", 18, THEME.INK if tutorial.active or battle_restart.can_restart() else THEME.LIGHT)
 	var heading_pos = (Vector2(390, 46) if compact_landscape else Vector2(24, 88)) if mobile_layout else Vector2(500, 47)
 	var heading = tutorial.title() if tutorial.active else (("调试 · " if debug_target > 0 else "") + "第 %d / 6 关   回合 %d" % [stage, turn] + " · " + PROFILES.DATA[player_skill].name)
 	if route.active() and route.state.pending >= 0:
@@ -1271,11 +1278,11 @@ func _draw():
 	if phase == "reward" and input_lock <= 0: rewardui.draw()
 	if phase in ["dead", "win"] and input_lock <= 0:
 		draw_rect(Rect2(Vector2.ZERO, ui_size), Palette.PAPER);text_at(Vector2(24, ui_size.y * 0.4) if mobile_layout else Vector2(410, 380), ("山河已定 · 两章通关" if route.active() else "六关突破 · 原型通关") if phase == "win" else "此局已尽 · 再弈一局", 28 if mobile_layout else 36, THEME.HEADING)
-		text_at(Vector2(24, ui_size.y * 0.4 + 50) if mobile_layout else Vector2(430, 435), "重新开局，再行山河" if phase == "win" else "可悔棋，或重新开局", 20, THEME.LIGHT)
+		text_at(Vector2(24, ui_size.y * 0.4 + 50) if mobile_layout else Vector2(430, 435), "重新开局，再行山河" if phase == "win" else "可悔棋，或重开本战", 20, THEME.LIGHT)
 		if phase == "win" and route.rewards_blocked():
 			text_at(Vector2(24, ui_size.y * 0.4 + 90) if mobile_layout else Vector2(410, 480), route.homework_summary(), 18, THEME.LIGHT)
 		if phase == "dead": text_at(Vector2(24, ui_size.y * 0.4 + 90) if mobile_layout else Vector2(480, 480), notice, 20, RED)
-		panel(RESTART_RECT, THEME.PAPER_SELECTED);text_at(RESTART_RECT.position + Vector2(16, 32 if mobile_layout else 27), "重新开局", 18, THEME.INK)
+		panel(RESTART_RECT, THEME.PAPER_SELECTED);text_at(RESTART_RECT.position + Vector2(16, 32 if mobile_layout else 27), "重新开局" if phase == "win" else "重开本战", 18, THEME.INK)
 
 	panel(UNDO_RECT, THEME.BUTTON, GOLD if history.can_undo() else THEME.BORDER);text_at(UNDO_RECT.position + Vector2(8, 29), undo_label(), 14 if mobile_layout else 16)
 	panel(home_rect(), THEME.BUTTON);text_at(home_rect().position + Vector2(10, 29 if mobile_layout else 27), "首页" if mobile_layout else "返回首页", 18)

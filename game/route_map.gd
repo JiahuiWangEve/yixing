@@ -252,6 +252,7 @@ func chapter_seed(run_seed: int, chapter_number: int) -> int:
 	# XOR retains the whole run seed and guarantees a different map identity.
 	return run_seed ^ (CHAPTER_SEED_SALT * (chapter_number - 1))
 func generate(seed_number: int, chapter_number: int = 1):
+	game.battle_restart.clear()
 	state = GENERATOR.generate(seed_number, clampi(chapter_number, 1, LAST_CHAPTER), game.player_skill)
 	state.merge({"treasure_id": "", "treasure_claimed": false, "treasure_choices": [], "current": -1, "visited": [], "pending": -1, "prepared": false, "reward_debt": 0, "pending_homework": [], "homework_awarded": [], "reward_blocked": false, "victory_recorded": false, "last_result": "", "done": false})
 	choices = [];deck_view = false;choice_mode = "root";pending_choice = {};merchant_offer = -1;page = 0;reset_view()
@@ -272,6 +273,7 @@ func enter(id: int):
 		if state.prepared:
 			state.prepared = false;game.draw_card();game.draw_card()
 			game.notice = "养精蓄锐：开战额外抽2张牌。"
+		game.battle_restart.capture()
 	else:
 		game.screen = "route_choice"
 		choices = options()
@@ -428,6 +430,7 @@ func rewards_blocked() -> bool:
 func complete():
 	if game.card_picker.active: game.card_picker.close()
 	if not active() or state.pending < 0 or state.done: return
+	game.battle_restart.clear()
 	var completed_boss = state.nodes[state.pending].kind == "boss"
 	if completed_boss and chapter() == LAST_CHAPTER:
 		state.done = true;game.phase = "win"
@@ -475,6 +478,7 @@ func save():
 	config.set_value("run", "route", state)
 	config.set_value("run", "battle", game.history.capture())
 	config.set_value("run", "screen", game.screen if game.screen in ["game", "map", "route_choice", "treasure_choice"] else "map")
+	config.set_value("run", "battle_start", game.battle_restart.snapshot)
 	save_error = config.save(SAVE)
 	# IndexedDB flushes asynchronously; a same-format synchronous snapshot keeps
 	# a refresh immediately after arrival/reward from loading the prior state.
@@ -511,6 +515,8 @@ func resume() -> bool:
 	game.rewardui.reset();game.handui.reset();page = 0;deck_view = false;reset_view()
 	choice_mode = "root";pending_choice = {};merchant_offer = -1
 	choices = options() if game.screen == "route_choice" else []
+	game.battle_restart.clear()
+	if game.screen == "game": game.battle_restart.load_snapshot(config.get_value("run", "battle_start", {}))
 	return true
 func valid_snapshot(saved, battle, saved_screen) -> bool:
 	# Validate the entire current-version envelope before touching live state.

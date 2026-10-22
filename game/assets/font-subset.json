@@ -747,6 +747,7 @@
     "game/assets/audio/wood_paper/approved_manifest.json",
     "game/assets/treasures/manifest.json",
     "game/attack_targeting.gd",
+    "game/battle_restart.gd",
     "game/board_info.gd",
     "game/campaign.gd",
     "game/cannon_planner.gd",
