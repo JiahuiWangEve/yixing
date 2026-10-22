@@ -94,8 +94,9 @@ func point(pos: Vector2) -> Array: return [pos.x,pos.y]
 func rectangle(rect: Rect2) -> Array: return [rect.position.x,rect.position.y,rect.size.x,rect.size.y]
 func popup_rectangle() -> Array:
 	var before = snapshot()
-	game.information.candidate(ui.icon_rect().get_center(), "mouse");game.information.tick(0.31)
-	check(game.information.visible, "fixture popup opens through shared hover delay")
+	var source = "touch" if game.mobile_layout else "mouse"
+	game.information.candidate(ui.icon_rect().get_center(), source, 1 if source == "touch" else -2);game.information.tick(0.41)
+	check(game.information.visible, "fixture popup opens through actual mouse/touch delay and avoidance layout")
 	var result = rectangle(game.information.area)
 	game.information.clear()
 	check(snapshot() == before, "fixture popup measurement changes no gameplay/save state")
