@@ -22,6 +22,85 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'verification/v0.14.13/catalog'
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
 KEY = 'yixing.route_run.v0149'
+MIN_DRAG = 24.0  # Safely beyond the production 12-logical-pixel tap deadzone.
+QUICK_IDS = {'sword', 'airdrop', 'last_stand', 'chain_assault', 'reload', 'fatigue', '__free_artillery_attack'}
+
+
+def chosen_cards(group, full):
+    return group['cards'] if full else ([c for c in group['cards'] if c['id'] in QUICK_IDS] or group['cards'][-1:])
+
+
+def scroll_plan(grid, current, desired, maximum, exact_end=False):
+    """Return gestures and the actual resulting offset, never a tiny tap-drag."""
+    limit = max(MIN_DRAG, grid[3] * .55)
+    steps = []
+    while abs(desired - current) > (1e-6 if exact_end else .5):
+        delta = max(-limit, min(limit, desired - current))
+        if abs(delta) < MIN_DRAG:
+            if exact_end and (abs(desired) < .5 or abs(desired - maximum) < .5):
+                # At an end-stop a full safe swipe clamps exactly to the end.
+                delta = MIN_DRAG if delta > 0 else -MIN_DRAG
+            else:
+                # Keep the real offset; the caller shifts its intended card tap.
+                break
+        steps.append(delta)
+        current = max(0, min(maximum, current + delta))
+    return steps, current
+
+
+def drag_fractions(delta):
+    assert abs(delta) >= MIN_DRAG, ('Unsafe subthreshold scroll gesture', delta)
+    # The picker updates pointer_last even below its drag deadzone. Starting
+    # with a full safe movement prevents losing the first interpolation step.
+    first = min(1.0, MIN_DRAG / abs(delta))
+    return sorted({first, *(f for f in [.5, .75, 1.] if f > first)})
+
+
+def drag_points(grid, delta):
+    x, y, width, height = grid
+    start = [x + width * .5, y + height * .8 if delta >= 0 else y + height * .2]
+    end = [start[0], start[1] - delta]
+    for point in [start, end]:
+        assert x <= point[0] <= x + width and y <= point[1] <= y + height, ('Scroll pointer left clipped grid', grid, delta, point)
+    return start, end
+
+
+def actual_card_tap(group, card, current):
+    point = [card['tap'][0], card['tap'][1] + card['scroll'] - current]
+    x, y, width, height = group['grid']
+    assert x + 8 <= point[0] <= x + width - 8 and y + 8 <= point[1] <= y + height - 8, ('Card tap outside visible grid', group['id'], card['id'], point)
+    return point
+
+
+def validate_gesture_plans(replays):
+    """Offline proof over both traversal modes, including detail end-stop swipes."""
+    test_grid = [24., 156., 432., 302.]
+    assert scroll_plan(test_grid, 0., 8.615, 500.) == ([], 0.)
+    assert scroll_plan(test_grid, 0., 8.615, 8.615, exact_end=True) == ([MIN_DRAG], 8.615)
+    assert scroll_plan(test_grid, 8.615, 0., 500., exact_end=True) == ([-MIN_DRAG], 0.)
+    assert drag_fractions(MIN_DRAG) == [1.]
+    proof = []
+    for replay in replays:
+        for full in [False, True]:
+            for group in replay['groups']:
+                current = 0.0
+                for card in chosen_cards(group, full):
+                    steps, actual = scroll_plan(group['grid'], current, card['scroll'], group['scroll_limit'])
+                    for delta in steps:
+                        assert abs(delta * drag_fractions(delta)[0]) >= MIN_DRAG - 1e-8
+                        drag_points(group['grid'], delta)
+                    point = actual_card_tap(group, card, actual)
+                    detail_steps, detail_actual = scroll_plan(group['grid'], 0., card['detail_scroll_limit'], card['detail_scroll_limit'], exact_end=True)
+                    assert abs(detail_actual - card['detail_scroll_limit']) <= .5
+                    for delta in detail_steps:
+                        assert abs(delta * drag_fractions(delta)[0]) >= MIN_DRAG - 1e-8
+                        drag_points(group['grid'], delta)
+                    proof.append({'width': replay['viewport'][0], 'full': full, 'group': group['id'], 'card': card['id'],
+                                  'from': current, 'desired': card['scroll'], 'actual': actual, 'gestures': steps,
+                                  'tap': point, 'micro_adjustment_skipped': abs(actual - card['scroll']) > .5,
+                                  'detail_gestures': detail_steps})
+                    current = actual
+    return proof
 
 
 def complete_save(text):
@@ -105,6 +184,8 @@ def validate_manifest(manifest):
             changed = copy.deepcopy(original)
             changed[category][field] = '<deliberately changed>'
             assert differences(original, changed), ('Semantic guard lost field', category, field)
+    proof = validate_gesture_plans(replays)
+    assert len(proof) == sum(len(chosen_cards(g, full)) for r in replays for full in [False, True] for g in r['groups'])
     return replays
 
 
@@ -175,12 +256,10 @@ async def main(full=False, validate_only=False):
                 return data
 
             async def drag(grid, delta, cancel=False):
-                x, y, width, height = grid
-                a = [x + width * .5, y + height * .8 if delta >= 0 else y + height * .2]
-                b = [a[0], a[1] - delta]
+                a, b = drag_points(grid, delta)
                 pa, pb = xy(a), xy(b)
                 await cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{**pa, 'id': 1}]})
-                for fraction in [.25, .5, .75, 1]:
+                for fraction in drag_fractions(delta):
                     pt = {axis: pa[axis] + (pb[axis] - pa[axis]) * fraction for axis in ['x', 'y']}
                     await cdp.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [{**pt, 'id': 1}]})
                     await asyncio.sleep(.02)
@@ -188,12 +267,10 @@ async def main(full=False, validate_only=False):
                 return await stable(label='scroll')
 
             async def scroll_to(group, current, desired):
-                limit = max(24, group['grid'][3] * .55)
-                while abs(desired - current) > .5:
-                    delta = max(-limit, min(limit, desired - current))
+                steps, actual = scroll_plan(group['grid'], current, desired, group['scroll_limit'])
+                for delta in steps:
                     await drag(group['grid'], delta)
-                    current = max(0, min(group['scroll_limit'], current + delta))
-                return current
+                return actual
 
             try:
                 await page.goto(URL)
@@ -209,13 +286,11 @@ async def main(full=False, validate_only=False):
                     grid = await tap(group['tab'], grid, changed=group['id'] != 'common', label=group['id'])
                     current_scroll = 0.0
                     await shot(group['id'] + '-grid', grid)
-                    chosen_cards = group['cards'] if full else [c for c in group['cards'] if c['id'] in {'sword', 'airdrop', 'last_stand', 'chain_assault', 'reload', 'fatigue', '__free_artillery_attack'}]
-                    if not chosen_cards:
-                        chosen_cards = group['cards'][-1:]
-                    for card_number, card in enumerate(chosen_cards):
+                    selected_cards = chosen_cards(group, full)
+                    for card_number, card in enumerate(selected_cards):
                         current_scroll = await scroll_to(group, current_scroll, card['scroll'])
                         grid = await page.screenshot()
-                        detail = await tap(card['tap'], grid, label=card['id'] + ' full face')
+                        detail = await tap(actual_card_tap(group, card, current_scroll), grid, label=card['id'] + ' full face')
                         await shot(group['id'] + '-' + card['id'] + '-base', detail)
                         for shortcut in (['1', '2', '3', '4', '5', '6', '7', 'Space', 'Enter'] if card_number == 0 else []):
                             await page.keyboard.press(shortcut)
@@ -227,20 +302,18 @@ async def main(full=False, validate_only=False):
                             detail = await tap(card['variant'], upgraded, label='base restored')
                         if card['detail_scroll_limit'] > 0:
                             # Actual swipe within the focused face exposes its final effect line.
-                            area = card['detail']
-                            remain = card['detail_scroll_limit']
-                            while remain > .5:
-                                delta = min(remain, max(24, area[3] * .55))
+                            area = group['grid']  # Always the clipped viewport, not the tall card bounds.
+                            detail_steps, _ = scroll_plan(area, 0., card['detail_scroll_limit'], card['detail_scroll_limit'], exact_end=True)
+                            for delta in detail_steps:
                                 await drag(area, delta)
-                                remain -= delta
                             await shot(group['id'] + '-' + card['id'] + '-effect-bottom')
                         assert await storage() == initial, ('Catalog mutated saved state/preferences', card['id'])
                         visited.append({'group': group['id'], 'id': card['id'], 'upgrade': card['upgrade_id']})
                         grid = await tap(card['back'], detail, label='back to same grid')
-                    assert len([v for v in visited if v['group'] == group['id']]) == len(chosen_cards)
+                    assert len([v for v in visited if v['group'] == group['id']]) == len(selected_cards)
                     # A real touch-cancel on a card must not open detail.
                     before = await stable()
-                    pt = xy(group['cards'][-1]['tap'])
+                    pt = xy(actual_card_tap(group, selected_cards[-1], current_scroll))
                     await cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{**pt, 'id': 1}]})
                     await cdp.send('Input.dispatchTouchEvent', {'type': 'touchCancel', 'touchPoints': []})
                     after = await stable()
@@ -248,7 +321,7 @@ async def main(full=False, validate_only=False):
                 assert len(visited) == manifest['catalog_count'] if full else len(visited) >= len(manifest['groups'])
                 # Rotate while focused, then Escape must return to role selection.
                 last = replay['groups'][-1]['cards'][-1]
-                focused = await tap(last['tap'], after, label='focus before rotation')
+                focused = await tap(actual_card_tap(replay['groups'][-1], last, current_scroll), after, label='focus before rotation')
                 alternate = next(r for r in all_replays if r['viewport'][0] == (390 if w == 844 else 844))
                 geometry = alternate
                 await page.set_viewport_size(dict(zip(['width', 'height'], map(int, alternate['viewport']))))
