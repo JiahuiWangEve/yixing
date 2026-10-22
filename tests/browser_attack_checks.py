@@ -108,6 +108,63 @@ def color_count(image, box, color, tolerance=8):
     return sum(near(pixel, color, tolerance) for pixel in pixels), len(pixels)
 
 
+def text_ink_metrics(image, box, paper, ink):
+    """Measure antialiased text as the physical paper-to-ink mixture.
+
+    Small Chinese glyphs at fractional Web scales need not contain any fully
+    opaque ink pixel. Project onto the exact palette line instead of requiring
+    an arbitrary near-black RGB cutoff. The 25% ink coverage floor rejects
+    almost-paper noise, and residual <=8 excludes green/red UI decorations.
+    """
+    direction = [a - b for a, b in zip(ink, paper)]
+    denominator = sum(c * c for c in direction)
+    visible = 0; mass = 0.0; peak = 0.0
+    for pixel in image.crop(box).getdata():
+        alpha = sum((p - b) * d for p, b, d in zip(pixel, paper, direction)) / denominator
+        residual = max(abs(p - (b + alpha * d)) for p, b, d in zip(pixel, paper, direction))
+        if .25 <= alpha <= 1.08 and residual <= 8:
+            visible += 1; mass += min(1., alpha); peak = max(peak, min(1., alpha))
+    return {'visible_ink_pixels': visible, 'ink_coverage_mass': round(mass, 3),
+            'peak_ink_coverage': round(peak, 3), 'pixel_box': list(box)}
+
+
+def text_rows_evidence(image, rows, mapper, paper, ink, scale):
+    result = []
+    for row in rows:
+        if not row['text'].strip(): continue
+        measured = text_ink_metrics(image, mapper(row['rect']), paper, ink)
+        chars = len(row['text'].strip())
+        measured.update({'text': row['text'], 'font_size': row['font_size'],
+                         'font_ascent': row['font_ascent'], 'font_descent': row['font_descent'],
+                         'baseline': row['baseline'], 'text_advance': row['text_advance'],
+                         'logical_rect': row['rect'], 'physical_transform': row['physical_transform']})
+        measured['readable'] = (measured['visible_ink_pixels'] >= max(3, chars * scale * 1.2)
+                                and measured['ink_coverage_mass'] >= max(2, chars * scale * .75))
+        result.append(measured)
+    return bool(result) and all(row['readable'] for row in result), result
+
+
+def range_ring_metrics(image, centers, geometry, palette, mapper, sx, sy):
+    """Exact attack annulus, excluding the independently green countdown HUD."""
+    radius = geometry['cell_size'] * .49
+    hud = geometry['ring_hud']; result = []
+    for center in centers:
+        pt = mapper(center); hits = total = excluded = 0
+        for y in range(math.floor(pt['y'] - (radius + 3) * sy), math.ceil(pt['y'] + (radius + 3) * sy)):
+            for x in range(math.floor(pt['x'] - (radius + 3) * sx), math.ceil(pt['x'] + (radius + 3) * sx)):
+                dx, dy = (x + .5 - pt['x']) / sx, (y + .5 - pt['y']) / sy
+                if abs(math.hypot(dx, dy) - radius) > max(1.4 / min(sx, sy), 1.8): continue
+                bx, by = hud['badge_offset']; hx, hy, hw, hh = hud['hp_box']
+                if (math.hypot(dx - bx, dy - by) <= hud['badge_radius'] + 2
+                        or hx - 1 <= dx <= hx + hw + 1 and hy - 1 <= dy <= hy + hh + 1):
+                    excluded += 1; continue
+                total += 1
+                if near(image.getpixel((x, y)), palette['legal'], 12): hits += 1
+        result.append({'center': center, 'legal_ink_pixels': hits, 'annulus_pixels': total,
+                       'excluded_hud_pixels': excluded, 'hud_geometry': hud})
+    return result
+
+
 async def main(full=False, validate_only=False):
     replays = validate()
     selected = [r for r in replays if full or (r['basic'] and r['viewport'][0] in (1280, 390))]
@@ -193,7 +250,16 @@ async def main(full=False, validate_only=False):
                                 data = await page.screenshot(); image = Image.open(io.BytesIO(data)).convert('RGB')
                                 ok, result = predicate(image)
                                 if ok: return data, result
-                                assert time.monotonic() < deadline, (stem, label, result)
+                                if time.monotonic() >= deadline:
+                                    # Save the exact failed predicate frame and its
+                                    # geometry/palette proof, not just a later catch.
+                                    safe_label = ''.join(ch if ch.isalnum() else '-' for ch in label).strip('-')
+                                    (output / f'{stem}-{safe_label}-failed.png').write_bytes(data)
+                                    (output / f'{stem}-{safe_label}-failed.json').write_text(
+                                        json.dumps({'label': label, 'viewport': [w, h], 'logical_size': [uw, uh],
+                                                    'scale': scale, 'offset': [ox, oy], 'evidence': result},
+                                                   ensure_ascii=False, indent=2))
+                                    raise AssertionError((stem, label, result))
                                 await page.wait_for_timeout(80)
                         def board_visible(image):
                             x, y, _, _ = r['range']['board']
@@ -211,18 +277,7 @@ async def main(full=False, validate_only=False):
                             await until_image(board_visible, 'ordinary Continue reaches board', 10)
                             await expect(fixture_state(filename), 'ordinary save resumes')
                         def ring_metrics(image, centers):
-                            radius = r['range']['cell_size'] * .49 * scale
-                            result = []
-                            for center in centers:
-                                pt = xy(center); hits = total = 0
-                                for y in range(math.floor(pt['y'] - radius - 3), math.ceil(pt['y'] + radius + 3)):
-                                    for x in range(math.floor(pt['x'] - radius - 3), math.ceil(pt['x'] + radius + 3)):
-                                        distance = math.hypot(x + .5 - pt['x'], y + .5 - pt['y'])
-                                        if abs(distance - radius) <= max(1.4, 1.8 * scale):
-                                            total += 1
-                                            if near(image.getpixel((x, y)), r['range']['colors']['legal'], 12): hits += 1
-                                result.append({'center': center, 'legal_ink_pixels': hits, 'annulus_pixels': total})
-                            return result
+                            return range_ring_metrics(image, centers, r['range'], r['range']['colors'], xy, scale, scale)
                         def range_visible(image):
                             if not r['range']['rings']:
                                 rings = ring_metrics(image, r['enemy_centers'])
@@ -237,18 +292,19 @@ async def main(full=False, validate_only=False):
                             strong = all(item['legal_ink_pixels'] >= max(8, item['annulus_pixels'] * .12) for item in rings)
                             return filled >= 1 and strong, {'empty_legal_squares': fills, 'strong_enemy_rings': rings, 'palette': r['range']['colors']}
                         def face_visible(image):
-                            rows = []
-                            for row in r['face']['rows']:
-                                if not row['text'].strip(): continue
-                                count, _ = color_count(image, box(row['rect']), r['range']['colors']['ink'], 38)
-                                rows.append({'text': row['text'], 'ink_pixels': count})
-                            return all(item['ink_pixels'] >= max(2, len(item['text']) * scale * .3) for item in rows), rows
+                            ok, rows = text_rows_evidence(image, r['face']['rows'], box,
+                                                         r['range']['colors']['hand'], r['range']['colors']['ink'], scale)
+                            blank = text_ink_metrics(image, box(r['face']['blank_control']),
+                                                     r['range']['colors']['hand'], r['range']['colors']['ink'])
+                            return ok and blank['visible_ink_pixels'] == 0, {'rows': rows, 'blank_paper_control': blank}
                         async def select_card():
                             await tap(r['card_point'])
                             await expect(fixture_state(r['selected']), 'selection changes notice only, never spends/plays')
                             _, result = await until_image(range_visible, 'exact legal-square and enemy-ring palette')
                             metrics.append(result)
-                            await until_image(face_visible, 'normalized focused face rows')
+                            if full:
+                                _, face_result = await until_image(face_visible, 'normalized focused face rows')
+                                metrics.append({'focused_face_rows': face_result})
                             await shot('selected-range-and-detail')
                         async def guard_inputs():
                             chosen = fixture_state(r['selected']); source = r['selected_point']
@@ -293,14 +349,19 @@ async def main(full=False, validate_only=False):
                                     for row in c['rows']:
                                         x, y, rw, rh = row['rect']; y -= scroll
                                         if y < gy + 2 or y + rh > gy + gh - 2: continue
-                                        count, _ = color_count(image, box([x, y, rw, rh]), r['range']['colors']['ink'], 38)
-                                        rows.append({'text': row['text'], 'ink_pixels': count})
-                                    ok = bool(rows) and all(v['ink_pixels'] >= max(2, len(v['text']) * scale * .3) for v in rows)
-                                    return ok, rows
+                                        rows.append({**row, 'rect': [x, y, rw, rh],
+                                                     'baseline': [row['baseline'][0], row['baseline'][1] - scroll]})
+                                    return text_rows_evidence(image, rows, box,
+                                                              r['range']['colors']['surface'], r['range']['colors']['ink'], scale)
                                 _, found = await until_image(readable, label); metrics.append({'catalog_rows': found})
                                 await shot(label)
                             await inspect_catalog_rows(0, 'catalog-self-cost-top')
-                            moves, current = scroll_plan(c['grid'], 0, c['detail_scroll_limit'], c['detail_scroll_limit'], exact_end=True)
+                            # Scroll only if the actual final rule extends past the clip.
+                            # Card height includes intentional blank paper; scrolling to
+                            # that bottom can move every rule above the viewport.
+                            last_rule_bottom = max(row['rect'][1] + row['rect'][3] for row in c['rows'])
+                            rule_scroll = min(c['detail_scroll_limit'], max(0, last_rule_bottom - (c['grid'][1] + c['grid'][3]) + 2))
+                            moves, current = scroll_plan(c['grid'], 0, rule_scroll, c['detail_scroll_limit'], exact_end=rule_scroll == c['detail_scroll_limit'])
                             for delta in moves:
                                 a, b = drag_points(c['grid'], delta)
                                 # First motion exceeds the deadzone so none of

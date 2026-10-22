@@ -92,7 +92,19 @@ func range_evidence(view: Dictionary) -> Dictionary:
 			empty.append({"cell":point(cell),"center":point(center),"sample":point(center + Vector2(0.23,0.23) * game.CELL)})
 	for cell in view.enemy_cells: rings.append({"cell":point(cell),"center":point(game.cell_pos(cell)),"radius":game.CELL * 0.49,"width":3})
 	return {"squares":squares,"empty":empty,"rings":rings,"cell_size":game.CELL,"board":rectangle(game.BOARD_RECT),
+		"ring_hud":{"badge_offset":point(Vector2(0.36,-0.36)*game.CELL),"badge_radius":9*minf(1.0,game.CELL/48.0),"hp_box":[-game.CELL*0.39,game.CELL*0.47,game.CELL*0.78,maxf(2.5,3.5*minf(1.0,game.CELL/48.0))]},
 		"colors":{"board":rgb(game.Palette.BOARD),"legal":rgb(game.Palette.LEGAL),"fill":rgb(game.Palette.BOARD.lerp(game.Palette.LEGAL,0.07)),"border":rgb(game.Palette.BOARD.lerp(game.Palette.LEGAL,0.52)),"surface":rgb(game.Palette.SURFACE),"hand":rgb(game.Palette.HAND),"ink":rgb(game.Palette.INK)}}
+func text_row(value: String, baseline: Vector2, font_size: int, physical: Transform2D) -> Dictionary:
+	# card_face draws in physical logical pixels after normalizing the fan axes.
+	# Use actual font ascent/descent and advance, not font_size as a glyph box.
+	var ascent = game.FONT.get_ascent(font_size)
+	var descent = game.FONT.get_descent(font_size)
+	var advance = game.FONT.get_string_size(value,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size).x
+	var local = Rect2(baseline + Vector2(-1,-ascent),Vector2(advance + 2,ascent + descent))
+	var rect = Rect2(physical * local.position,Vector2.ZERO)
+	for corner in [Vector2(local.end.x,local.position.y),local.end,Vector2(local.position.x,local.end.y)]: rect = rect.expand(physical * corner)
+	return {"text":value,"rect":rectangle(rect),"baseline":point(physical * baseline),"font_size":font_size,"font_ascent":ascent,"font_descent":descent,"text_advance":advance,
+		"local_rect":rectangle(local),"physical_transform":{"x":point(physical.x),"y":point(physical.y),"origin":point(physical.origin)}}
 func focused_face() -> Dictionary:
 	game.handui.tick(1)
 	var t: Transform2D = game.handui.card_transform(0)
@@ -103,8 +115,10 @@ func focused_face() -> Dictionary:
 	var rows = []
 	for i in mini(layout.lines.size(),int(layout.available_lines)):
 		var left = float(layout.body_left) if i < int(layout.full_from) else 6.0
-		rows.append({"text":layout.lines[i],"rect":rectangle(Rect2(t.origin + Vector2(left,float(layout.start_y) + i * layout.line_height - layout.font_size),Vector2(dimensions.x-left-8,layout.font_size+2)))})
-	return {"card":game.hand[0],"rect":rectangle(game.handui.bounds(0)),"short":data[2],"detail":data[4],"font_size":layout.font_size,"complete":layout.complete,"rows":rows}
+		rows.append(text_row(layout.lines[i],Vector2(left,float(layout.start_y) + i * layout.line_height),int(layout.font_size),Transform2D(t.x.normalized(),t.y.normalized(),t.origin)))
+	var blank = Rect2(game.full_hand_area().position + Vector2(8,40),Vector2(dimensions.x-12,game.FONT.get_ascent(layout.font_size)+game.FONT.get_descent(layout.font_size)))
+	check(not blank.intersects(game.handui.bounds(0)) and game.full_hand_area().encloses(blank),"negative text control is blank hand paper")
+	return {"card":game.hand[0],"rect":rectangle(game.handui.bounds(0)),"short":data[2],"detail":data[4],"font_size":layout.font_size,"complete":layout.complete,"rows":rows,"blank_control":rectangle(blank)}
 func catalog_evidence() -> Dictionary:
 	var previous = game.screen;game.screen = "home"
 	var report = {"start":point(game.frontend.button_rect(0).get_center())}
@@ -126,7 +140,7 @@ func catalog_evidence() -> Dictionary:
 			report.detail = str(picker.catalog_data()[4]);report.face = rectangle(picker.catalog_detail_rect());report.rows = []
 			for i in layout.lines.size():
 				var left = float(layout.body_left) if i < int(layout.full_from) else 6.0
-				report.rows.append({"text":layout.lines[i],"rect":rectangle(Rect2(picker.catalog_detail_rect().position+Vector2(left,layout.start_y+i*layout.line_height-layout.font_size),Vector2(dimensions.x-left-8,layout.font_size+2)))})
+				report.rows.append(text_row(layout.lines[i],Vector2(left,layout.start_y+i*layout.line_height),int(layout.font_size),Transform2D(0,picker.catalog_detail_rect().position)))
 			picker.close();game.screen = previous;return report
 	check(false,"blood_break catalog entry exists");picker.close();game.screen = previous;return {}
 func make_case(name: String, size: Vector2) -> Dictionary:

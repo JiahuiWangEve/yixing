@@ -6,6 +6,41 @@ from presentation_image_checks import seal_score
 from playwright.async_api import async_playwright
 from browser_event_checks import ROOT, KEY, parse, boot
 OUT=ROOT/'verification/v0.14.3/presentation';URL=os.environ.get('YIXING_TEST_URL','http://127.0.0.1:8765')
+def upgrade_frame(data, baseline, logical_size):
+    """Require the expanded card outline and an occluded, then restored home button.
+
+    Map paper deliberately shares the old-card fill. A fill sample alone is not
+    card evidence, and the flip's unclassified sliver is not dismissal evidence.
+    """
+    im=Image.open(io.BytesIO(data)).convert('RGB')
+    before=Image.open(io.BytesIO(baseline)).convert('RGB').resize(im.size)
+    uw,uh=logical_size;scale=min(im.width/uw,im.height/uh)
+    ox=(im.width-uw*scale)/2;oy=(im.height-uh*scale)/2
+    def point(x,y):return round(ox+x*scale),round(oy+y*scale)
+    x,y=point(uw/2+118,uh/2+90)
+    rgb=ImageStat.Stat(im.crop((x-1,y-1,x+2,y+2))).mean
+    # Horizontal edges span most of the 260x310 presentation face, so map
+    # marks, a single paper pixel, and the narrow flipping face cannot qualify.
+    edges=[]
+    for dy in (-155,155):
+        x0,y0=point(uw/2-110,uh/2+dy);x1,_=point(uw/2+110,uh/2+dy)
+        radius=max(1,round(scale*2))
+        outside=y0+(-1 if dy<0 else 1)*max(3,round(scale*7))
+        edges.append(sum(sum(im.getpixel((x,outside)))/3-
+                         min(sum(im.getpixel((x,yy)))/3 for yy in range(y0-radius,y0+radius+1))>12
+                         for x in range(x0,x1))/max(1,x1-x0))
+    # This header button exists unchanged on both route_choice and map. Compare
+    # only its pre-action ink, not the visited counter or new deck button.
+    x0,y0=point(20,16);x1,y1=point(125,52)
+    ink=[(x,y) for y in range(y0,y1) for x in range(x0,x1) if max(before.getpixel((x,y)))<140]
+    assert ink,'Missing pre-action home-button baseline ink'
+    restored=sum(max(im.getpixel(pos))<170 for pos in ink)/len(ink)
+    label=None
+    if min(edges)>.65 and restored<.2:
+        label=next((name for name,target in [('old-card',(252,249,241)),('upgraded-card',(229,223,210))]
+                    if max(abs(rgb[i]-target[i]) for i in range(3))<8),None)
+    return label,{'probe_rgb':rgb,'edge_coverage':edges,'header_ink_restored':restored}
+
 async def main():
     output=OUT/'browser';output.mkdir(parents=True,exist_ok=True);reports=[]
     async with async_playwright() as p:
@@ -58,6 +93,7 @@ async def main():
                     await page.reload();await boot(page);await tap(r['resume']);await page.wait_for_timeout(450);await shot('reload-no-second-seal');assert await state()==s
                 else:
                     await tap(r['choose']);await page.wait_for_timeout(140)
+                    baseline=await page.screenshot()
                     # Stream compositor frames before input. Sequential screenshots
                     # can themselves outlast this short animation on slow runners.
                     cdp=await context.new_cdp_session(page);frames=[];ack_tasks=[]
@@ -66,31 +102,29 @@ async def main():
                         ack_tasks.append(asyncio.create_task(cdp.send('Page.screencastFrameAck',{'sessionId':event['sessionId']})))
                     cdp.on('Page.screencastFrame',receive_frame)
                     await cdp.send('Page.startScreencast',{'format':'jpeg','quality':80,'maxWidth':640,'maxHeight':640,'everyNthFrame':1})
-                    # Production card colors identify the two fully expanded
-                    # faces, not a flipped sliver or the map after dismissal.
-                    probe=(int(ox+(uw/2+118)*scale),int(oy+(uh/2+90)*scale))
                     selected={};frame_info=[]
                     await tap(r['confirm'])
                     cursor=0;finished=False;deadline=time.monotonic()+20
                     while not finished and time.monotonic()<deadline:
                         while cursor<len(frames):
                             number=cursor;stamp,data=frames[cursor];cursor+=1
-                            im=Image.open(io.BytesIO(data)).convert('RGB')
-                            x,y=int(probe[0]*im.width/w),int(probe[1]*im.height/h);patch=im.crop((x-1,y-1,x+2,y+2));rgb=ImageStat.Stat(patch).mean
-                            label=next((label for label,target in [('old-card',(252,249,241)),('upgraded-card',(229,223,210))] if max(abs(rgb[i]-target[i]) for i in range(3))<8),None)
-                            frame_info.append({'frame':number,'timestamp':stamp,'probe_rgb':rgb,'phase':label})
+                            label,evidence=upgrade_frame(data,baseline,(uw,uh))
+                            frame_info.append({'frame':number,'timestamp':stamp,'phase':label,**evidence})
                             if label and (label not in selected or label == 'upgraded-card'):selected[label]=(number,stamp,data)
-                            if 'upgraded-card' in selected and label is None:finished=True
+                            if 'upgraded-card' in selected and label is None and evidence['header_ink_restored']>.8:
+                                finished=True
+                                Image.open(io.BytesIO(data)).save(output/f"{r['name']}-{mode}-map-after-display.png")
                         if not finished:await asyncio.sleep(.05)
                     await cdp.send('Page.stopScreencast');await asyncio.gather(*ack_tasks);await cdp.detach()
                     assert (await state())['collection']==r['after']
                     (output/f"{r['name']}-upgrade-frames.json").write_text(json.dumps(frame_info,indent=2))
+                    # Retain visual evidence even when a later assertion fails.
+                    for label,(_,stamp,data) in selected.items():
+                        Image.open(io.BytesIO(data)).save(output/f"{r['name']}-{mode}-{label}.png")
+                    if frames:Image.open(io.BytesIO(frames[-1][1])).save(output/f"{r['name']}-{mode}-last-frame.png")
                     assert finished,('upgrade display did not visibly finish',w,frame_info)
                     assert set(selected)=={'old-card','upgraded-card'},('missing distinct visible card phases',w,frame_info)
                     assert selected['old-card'][0]<selected['upgraded-card'][0],frame_info
-                    for label,(_,stamp,data) in selected.items():
-                        Image.open(io.BytesIO(data)).save(output/f"{r['name']}-{mode}-{label}.png")
-                    (output/f"{r['name']}-upgrade-frames.json").write_text(json.dumps(frame_info,indent=2))
                     await tap(r['view']);await page.wait_for_timeout(150);await shot('read-only-deck');s=await state();assert s['collection']==r['after']
                     await page.keyboard.press('Enter');await page.keyboard.press('Space');await tap(r['back']);await page.wait_for_timeout(150);assert await state()==s
                     await page.reload();await boot(page);await tap(r['resume']);await page.wait_for_timeout(450);assert (await state())['collection']==r['after'];await shot('reload-no-reroll')
