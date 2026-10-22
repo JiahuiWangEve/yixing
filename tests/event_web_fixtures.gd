@@ -37,7 +37,10 @@ func choose(action: String, card_index: int = -1):
 	var target_page = int(index / game.route.capacity())
 	while game.route.page < target_page:
 		taps.append(point(game.route.footer_rect(1).get_center()));game.route.page += 1
-	taps.append(point(game.route.row_rect(index % game.route.capacity()).get_center()))
+	if game.route.merchant_ui.active():
+		taps.append(point(game.route.merchant_ui.leave_rect().get_center() if action == "leave" else game.route.merchant_ui.card_rect(index).get_center()))
+	else:
+		taps.append(point(game.route.row_rect(index % game.route.capacity()).get_center()))
 	game.route.resolve(index)
 	step("tap", action, taps)
 func reload_step():

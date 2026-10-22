@@ -6,6 +6,7 @@ var face
 var active = false
 var action = ""
 var title = ""
+var incoming_card = ""
 var snapshot: Array = []
 var indices: Array = []
 var selected = -1
@@ -26,9 +27,10 @@ var touch_seen = false
 
 func _init(owner):
 	game = owner;face = preload("res://card_face.gd").new(owner)
-func open(kind: String, heading: String, eligible: Array, confirm_callback: Callable, cancel_callback: Callable):
+func open(kind: String, heading: String, eligible: Array, confirm_callback: Callable, cancel_callback: Callable, incoming_card: String = ""):
 	game.cancel_gesture();game.route.cancel_pointer()
 	action = kind;title = heading;snapshot = game.collection.duplicate();indices = []
+	self.incoming_card = incoming_card if kind == "exchange" and game.CARDS.has(incoming_card) else ""
 	for index in eligible:
 		if index >= 0 and index < snapshot.size() and game.CARDS.has(snapshot[index]): indices.append(index)
 	selected = -1;scroll_y = 0;pointer = -2;dragged = false
@@ -41,7 +43,7 @@ func open(kind: String, heading: String, eligible: Array, confirm_callback: Call
 		game.add_child(clip);clip.add_child(canvas);canvas.draw.connect(_draw_cards)
 	refresh()
 func close():
-	active = false;pointer = -2;dragged = false
+	active = false;pointer = -2;dragged = false;incoming_card = ""
 	if is_instance_valid(clip): clip.hide()
 	game.cancel_gesture();game.route.cancel_pointer();game.queue_redraw()
 func cancel():
@@ -56,7 +58,14 @@ func confirm():
 	var index = selected;var callback = on_confirm
 	close() # Close first: duplicate taps cannot commit twice.
 	if callback.is_valid(): callback.call(index)
+func has_incoming_preview() -> bool:
+	return action == "exchange" and game.CARDS.has(incoming_card)
+func incoming_preview_rect() -> Rect2:
+	return Rect2(24, 96, 188 if game.compact_landscape else 180, 250 if game.compact_landscape else 230)
 func grid_rect() -> Rect2:
+	if has_incoming_preview():
+		if game.compact_landscape: return Rect2(236, 96, game.ui_size.x - 260, maxf(110, game.ui_size.y - 238))
+		return Rect2(24, 362, game.ui_size.x - 48, maxf(110, game.ui_size.y - 536))
 	if game.compact_landscape: return Rect2(24, 96, game.ui_size.x - 48, maxf(110, game.ui_size.y - 238))
 	return Rect2(24, 108, game.ui_size.x - 48, maxf(110, game.ui_size.y - 282))
 func columns() -> int:
@@ -123,6 +132,7 @@ func input_event(event) -> bool:
 func description() -> String:
 	if not valid_context(): return "牌组已改变，请返回后重新选择。"
 	if indices.is_empty(): return "永久牌组为空。" if action == "view" else "没有符合条件的永久牌。可返回选择其他选项。"
+	if has_incoming_preview() and selected not in indices: return "点选一张要交出的永久牌，再确认交换。返回可重新选择行商报价。"
 	if selected not in indices: return "全部永久牌逐张展示，点选查看，上下滑动浏览。" if action == "view" else "点选一张牌，再确认；同名牌逐张展示，上下滑动查看更多。"
 	var id: String = snapshot[selected]
 	var name: String = game.CARDS[id][0]
@@ -132,14 +142,28 @@ func description() -> String:
 		"remove": return "永久删除「%s」第%d张，仅移除这一张。" % [name, selected + 1]
 		"focus": return "立即复制「%s」，并加入疲惫：抽到扣1能量，最低0；留在手中每轮扣1；2费打出。" % name
 		"homework": return "记录「%s」副本（保留强化）：下一战无常规奖励，胜利后交付。" % name
-		"exchange": return "交出「%s」第%d张，换入已选定的行商报价牌。" % [name, selected + 1]
+		"exchange":
+			if has_incoming_preview(): return "交出「%s」第%d张 → 换入「%s」。" % [name, selected + 1, game.CARDS[incoming_card][0]]
+			return "交出「%s」第%d张，换入已选定的行商报价牌。" % [name, selected + 1]
 	return ""
+func _draw_incoming_preview():
+	var area = incoming_preview_rect()
+	var transform = Transform2D(Vector2(area.size.x / 156, 0), Vector2(0, area.size.y / 156), area.position)
+	face.draw_data(game, game.CARDS[incoming_card], game.is_consumable(incoming_card), transform)
+	game.draw_rect(area.grow(2), game.GOLD, false, 2)
+	if game.compact_landscape:
+		game.text_at(Vector2(24, area.end.y + 28), "换入后永久牌张数不变", 16, game.THEME.LIGHT)
+	else:
+		game.text_at(Vector2(224, 130), "选择交出的永久牌", 20, game.THEME.HEADING)
+		game.wrapped_text("选中下方旧牌后，确认交换。\n返回可重新选择行商报价。", Rect2(224, 150, game.ui_size.x - 248, 140), 17, game.THEME.LIGHT)
+	game.text_at(Vector2(grid_rect().position.x, grid_rect().position.y - 14), "可选 %d 张 · 每张卡牌单独选择" % indices.size(), 17, game.THEME.LIGHT)
 func draw():
 	if not active: return
 	refresh_layout_only()
 	game.draw_rect(Rect2(Vector2.ZERO, game.ui_size), game.THEME.BACKGROUND)
-	game.text_at(Vector2(24, 42), title, 26, game.THEME.HEADING)
-	game.text_at(Vector2(24, 76), ("共 %d 张 · 永久牌逐张展示" if action == "view" else "可选 %d 张 · 每张卡牌单独选择") % indices.size(), 17, game.THEME.LIGHT)
+	game.text_at(Vector2(24, 42), "准备换入：" + str(game.CARDS[incoming_card][0]) if has_incoming_preview() else title, 26, game.THEME.HEADING)
+	if has_incoming_preview(): _draw_incoming_preview()
+	else: game.text_at(Vector2(24, 76), ("共 %d 张 · 永久牌逐张展示" if action == "view" else "可选 %d 张 · 每张卡牌单独选择") % indices.size(), 17, game.THEME.LIGHT)
 	game.wrapped_text(description(), Rect2(24, game.ui_size.y - (132 if game.compact_landscape else 152), game.ui_size.x - 48, 58 if game.compact_landscape else 78), 17, game.THEME.HEADING)
 	game.rewardui._button(cancel_rect(), "返回")
 	if action != "view": game.rewardui._button(confirm_rect(), "确认" + {"upgrade": "强化", "remove": "删除", "focus": "抄写", "homework": "记录", "exchange": "交换"}.get(action, "选择") if selected_valid() else "先选择一张牌", selected_valid(), action == "remove")

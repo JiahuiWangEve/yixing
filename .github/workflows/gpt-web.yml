@@ -80,7 +80,7 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           python3 tests/browser_release_smoke.py 2>&1 | tee build/release-smoke.log
-          python3 tests/browser_hand_shortcut_checks.py 2>&1 | tee build/hand-shortcuts-smoke.log
+          python3 tests/browser_merchant_ui_checks.py 2>&1 | tee build/merchant-ui-smoke.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -91,7 +91,8 @@ jobs:
             build/export.log
             build/package-audit.log
             build/release-smoke.log
-            build/hand-shortcuts-smoke.log
+            build/merchant-ui-smoke.log
+            verification/v0.14.11/
             verification/v0.14.10/
             verification/v0.14.7/
             build/debug-undo-smoke.log
@@ -174,10 +175,12 @@ jobs:
           trap 'kill "$server_pid"' EXIT
           # Run every suite even after an earlier failure; retain the overall red result.
           failed=0
-          for suite in map cannon rook event chapter debug_undo airdrop sound_settings; do
+          for suite in hand_shortcut map cannon rook event chapter debug_undo airdrop sound_settings; do
             if ! python3 "tests/browser_${suite}_checks.py" > "build/${suite}-browser.log" 2>&1; then failed=1; fi
             cat "build/${suite}-browser.log"
           done
+          if ! python3 tests/browser_merchant_ui_checks.py --full > build/merchant-ui-browser.log 2>&1; then failed=1; fi
+          cat build/merchant-ui-browser.log
           if ! python3 tests/browser_picker_checks.py --full > build/picker-browser.log 2>&1; then failed=1; fi
           cat build/picker-browser.log
           if ! python3 tests/browser_pass_checks.py --full > build/pass-browser.log 2>&1; then failed=1; fi

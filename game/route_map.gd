@@ -79,6 +79,7 @@ const EVENT_TITLES = {"herbalist": "药庐", "merchant": "行商", "manual": "�
 var choice_mode = "root"
 var pending_choice: Dictionary = {}
 var merchant_offer = -1
+var merchant_ui
 const LABELS = {"battle": "战", "elite": "关", "camp": "营", "workshop": "坊", "event": "事", "boss": "帅"}
 var game
 var state: Dictionary = {}
@@ -153,6 +154,7 @@ func tick(delta: float):
 			travel_target = -1
 			enter(target)
 func cancel_pointer():
+	if merchant_ui != null: merchant_ui.cancel_pointer()
 	pointer_id = -2;pointer_dragged = false;pointer_scroll = false
 func pointer_press(pos: Vector2, id: int):
 	if travel_target >= 0 or pointer_id != -2: return
@@ -169,6 +171,7 @@ func pointer_release(pos: Vector2, id: int, canceled: bool = false):
 	pointer_id = -2
 	if tap: click(pos)
 func input_event(event) -> bool:
+	if merchant_ui.input_event(event): return true
 	if game.screen not in ["map", "route_choice"]: return false
 	if event is InputEventScreenTouch:
 		game.touch_seen = true
@@ -192,7 +195,8 @@ func input_event(event) -> bool:
 		elif event.keycode in [KEY_ENTER, KEY_KP_ENTER] and not event.echo: confirm()
 		return true
 	return false
-func _init(owner): game = owner
+func _init(owner):
+	game = owner;merchant_ui = preload("res://merchant_offers.gd").new(owner)
 func active() -> bool: return not state.is_empty()
 func chapter() -> int: return state.get("chapter", 1)
 func chapter_title() -> String: return "第二章 · 坚城" if chapter() == 2 else "第一章 · 朱印行军"
@@ -314,7 +318,7 @@ func resolve(index: int):
 			outcome = "已记下" + card_label(i) + "：下一战无奖励，胜利后获得副本"
 		"exchange":
 			if choice.offer < 0 or choice.offer >= state.nodes[state.pending].offers.size(): return
-			game.collection[i] = state.nodes[state.pending].offers[choice.offer];outcome = "行商换得" + card_label(i)
+			game.collection[i] = state.nodes[state.pending].offers[choice.offer];outcome = "换得" + game.CARDS[game.collection[i]][0]
 		"heal":
 			if game.lives >= 5: return
 			game.lives += 1;outcome = "药庐疗养：生命+1，现有%d" % game.lives
@@ -327,7 +331,7 @@ func open_card_picker():
 	var heading = {"upgrade": "工坊 · 强化卡牌", "remove": "休整 · 轻装上阵", "focus": "兵书 · 专注抄写", "homework": "兵书 · 课后作业", "exchange": "行商 · 选择交出的牌"}[choice_mode]
 	if choice_mode == "exchange" and merchant_offer >= 0:
 		heading = "行商 · 换取" + game.CARDS[state.nodes[state.pending].offers[merchant_offer]][0]
-	game.card_picker.open(choice_mode, heading, eligible, picker_confirm, picker_cancel)
+	game.card_picker.open(choice_mode, heading, eligible, picker_confirm, picker_cancel, state.nodes[state.pending].offers[merchant_offer] if choice_mode == "exchange" else "")
 func picker_cancel():
 	choice_mode = "root";pending_choice = {};refresh_choices();game.queue_redraw()
 func picker_confirm(index: int):
@@ -546,6 +550,7 @@ func capacity() -> int: return maxi(1, int((game.ui_size.y - 260) / 54))
 func footer_rect(i: int) -> Rect2:
 	return Rect2(24 + i * 145, game.ui_size.y - 65, 136, 48)
 func click(pos: Vector2):
+	if merchant_ui.active(): merchant_ui.click(pos);return
 	if travel_target >= 0: return
 	if home_rect().has_point(pos): game.show_home();return
 	if game.screen == "map":
@@ -718,6 +723,8 @@ func draw_map():
 		game.draw_rect(track, Color(0.27, 0.25, 0.20, 0.12))
 		var thumb_h = maxf(24, track.size.y * area.size.y / content_height())
 		game.draw_rect(Rect2(track.position + Vector2(0, (track.size.y - thumb_h) * scroll_y / scroll_limit()), Vector2(3, thumb_h)), MUTED)
+func reward_debt_text() -> String:
+	return "无收益·剩%d场" % state.get("reward_debt", 0) if state.get("reward_debt", 0) > 0 else ""
 func draw_header():
 	button(home_rect(), "‹ 首页")
 	if game.screen == "map":
@@ -732,10 +739,13 @@ func draw_header():
 	else:
 		if game.mobile_layout:
 			game.text_at(Vector2(26, 76), "已行%d/%d · 生命%d · 永久牌%d张" % [state.visited.size(), state.path_length, game.lives, game.collection.size()], 16, INK)
-			game.text_at(Vector2(26, 99), "备战%s · 无收益剩%d场" % ["+2" if state.prepared else "无", state.reward_debt], 14, MUTED)
+			game.text_at(Vector2(26, 99), "备战%s" % ("+2" if state.prepared else "无"), 14, MUTED)
 		else:
 			game.text_at(Vector2(26, 92), subtitle, 23, INK)
 			game.text_at(Vector2(game.ui_size.x - 370, 91), "已行 %d / %d · 生命%d · 永久牌%d张" % [state.visited.size(), state.path_length, game.lives, game.collection.size()], 16, MUTED)
+	if game.screen == "map" and not reward_debt_text().is_empty():
+		var debt_pos = Vector2(590, 78) if game.compact_landscape else (Vector2(170, 99) if game.mobile_layout else Vector2(450, 92))
+		game.text_at(debt_pos, reward_debt_text(), 16, RED)
 	if not game.mobile_layout:
 		game.text_at(Vector2(290, 45), "一子入山河，百战成归途", 18, MUTED)
 		game.text_at(Vector2(850, 45), game.BUILD_VERSION + " · 朱印军符", 16, MUTED)
@@ -759,13 +769,14 @@ func draw_deck():
 	for id in counts: text += "%s × %d   " % [game.CARDS[id][0], counts[id]]
 	game.wrapped_text(text, Rect2(area.position + Vector2(16, 88), area.size - Vector2(32, 108)), 18, INK)
 func draw():
+	if merchant_ui.active(): merchant_ui.draw();return
 	game.draw_rect(Rect2(Vector2.ZERO, game.ui_size), PAPER)
 	if game.screen == "route_choice":
 		draw_header()
 		var node = state.nodes[state.pending]
-		var heading = event_title(node) + " · " + ("确认后生效，可取消" if choice_mode == "confirm" else "每个节点只选一次")
+		var heading = event_title(node) + (" · 确认后生效，可取消" if choice_mode == "confirm" else "")
 		game.text_at(Vector2(24, 136), heading, 17, INK)
-		game.text_at(Vector2(24, 158), "生命%d · 永久牌%d张 · 无收益剩%d场%s" % [game.lives, game.collection.size(), state.reward_debt, " · 已备战+2" if state.prepared else ""], 14, MUTED)
+		game.text_at(Vector2(24, 158), "生命%d · 永久牌%d张%s" % [game.lives, game.collection.size(), " · 已备战+2" if state.prepared else ""], 14, MUTED)
 		for i in capacity():
 			var index = page * capacity() + i
 			if index < choices.size(): button(row_rect(i), choices[index].label, choices[index].action == "confirm")
