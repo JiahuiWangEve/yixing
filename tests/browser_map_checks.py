@@ -172,46 +172,40 @@ async def main():
    unreachable=next((n['id'] for n in route['nodes'] if n['id']!=0 and geometry.visible(n['id'])),None)
    assert unreachable is not None, 'Need a visible unreachable landmark for strict selection checks'
    if w==1280:
-    # Real mouse hover opens information, but must not implicitly select.
+    # Mouse hover frames immediately and reveals information after its dwell.
     plain=await page.screenshot();nx,ny=node(0)
     await page.mouse.move(ox+nx*scale,oy+ny*scale);await page.wait_for_timeout(450)
-    assert await shot('hover-info')!=plain,'Hover must show route information'
+    assert await shot('hover-info')!=plain,'Hover must show framed route information'
     await page.mouse.move(ox+uw*.5*scale,oy+80*scale);await page.wait_for_timeout(150)
-    map_assertions.append('Mouse hover displays information without selecting')
-   await tap(*node(0));await remains_map();await shot('selected')
-   await tap(*blank);await page.keyboard.press('Enter');await remains_map();await shot('blank-cleared')
-   await tap(*node(0));await remains_map()
-   map_assertions.append('First click selects; blank map clears selection and Enter cannot depart')
-   # Selecting another node replaces the old selection; unreachable nodes are
-   # still inspectable but even repeated clicks must never start a journey.
-   await tap(*node(unreachable));await tap(*node(unreachable));await remains_map()
-   await tap(*node(0));await remains_map()
-   map_assertions.append('Different node replaces selection; unreachable repeat cannot depart')
-   for gesture in ['hold','cancel','multitouch-hold']:
-    for already_selected in [False,True]:
+    assert await page.screenshot()==plain,'Leaving the node must clear frame and hover information'
+    map_assertions.append('Mouse hover inspects; mouse exit clears without departure')
+   await tap(*node(unreachable));await remains_map()
+   await tap(*blank);await page.keyboard.press('Enter');await remains_map()
+   map_assertions.append('Single nonlegal tap never departs; blank clears and Enter cannot depart')
+   for gesture in ['hold','cancel','multitouch']:
+    await tap(*blank)
+    before_gesture=await page.screenshot()
+    await touch('touchStart',[touch_point(node(0))])
+    if gesture=='hold':
+     await page.wait_for_timeout(550)
+     held=await shot('hold-info')
+     assert held!=before_gesture,'Touch hold must show framed route information'
+    elif gesture=='multitouch':
+     await touch('touchStart',[touch_point(node(0)),touch_point(blank,1)])
+     await page.wait_for_timeout(550)
+    await touch('touchCancel' if gesture=='cancel' else 'touchEnd',[])
+    await remains_map()
+    if gesture=='hold':
+     assert await shot('hold-release-sticky')==held,'Long-hold release must retain frame and tooltip'
      await tap(*blank)
-     if already_selected:await tap(*node(0))
-     before_gesture=await page.screenshot()
-     await touch('touchStart',[touch_point(node(0))])
-     if gesture=='hold':
-      await page.wait_for_timeout(550)
-      assert await shot('hold-selected' if already_selected else 'hold-info')!=before_gesture,'Touch hold must show route information'
-     elif gesture=='multitouch-hold':
-      # Secondary contact must not steal the primary long-hold capture.
-      await touch('touchStart',[touch_point(node(0)),touch_point(blank,1)])
-      await page.wait_for_timeout(550)
-      assert await shot('multitouch-hold-selected' if already_selected else 'multitouch-hold-info')!=before_gesture,'Primary touch hold must still show information with a second finger present'
-     await touch('touchCancel' if gesture=='cancel' else 'touchEnd',[])
-     await remains_map()
-     if not already_selected:
-      # If the gesture secretly selected, this ordinary first click would depart.
-      await tap(*node(0));await remains_map()
-     map_assertions.append('%s on %s node does not select or depart'%(gesture,'selected' if already_selected else 'unselected'))
-   await tap(*blank);await tap(*node(0));await remains_map()
-   await page.wait_for_timeout(1200) # Selection is not a timed double-click window.
-   await tap(*node(0),120);await tap(*node(0),1000)
+     assert await page.screenshot()==before_gesture,'Blank tap must clear sticky frame and tooltip'
+    else:
+     assert await page.screenshot()==before_gesture,'Canceled/multiple touch sequence must clear its frame'
+    map_assertions.append(gesture+' inspects or cancels without departure')
+   # Exactly one ordinary release enters; no preselection or confirming tap.
+   await tap(*node(0),1000)
    await state('game',-1,0);await shot('battle')
-   map_assertions.append('Same selected node departs after a long delay; duplicate travel input suppressed')
+   map_assertions.append('One short tap departs without a preselection or confirming tap')
    if w == 1280:
     async def saved_turn():
      saved=await page.evaluate("localStorage.getItem('yixing.route_run.v0149')")
@@ -256,7 +250,7 @@ async def main():
    for target in path:
     assert target in route['nodes'][current]['next'], (current,target)
     assert geometry.visible(target,current), ('Next route node is not visible',current,target)
-    await tap(*node(target,current));await tap(*node(target,current),350)
+    await tap(*node(target,current),350)
     await shot('march' if target==path[-1] else 'march-'+str(target))
     await page.wait_for_timeout(700)
     kind=route['nodes'][target]['kind']
@@ -284,7 +278,7 @@ async def main():
    await shot('event-return'); await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
    await state('map',event_id,-1); await shot('map-resume')
    assert not errors,(w,errors)
-   reports.append({'viewport':[w,h],'errors':errors,'state_assertions':assertions,'keyboard_assertions':keyboard_assertions,'map_assertions':map_assertions,'event_path':path,'skipped_eventless_seeds':skipped_seeds,'map_performance':{'touch_scroll_checks':3,'idle_browser_raf_ms':frame_deltas},'note':'Actual Web export: centered map, first-click selection, delayed same-node departure, blank clearing, unreachable nodes, mouse hover and touch hold/cancel/multitouch safety, duplicate suppression, drag round-trip, battle reload, debug reward return, curved march, event reload/resolve, map refresh.'})
+   reports.append({'viewport':[w,h],'errors':errors,'state_assertions':assertions,'keyboard_assertions':keyboard_assertions,'map_assertions':map_assertions,'event_path':path,'skipped_eventless_seeds':skipped_seeds,'map_performance':{'touch_scroll_checks':3,'idle_browser_raf_ms':frame_deltas},'note':'Actual Web export: centered map, single-tap departure, blank clearing, unreachable nodes, immediate hover framing and sticky touch hold/cancel/multitouch safety, drag round-trip, battle reload, debug reward return, curved march, event reload/resolve, map refresh.'})
    await context.close()
   await browser.close()
  (OUT/'browser-flow.json').write_text(json.dumps(reports,indent=2))

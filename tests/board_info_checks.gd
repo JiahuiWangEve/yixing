@@ -148,8 +148,25 @@ func check_previews():
 	var airdrop = game.board_info.preview(0, Vector2i(3, 5))
 	check(airdrop.self_defeat and airdrop.self_damage == 1, "airdrop one-life defeat explicitly previewed")
 	game.play_card(0, Vector2i(3, 5));check(game.phase == "dead", "airdrop defeat priority actual unchanged")
+func check_hold_release():
+	# Map holds now stay open after release. Shared battle inspection must retain
+	# its original dismiss-on-release behavior and never play a selected attack.
+	for size in [Vector2(1280, 940), Vector2(390, 844), Vector2(360, 640), Vector2(844, 390)]:
+		game.configure_layout(size);fixture()
+		add("p", Vector2i(4, 5), 3);game.hand = ["sword"];game.sync_hand_views();game.selected = 0
+		game.information.clear()
+		var before = pack()
+		var touch = InputEventScreenTouch.new();touch.index = 4;touch.position = game.cell_pos(Vector2i(4, 5));touch.pressed = true
+		game._input(touch);game.information.tick(0.39)
+		check(not game.information.visible, "battle inspection waits for its hold threshold")
+		game.information.tick(0.02)
+		check(game.information.visible and game.information.consumed_hold, "battle long hold opens read-only information")
+		check(pack() == before, "battle hold preserves selected attack, board, RNG and undo")
+		touch.pressed = false;game._input(touch)
+		check(not game.information.visible and not game.information.sticky and game.information.pointer == -2 and not game.information.consumed_hold, "battle hold release dismisses instead of retaining map-style inspection")
+		check(pack() == before, "battle hold release never performs a selected attack")
 func run():
 	game = load("res://main.tscn").instantiate();root.add_child(game);game.set_process(false)
-	check_statuses();check_mechanisms_and_ghosts();check_dense_status_and_cues();check_previews()
+	check_statuses();check_mechanisms_and_ghosts();check_dense_status_and_cues();check_previews();check_hold_release()
 	game.free()
 	print("BOARD INFO: %d checks; %d failures" % [checks, failures]);quit(1 if failures else 0)

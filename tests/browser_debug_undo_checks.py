@@ -50,7 +50,7 @@ async def main():
                 route=saved_route(await save());geometry=RouteGeometry(route,w,h)
                 assert route['current']==-1 and route['pending']==-1 and route['nodes'][0]['kind']=='battle'
                 assert geometry.visible(0), 'Generated entrance must be visible'
-                await tap(geometry.node(0));await tap(geometry.node(0))
+                await tap(geometry.node(0))
                 await wait_turn(1);assert await budget()==3
                 off=await shot('battle-off-no-skip');await tap(skip);await page.wait_for_timeout(1100)
                 assert (await state())['phase']=='play';assert await budget()==3

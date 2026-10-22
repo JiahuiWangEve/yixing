@@ -1,8 +1,8 @@
 """Small real-Web release gate; full semantic/UI regression runs after publication.
 
-Uses only normal UI and persisted saves. Desktop and touch portrait exercise new
-run -> map -> battle -> victory -> map -> reload -> Continue -> legal next node.
-No fixture injection.
+Uses only normal UI and persisted saves. Desktop mouse and portrait touch
+exercise inspection -> deck -> single-tap travel -> victory -> reload ->
+Continue -> single-tap legal next node. No fixture injection.
 """
 import asyncio
 import json
@@ -38,8 +38,24 @@ async def main():
                 scale = min(w/uw, h/uh)
                 ox, oy = (w-uw*scale)/2, (h-uh*scale)/2
                 async def tap(x, y):
-                    await page.touchscreen.tap(ox+x*scale, oy+y*scale)
+                    if desktop:
+                        await page.mouse.click(ox+x*scale, oy+y*scale)
+                    else:
+                        await page.touchscreen.tap(ox+x*scale, oy+y*scale)
                     await page.wait_for_timeout(180)
+                async def inspect(x, y):
+                    px, py = ox+x*scale, oy+y*scale
+                    if desktop:
+                        await page.mouse.move(px, py)
+                        await page.wait_for_timeout(350)
+                    else:
+                        session = await context.new_cdp_session(page)
+                        await session.send('Input.dispatchTouchEvent', {'type':'touchStart',
+                                           'touchPoints':[{'x':px, 'y':py}]})
+                        await page.wait_for_timeout(450)
+                        await session.send('Input.dispatchTouchEvent', {'type':'touchEnd', 'touchPoints':[]})
+                        await session.detach()
+                        await page.wait_for_timeout(180)
                 async def boot():
                     await page.wait_for_function("!document.getElementById('status')", timeout=60000)
                     await page.wait_for_timeout(350)
@@ -64,22 +80,24 @@ async def main():
                     geometry = RouteGeometry(route, w, h)
                     assert route['nodes'][0]['kind'] == 'battle'
                     assert geometry.visible(0), 'Generated entrance must be visible'
-                    await tap(*geometry.node(0))
-                    # The independent header entry remains usable with a selected node.
                     saved_before = await page.evaluate('(key)=>localStorage.getItem(key)', KEY)
-                    selected_map = await page.screenshot(path=str(OUT / f'map-selected-deck-entry-{w}.png'))
+                    plain_map = await page.screenshot(path=str(OUT / f'map-before-inspection-{w}.png'))
+                    await inspect(*geometry.node(0))
+                    inspected_map = await page.screenshot(path=str(OUT / f'map-inspected-deck-entry-{w}.png'))
+                    assert inspected_map != plain_map, 'Hover or held touch did not show map inspection'
+                    assert await page.evaluate('(key)=>localStorage.getItem(key)', KEY) == saved_before
+                    # Inspection never departs. The deck clears its frame/popup,
+                    # and closing keeps only the previous map camera position.
                     await tap(uw-84, 34)
                     deck = await page.screenshot(path=str(OUT / f'map-readonly-deck-{w}.png'))
-                    assert deck != selected_map, 'Header deck entry did not open the read-only picker'
+                    assert deck != inspected_map, 'Header deck entry did not open the read-only picker'
                     await page.keyboard.press('Enter')
                     assert await page.evaluate('(key)=>localStorage.getItem(key)', KEY) == saved_before
                     await tap(88, uh-40)
-                    returned_map = await page.screenshot(path=str(OUT / f'map-returned-selected-{w}.png'))
-                    assert returned_map == selected_map, 'Closing the deck did not restore the selected map'
+                    returned_map = await page.screenshot(path=str(OUT / f'map-returned-cleared-{w}.png'))
+                    assert returned_map == plain_map, 'Closing the deck did not retain camera while clearing inspection'
                     assert await page.evaluate('(key)=>localStorage.getItem(key)', KEY) == saved_before
-                    # A second click on the same node proves closing retained selection.
-                    # This is deliberately later than a conventional double-click.
-                    await page.wait_for_timeout(1200)
+                    # One ordinary release departs from the unselected map.
                     await tap(*geometry.node(0))
                     await state('game', -1, 0)
                     await tap(*( (1098,102) if desktop else (410,84) ))
@@ -101,13 +119,15 @@ async def main():
                     geometry = RouteGeometry(restored, w, h)
                     assert geometry.visible(target), 'Next generated node must be visible'
                     await tap(*geometry.node(target))
-                    await tap(*geometry.node(target))
                     kind = restored['nodes'][target]['kind']
                     next_screen = 'game' if kind in ['battle', 'elite', 'boss'] else 'route_choice'
                     await state(next_screen, 0, target)
                     assert not errors, errors
                     await page.screenshot(path=str(OUT / f'next-node-after-resume-{w}.png'))
                     reports.append({'viewport':[w,h], 'errors':errors, 'passed':True,
+                                    'input':'mouse' if desktop else 'touch',
+                                    'inspection_cleared_by_deck':True,
+                                    'single_tap_departures':2,
                                     'resumed_next_node':target, 'resumed_next_kind':kind,
                                     'resumed_next_screen':next_screen})
                     print('PASS release smoke', w, h, flush=True)

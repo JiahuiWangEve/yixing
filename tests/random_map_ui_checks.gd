@@ -38,19 +38,21 @@ func run():
 					route.ensure_road_cache();check(route.decoration_layout() == decorations, "scroll and selection never reroll scenery")
 				check(route.road_cache_builds == builds, "scroll and selection reuse road geometry")
 				check(route.state == original and game.rng.state == rng_before, "presentation cannot mutate routes, encounters, rewards, events, or RNG")
-				# Browsing is lossless even with an existing choice and a scrolled map.
+				# Browsing clears transient inspection but preserves the camera and map.
 				route.selected_node = 0;route.scroll_y = route.scroll_limit() * 0.4
 				var scroll = route.scroll_y
 				route.click(route.deck_rect().get_center())
 				check(game.card_picker.active and game.card_picker.action == "view", "header always opens the existing read-only grid")
+				check(route.selected_node == -1 and not game.information.visible, "opening the deck clears transient map inspection")
 				game.card_picker.cancel()
-				check(route.selected_node == 0 and route.scroll_y == scroll and route.state == original, "deck close preserves node choice, scroll, and generated content")
+				check(route.selected_node == -1 and route.scroll_y == scroll and route.state == original, "deck close preserves scroll and generated content without restoring inspection")
 				# Resizing preserves the content center, not a forced jump to current.
+				route.selected_node = 0
 				var center_fraction = (route.scroll_y + area.size.y * 0.5) / route.content_height()
 				var other = Vector2(844,390) if size.x < size.y else Vector2(390,844)
 				game.configure_layout(other);route.tick(0)
 				var expected = clampf(center_fraction * route.content_height() - route.map_rect().size.y * 0.5, 0, route.scroll_limit())
-				check(absf(route.scroll_y - expected) < 0.01 and route.selected_node == 0, "rotation keeps relative map center and selected node")
+				check(absf(route.scroll_y - expected) < 0.01 and route.selected_node == -1, "rotation keeps relative map center and clears transient inspection")
 				check(route.state == original, "rotation is layout-only, not regeneration")
 				route.save();check(route.resume() and route.state == original, "saved graph resumes byte-equivalent logical content")
 	game.queue_free();print("RANDOM MAP UI RESULT %d checks, %d failures" % [checks, failures]);quit(1 if failures else 0)

@@ -61,7 +61,7 @@ func run():
 		route.tick(0.2);check(route.needs_redraw(), "stamp animates")
 		route.tick(1);check(route.needs_redraw(), "stamp final static frame redraws")
 		check(not route.needs_redraw(), "finished stamp does not redraw forever")
-		var start = route.position(route.state.nodes[0]);route.click(start);route.click(start);check(route.needs_redraw(), "second node click begins march redraw")
+		var start = route.position(route.state.nodes[0]);route.click(start);check(route.needs_redraw(), "single node click begins march redraw")
 		route.tick(0.4);check(route.needs_redraw(), "march redraws while active")
 		route.tick(0.5);check(game.screen == "game", "march enters battle once")
 		game.debug_skip();game.choose_reward(-1);route.tick(0)

@@ -173,7 +173,6 @@ async def main(smoke=False):
                         assert route['current'] == -1 and route['pending'] == -1 and route['nodes'][0]['kind'] == 'battle'
                         assert geometry.visible(0), 'Generated entrance must be visible'
                         await tap(geometry.node(0))
-                        await tap(geometry.node(0))
                         await wait_state('game', 'play')
                         await page.wait_for_timeout(800)
                         await no_old_button('battle')

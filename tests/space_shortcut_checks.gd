@@ -129,11 +129,13 @@ func check_map_confirmation():
 		key(confirm_key, false);key(confirm_key, true, true)
 		check(route.travel_target == -1 and route.state == state, "map Enter release and auto-repeat remain inert")
 		key(confirm_key)
-		check(route.travel_target == 0 and route.state.pending == -1 and game.screen == "map", "map " + str(confirm_key) + " still confirms valid selection into transient travel")
+		check(route.travel_target == -1 and route.state == state and game.screen == "map", "map " + str(confirm_key) + " cannot turn a transient frame into travel")
+		route.click(route.hit_rect(route.state.nodes[0]).get_center())
+		check(route.travel_target == 0 and route.state.pending == -1, "one ordinary map click starts travel after inert keyboard input")
 		key(KEY_SPACE);key(confirm_key);key(confirm_key, true, true)
 		check(route.travel_target == 0 and route.state == state and game.turn == turn, "keys during map travel cannot duplicate confirmation or end a turn")
 		route.tick(route.TRAVEL_SECONDS + 0.01)
-		check(game.screen == "game" and route.state.pending == 0 and game.turn == 1, "confirmed map travel enters battle once without ending its first turn")
+		check(game.screen == "game" and route.state.pending == 0 and game.turn == 1, "single-click map travel enters battle once without ending its first turn")
 
 func run():
 	game = load("res://main.tscn").instantiate()

@@ -57,8 +57,8 @@ func enter(id: int):
 	game.route.focus_current()
 	var target = game.route.position(game.route.state.nodes[id])
 	check(game.route.map_rect().has_point(target), "chosen map node is visible")
-	var taps = [point(target), point(target)]
-	game.route.click(target);game.route.click(target);game.route.tick(game.route.TRAVEL_SECONDS + 0.01);step("enter", "enter-first-battle", taps)
+	var taps = [point(target)]
+	game.route.click(target);game.route.tick(game.route.TRAVEL_SECONDS + 0.01);step("enter", "enter-first-battle", taps)
 func rectangle(value: Rect2) -> Array:
 	return [value.position.x, value.position.y, value.size.x, value.size.y]
 func inspection_state() -> Dictionary:

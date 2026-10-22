@@ -16,35 +16,52 @@ var rows: Array[String] = []
 var area = Rect2()
 var font_size = 16
 var consumed_hold = false
+var sticky = false
+var touch_moved = false
 func _init(owner): game = owner
 func allowed() -> bool:
 	if game.card_picker.active or game.presentation.active() or game.encounter_info_open: return false
-	if game.screen == "map": return game.route.travel_target < 0
+	if game.screen == "map": return game.route.travel_target < 0 and not game.route.deck_view
 	return game.screen == "game" and game.phase in ["play", "discard"] and game.input_lock <= 0 and game.navigation_lock <= 0 and not game.gesture.active
 func context_key() -> Array:
-	return [game.screen, game.phase, game.turn, game.selected, game.free_selected, game.route.state.get("pending", -1), game.route.scroll_y, game.enemies.size()]
+	return [game.screen, game.phase, game.turn, game.selected, game.free_selected, game.route.state.get("pending", -1), game.route.scroll_y, game.enemies.size(), game.ui_size, game.route.page]
 func lookup(pos: Vector2) -> Dictionary:
 	if not allowed(): return {}
 	if game.screen == "map": return game.route.inspect_at(pos)
 	return game.inspect_information(pos)
 func clear():
-	# If inspection is dismissed by a turn/modal/layout change, its eventual
-	# pointer-up must still never become an attack or map departure.
+	# Dismissing a fired hold never converts its outstanding release to an action.
 	if consumed_hold:
 		game.touch_dragged = true
 		game.route.pointer_dragged = true
+	var had_map_frame = data.has("node_id") and game.route.selected_node >= 0
+	if data.has("node_id"): game.route.selected_node = -1
 	var was_visible = visible
-	data = {};visible = false;elapsed = 0;pointer = -2;source = "";rows = [];consumed_hold = false
-	if was_visible: game.queue_redraw()
+	data = {};visible = false;elapsed = 0;pointer = -2;source = "";rows = [];consumed_hold = false;sticky = false;touch_moved = false
+	if was_visible or had_map_frame: game.queue_redraw()
+func dismiss_map_drag():
+	if not data.has("node_id"): return
+	if consumed_hold:
+		# Keep capture even after the visible hold is dismissed, including an
+		# excursion out of the hit rectangle smaller than the drag threshold.
+		visible = false;sticky = false;touch_moved = true
+		game.touch_dragged = true;game.route.pointer_dragged = true;game.route.selected_node = -1;game.queue_redraw()
+	else: clear()
 func candidate(pos: Vector2, kind: String, id: int = -2):
 	var found = lookup(pos)
 	if found.is_empty(): clear();return
 	if kind == "mouse" and source == "mouse" and found.get("key") == data.get("key") and pos.distance_to(start) < MOVE_LIMIT: return
 	clear();data = found;position = pos;start = pos;source = kind;pointer = id;context = context_key()
+	if data.has("node_id"):
+		game.route.selected_node = data.node_id;game.queue_redraw()
 func tick(delta: float):
 	if data.is_empty(): return
-	if not allowed() or context != context_key(): clear();return
-	if visible: return
+	if not allowed() or context != context_key():
+		var map_press = data.has("node_id") and pointer >= 0
+		clear()
+		if map_press: game.route.cancel_pointer(false, true)
+		return
+	if visible or touch_moved: return
 	elapsed += delta
 	if elapsed < (TOUCH_DELAY if source == "touch" else MOUSE_DELAY): return
 	var fresh = lookup(position)
@@ -57,24 +74,44 @@ func input_event(event) -> bool:
 		return false
 	if event is InputEventScreenTouch:
 		if event.pressed:
+			if game.screen == "map":
+				game.touch_seen = true
+				# Let the route tracker see every contact so it can block the
+				# complete multi-touch sequence until all fingers have lifted.
+				if game.route.touch_sequence_blocked or (game.route.pointer_id >= 0 and game.route.pointer_id != event.index):
+					clear();return false
 			if pointer == -2: candidate(event.position, "touch", event.index)
 		elif event.index == pointer:
 			var consume = consumed_hold and not event.canceled
+			if data.has("node_id") and consumed_hold:
+				var fresh = lookup(event.position)
+				var keep = consume and not touch_moved and not game.route.pointer_dragged and event.position.distance_to(start) < MOVE_LIMIT and fresh.get("key") == data.get("key") and context == context_key()
+				if keep:
+					pointer = -2;consumed_hold = false;sticky = true
+					game.route.finish_inspection(event.index, true)
+					game.queue_redraw()
+				else:
+					clear();game.route.finish_inspection(event.index)
+				return true
 			clear()
 			if consume:
+				# Board inspection deliberately remains release-to-dismiss.
 				game.cancel_gesture();game.route.cancel_pointer();return true
 		return false
 	if event is InputEventScreenDrag:
 		if pointer == event.index:
 			position = event.position
-			if position.distance_to(start) >= MOVE_LIMIT:
-				# Keep a fired hold captured through release: dragging away must not tap.
+			if data.has("node_id"):
+				if position.distance_to(start) >= MOVE_LIMIT or lookup(position).get("key") != data.get("key"): dismiss_map_drag()
+			elif position.distance_to(start) >= MOVE_LIMIT:
+				# Preserve the board's existing long-hold release capture.
 				if consumed_hold:
 					visible = false;game.touch_dragged = true;game.route.pointer_dragged = true;game.queue_redraw()
 				else: clear()
 		return false
 	if event is InputEventMouse:
 		if event.device == -1 and game.touch_seen: return false
+		if game.screen == "map" and not game.route.touch_contacts.is_empty(): return false
 		if event is InputEventMouseMotion:
 			if event.button_mask != 0: clear()
 			else: candidate(event.position, "mouse")

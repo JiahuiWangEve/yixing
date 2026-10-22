@@ -41,11 +41,12 @@ func run():
 		check(not route.decoration_clear(Rect2(middle - Vector2(8,8), Vector2(16,16))), "scenery cannot occupy a road")
 		# Selection, blank-clear, and travelling must not create a completion seal.
 		var start = route.position(route.state.nodes[0])
-		route.click(start)
-		check(route.selected_node == 0 and route.stamp_node == -1, "preview is not completion")
+		var hover = InputEventMouseMotion.new();hover.position = start;hover.device = 0
+		game._gui_input(hover)
+		check(route.selected_node == 0 and route.stamp_node == -1 and route.travel_target == -1, "hover frame is not departure or completion")
 		route.click(route.map_rect().position + Vector2(4, 4))
 		check(route.selected_node == -1 and route.state.visited.is_empty(), "blank-clear preserves uncompleted map")
-		route.click(start);route.click(start);route.tick(0.4)
+		route.click(start);route.tick(0.4)
 		check(route.stamp_node == -1 and route.state.visited.is_empty(), "marching is not completion")
 		route.tick(0.5)
 		check(game.screen == "game" and route.state.pending == 0, "arrival still enters battle")
@@ -65,7 +66,7 @@ func run():
 		route.tick(0)
 		# An event can be completed too, including the no-upgrade 'leave' choice.
 		var event_id = T.next_node(game, "event")
-		var next = route.position(route.state.nodes[event_id]);route.click(next);route.click(next);route.tick(0.86)
+		var next = route.position(route.state.nodes[event_id]);route.click(next);route.tick(0.86)
 		check(game.screen == "route_choice" and route.state.pending == event_id, "event arrival remains a choice, not automatic completion")
 		check(route.stamp_node == -1 and route.state.visited == [0], "event preview has no premature seal")
 		route.resolve(route.choices.size() - 1)

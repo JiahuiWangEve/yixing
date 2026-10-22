@@ -98,6 +98,10 @@ var pointer_start = Vector2.ZERO
 var pointer_last = Vector2.ZERO
 var pointer_dragged = false
 var pointer_scroll = false
+var pointer_node = -1
+# A second finger cancels the entire sequence, not only that finger.
+var touch_contacts: Dictionary = {}
+var touch_sequence_blocked = false
 var layout_size = Vector2.ZERO
 var layout_content_height = 0.0
 var layout_view_height = 0.0
@@ -107,7 +111,7 @@ const DETAILS = {"battle": "战胜守军后选择战利品。", "elite": "精英
 func reset_view():
 	selected_node = -1;travel_target = -1;travel_elapsed = 0.0
 	stamp_node = -1;stamp_elapsed = STAMP_SECONDS
-	pointer_id = -2;pointer_dragged = false;focus_needed = true
+	cancel_pointer();focus_needed = true
 func side_layout() -> bool: return not game.mobile_layout or game.compact_landscape
 func map_rect() -> Rect2:
 	var width = minf(game.ui_size.x - 28, 1000)
@@ -136,8 +140,10 @@ func march_point(progress: float) -> Vector2:
 	if state.current < 0: return target
 	return edge_point(position(state.nodes[state.current]), target, progress)
 func confirm():
-	if travel_target >= 0 or selected_node not in legal(): return
-	travel_target = selected_node;selected_node = -1;travel_elapsed = 0.0;pointer_id = -2
+	if game.screen != "map" or travel_target >= 0 or selected_node not in legal(): return
+	var target = selected_node
+	cancel_pointer()
+	travel_target = target;travel_elapsed = 0.0
 func tick(delta: float):
 	if game.screen != "map": return
 	stamp_elapsed = minf(STAMP_SECONDS, stamp_elapsed + delta)
@@ -145,7 +151,7 @@ func tick(delta: float):
 		if not focus_needed and layout_content_height > 0:
 			var center_fraction = (scroll_y + layout_view_height * 0.5) / layout_content_height
 			scroll_y = clampf(center_fraction * content_height() - map_rect().size.y * 0.5, 0, scroll_limit())
-		layout_size = game.ui_size;layout_content_height = content_height();layout_view_height = map_rect().size.y;pointer_id = -2
+		layout_size = game.ui_size;layout_content_height = content_height();layout_view_height = map_rect().size.y;cancel_pointer()
 	if focus_needed: focus_current()
 	if travel_target >= 0:
 		travel_elapsed += delta
@@ -153,46 +159,87 @@ func tick(delta: float):
 			var target = travel_target
 			travel_target = -1
 			enter(target)
-func cancel_pointer():
+func cancel_pointer(keep_frame: bool = false, keep_touches: bool = false):
 	if merchant_ui != null: merchant_ui.cancel_pointer()
-	pointer_id = -2;pointer_dragged = false;pointer_scroll = false
+	pointer_id = -2;pointer_dragged = false;pointer_scroll = false;pointer_node = -1
+	if not keep_touches:
+		touch_contacts.clear();touch_sequence_blocked = false
+	if not keep_frame:
+		selected_node = -1
+		if game.information != null: game.information.clear()
+func finish_inspection(id: int, keep_frame: bool = false):
+	# A consumed map hold bypasses main.cancel_gesture(), which would erase the
+	# intentionally sticky information. Its release can never become a click.
+	touch_contacts.erase(id)
+	cancel_pointer(keep_frame, true)
+	if touch_contacts.is_empty(): touch_sequence_blocked = false
+func node_at(pos: Vector2) -> int:
+	if game.screen != "map" or not active() or deck_view or travel_target >= 0 or not map_rect().has_point(pos): return -1
+	if game.card_picker.active or game.presentation.active() or game.encounter_info_open: return -1
+	for node in state.nodes:
+		if hit_rect(node).has_point(pos): return node.id
+	return -1
 func pointer_press(pos: Vector2, id: int):
-	if travel_target >= 0 or pointer_id != -2: return
+	if travel_target >= 0: return
+	if pointer_id != -2:
+		if pointer_id != id: cancel_pointer()
+		return
 	pointer_id = id;pointer_start = pos;pointer_last = pos;pointer_dragged = false
 	pointer_scroll = game.screen == "map" and not deck_view and map_rect().has_point(pos)
+	pointer_node = node_at(pos)
+	if game.screen == "map": selected_node = pointer_node
 func pointer_motion(pos: Vector2, id: int):
 	if pointer_id != id: return
 	if pos.distance_to(pointer_start) >= 12: pointer_dragged = true
+	# Even a small exit across a hit-rect edge invalidates the original press.
+	if pointer_node >= 0 and node_at(pos) != pointer_node: pointer_dragged = true
+	if pointer_dragged:
+		selected_node = -1
+		if game.information != null: game.information.dismiss_map_drag()
 	if pointer_scroll and pointer_dragged: scroll_y = clampf(scroll_y - (pos.y - pointer_last.y), 0, scroll_limit())
 	pointer_last = pos
 func pointer_release(pos: Vector2, id: int, canceled: bool = false):
 	if pointer_id != id: return
 	var tap = not canceled and not pointer_dragged and pos.distance_to(pointer_start) < 12
-	pointer_id = -2
+	if game.screen == "map" and pointer_node != node_at(pos): tap = false
+	pointer_id = -2;pointer_scroll = false;pointer_node = -1
 	if tap: click(pos)
+	else: cancel_pointer()
 func input_event(event) -> bool:
 	if merchant_ui.input_event(event): return true
 	if game.screen not in ["map", "route_choice"]: return false
 	if event is InputEventScreenTouch:
 		game.touch_seen = true
-		if event.pressed: pointer_press(event.position, event.index)
-		else: pointer_release(event.position, event.index, event.canceled)
+		if event.pressed:
+			touch_contacts[event.index] = true
+			if touch_sequence_blocked or touch_contacts.size() > 1:
+				cancel_pointer(false, true);touch_sequence_blocked = true
+			else: pointer_press(event.position, event.index)
+		else:
+			touch_contacts.erase(event.index)
+			if touch_sequence_blocked:
+				if touch_contacts.is_empty(): touch_sequence_blocked = false
+			else: pointer_release(event.position, event.index, event.canceled)
 		return true
 	if event is InputEventScreenDrag:
-		pointer_motion(event.position, event.index);return true
+		if not touch_sequence_blocked: pointer_motion(event.position, event.index)
+		return true
 	if event is InputEventMouse:
-		if event.device == -1 and game.touch_seen: return true
-		if event is InputEventMouseMotion: pointer_motion(event.position, -1)
+		if (event.device == -1 and game.touch_seen) or not touch_contacts.is_empty(): return true
+		if event is InputEventMouseMotion:
+			if pointer_id == -1: pointer_motion(event.position, -1)
+			elif event.button_mask == 0: selected_node = node_at(event.position)
 		elif event is InputEventMouseButton:
 			if event.button_index == MOUSE_BUTTON_LEFT:
 				if event.pressed: pointer_press(event.position, -1)
 				else: pointer_release(event.position, -1)
 			elif event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and travel_target < 0 and map_rect().has_point(event.position) and not deck_view:
+				cancel_pointer()
 				scroll_y = clampf(scroll_y + (100 if event.button_index == MOUSE_BUTTON_WHEEL_DOWN else -100), 0, scroll_limit())
 		return true
 	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_ESCAPE and travel_target < 0: selected_node = -1;deck_view = false;cancel_pointer()
-		elif event.keycode in [KEY_ENTER, KEY_KP_ENTER] and not event.echo: confirm()
+		if event.keycode == KEY_ESCAPE and travel_target < 0: deck_view = false;cancel_pointer()
+		# Hover and touch frames are not a keyboard selection or departure gate.
 		return true
 	return false
 func _init(owner):
@@ -556,13 +603,10 @@ func click(pos: Vector2):
 	if game.screen == "map":
 		if deck_rect().has_point(pos):
 			game.card_picker.open("view", "全部永久牌组", range(game.collection.size()), Callable(), Callable());return
-		if map_rect().has_point(pos):
-			for id in range(state.nodes.size()):
-				if hit_rect(state.nodes[id]).has_point(pos):
-					if selected_node == id and id in legal(): confirm()
-					else: selected_node = id
-					return
-			selected_node = -1
+		var id = node_at(pos)
+		game.information.clear()
+		selected_node = id
+		if id in legal(): confirm()
 
 	else:
 		if footer_rect(0).has_point(pos): page = maxi(0, page - 1);return
@@ -684,9 +728,6 @@ func draw_landmark(node: Dictionary):
 	game.draw_texture_rect(SYMBOLS[node.kind], rect, false)
 	var label = {"battle":"战斗", "elite":"关隘", "camp":"休整", "workshop":"工坊", "event":"奇遇", "boss":"决战"}[node.kind]
 	centered_text(point + Vector2(0, 31), label, 19, INK)
-	if selected and available:
-		game.draw_rect(Rect2(point.x - 36, rect.position.y - 27, 72, 21), PAPER_LIGHT)
-		centered_text(Vector2(point.x, rect.position.y - 11), "再点出发", 14, RED)
 	if available:
 		game.draw_line(point + Vector2(-22, 36), point + Vector2(22, 36), INK, 1.2, true)
 		game.draw_circle(point + Vector2(-30, 25), 2.5, INK)
@@ -750,14 +791,12 @@ func draw_header():
 		game.text_at(Vector2(290, 45), "一子入山河，百战成归途", 18, MUTED)
 		game.text_at(Vector2(850, 45), game.BUILD_VERSION + " · 朱印军符", 16, MUTED)
 func inspect_at(pos: Vector2) -> Dictionary:
-	if game.screen != "map" or travel_target >= 0 or not map_rect().has_point(pos): return {}
-	for node in state.nodes:
-		if not hit_rect(node).has_point(pos): continue
-		var names = {"battle": "战斗", "elite": "关隘", "camp": "休整", "workshop": "工坊", "event": "奇遇", "boss": "决战"}
-		var nature = {"battle": "普通战斗，检验当前构筑。", "elite": "精英战斗，奖励选择更多。", "camp": "休整节点，可选择轻装或备战。", "workshop": "强化节点，打磨可升级的卡牌。", "event": "未知遭遇，抵达后揭晓选项与代价。", "boss": "本章最终战斗，击败守将前进。"}
-		var status = "可前往 · 再点选中的地标出发" if node.id in legal() else ("已行经" if node.id in state.visited else "当前不可达 · 沿相连道路前进")
-		return {"key": "node-%d" % node.id, "title": names[node.kind], "lines": [nature[node.kind], status], "anchor": hit_rect(node)}
-	return {}
+	var id = node_at(pos)
+	if id < 0: return {}
+	var node = state.nodes[id]
+	var names = {"battle": "战斗", "elite": "关隘", "camp": "休整", "workshop": "工坊", "event": "奇遇", "boss": "决战"}
+	var nature = {"battle": "普通战斗，检验当前构筑。", "elite": "精英战斗，奖励选择更多。", "camp": "休整节点，可选择轻装或备战。", "workshop": "强化节点，打磨可升级的卡牌。", "event": "未知遭遇，抵达后揭晓选项与代价。", "boss": "本章最终战斗，击败守将前进。"}
+	return {"key": "node-%d" % node.id, "node_id": node.id, "title": names[node.kind], "lines": [nature[node.kind]], "anchor": hit_rect(node)}
 func draw_deck():
 	var area = map_rect().grow(-12)
 	game.panel(area, PAPER_LIGHT, Color("a08a66"))

@@ -344,7 +344,6 @@
     24405,
     24418,
     24433,
-    24448,
     24449,
     24453,
     24471,
@@ -473,7 +472,6 @@
     27721,
     27809,
     27827,
-    27839,
     27861,
     27874,
     27880,
@@ -648,7 +646,6 @@
     36895,
     36896,
     36935,
-    36947,
     36973,
     36981,
     36991,
@@ -750,7 +747,7 @@
     "game/tutorial.gd",
     "game/undo_history.gd"
   ],
-  "subset_sha256": "1fa2a93cb4b003254f9141185249f1747f8def8b58bf7f7d5254701a967e773d",
-  "subset_bytes": 303924,
+  "subset_sha256": "aeca31a763b54bbc0b1dc0e89fdf6bda682f7c2c0aad54cafe86cf5363b071af",
+  "subset_bytes": 301944,
   "license": "FONT_LICENSE.txt"
 }
