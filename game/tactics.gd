@@ -27,7 +27,7 @@ static func attack_danger(game, id: String, target: Vector2i) -> bool:
 	var board = game.enemies.duplicate(true)
 	var i = R.occupied(target, board)
 	if i < 0: return false
-	var damage = 2 if id == "knight_assault" else 1
+	var damage = (2 if id == "knight_assault" else 1) + game.treasures.preview_bonus(id)
 	var killed = int(board[i].get("hp", game.enemy_health(board[i].kind))) <= damage
 	if killed: board.remove_at(i)
 	else: board[i].hp -= damage
@@ -42,12 +42,13 @@ static func apply(game, id: String, p: Vector2i, index: int):
 			if id == "retreat_strike":
 				game.player = origin - (p - origin)
 				game.move_piece({}, game.cell_pos(origin), game.cell_pos(game.player))
+				game.record_active_displacement(origin);game.treasures.claim_attack_bonus()
 			game.effect("sword", game.cell_pos(game.player), game.cell_pos(p), 0.3, 0.28 if id == "retreat_strike" else 0.0)
 			var killed: bool = game.damage_enemy(index, 0.4 if id == "retreat_strike" else 0.12, 2 if id == "knight_assault" else 1)
 			if killed and id != "retreat_strike":
 				game.player = p
 				game.move_piece({}, game.cell_pos(origin), game.cell_pos(p), 0.2, id == "knight_assault")
-			if game.player != origin: game.record_active_displacement(origin)
+			if game.player != origin and id != "retreat_strike": game.record_active_displacement(origin)
 		"stake", "permanent_stake":
 			game.add_enemy("stake", p, 0)
 			if id == "permanent_stake": game.enemies.back()["permanent"] = true
@@ -61,7 +62,7 @@ static func apply(game, id: String, p: Vector2i, index: int):
 			game.damage_enemy(index, 0.12, 1 + int(game.active_displacements))
 		"pursuit":
 			game.effect("sword", game.cell_pos(game.player), game.cell_pos(p), 0.3)
-			if game.damage_enemy(index): game.draw_card()
+			if game.damage_enemy(index) and game.general_alive() and game.lives > 0: game.draw_card()
 		"shock":
 			var victim: Dictionary = game.enemies[index]
 			game.effect("sword", game.cell_pos(game.player), game.cell_pos(p), 0.3)

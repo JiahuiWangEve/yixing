@@ -1,4 +1,5 @@
 extends RefCounted
+const Palette = preload("res://palette.gd")
 # Presentation only: callers commit and save first. Never grants rewards or rerolls.
 const SEAL = preload("res://assets/map/seals/victory_seal.svg")
 var game
@@ -37,7 +38,7 @@ func input_event(event) -> bool:
 	return true
 func draw():
 	if not active(): return
-	game.draw_rect(Rect2(Vector2.ZERO, game.ui_size), Color(0.08,0.06,0.04,0.62))
+	game.draw_rect(Rect2(Vector2.ZERO, game.ui_size), Color(Palette.PAPER, 0.98))
 	var center = game.ui_size * 0.5
 	if kind == "victory":
 		# A short hold precedes the descending red general's seal.
@@ -59,7 +60,7 @@ func draw():
 	var transform = Transform2D(Vector2(dimensions.x * scale_x / 156,0),Vector2(0,dimensions.y / 156),center - Vector2(dimensions.x * scale_x * 0.5,dimensions.y * 0.5))
 	face.draw_data(game, game.CARDS[id], game.is_consumable(id), transform, 1, false, progress >= 0.5)
 	if progress > 0.5 and progress < 1:
-		game.draw_rect(Rect2(position, dimensions).grow(5), Color(0.9,0.65,0.28,sin((progress-0.5)*PI*2)), false, 4)
+		game.draw_rect(Rect2(position, dimensions).grow(5), Color(Palette.ACCENT, sin((progress-0.5)*PI*2)), false, 4)
 	var title = "兵书 · 口诀领悟" if progress < 0.5 else "强化完成 · " + game.CARDS[new_id][0]
 	var width = game.FONT.get_string_size(title,HORIZONTAL_ALIGNMENT_LEFT,-1,24).x
 	game.text_at(Vector2(center.x-width*0.5, position.y-24), title,24,game.THEME.HEADING)

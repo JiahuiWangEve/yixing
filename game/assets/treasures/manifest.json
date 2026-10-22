@@ -1,0 +1,213 @@
+{
+  "variant": "B-vermilion",
+  "source": "User-approved black-and-vermilion transparent PNGs, proportionally downsampled from 384px to 128px for crisp selection icons and 48-logical-pixel HUD rendering. No redraw, recolor, or AI generation.",
+  "assets": [
+    {
+      "id": "longevity_seal",
+      "file": "longevity_seal.png",
+      "source_variant": "B-vermilion",
+      "source_file": "png-384/01-longevity-seal.png",
+      "source_size": [
+        384,
+        384
+      ],
+      "source_sha256": "8ed5b810af9957456cb3173a1cd6b7fdc1e1b0816efabc0ac5fd591e6997d6c7",
+      "transformation": "Proportional 384-to-128 downsample with Lanczos; original RGBA drawing and palette retained.",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "bytes": 10175,
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "40d9d6448ec4338171e0fa42a85b5584e0dd5c7293ba4392d488b003d595090b"
+    },
+    {
+      "id": "life_talisman",
+      "file": "life_talisman.png",
+      "source_variant": "B-vermilion",
+      "source_file": "png-384/02-life-talisman.png",
+      "source_size": [
+        384,
+        384
+      ],
+      "source_sha256": "97539220ac4b7415c5fbf7d355ffb4df71d0629aa15eb9108037ef938c92b151",
+      "transformation": "Proportional 384-to-128 downsample with Lanczos; original RGBA drawing and palette retained.",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "bytes": 8632,
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "d0d1aaecc598b237c183f9883656ce56ad1dbb98d40891c949a675f3c0f78c3c"
+    },
+    {
+      "id": "tiger_tally",
+      "file": "tiger_tally.png",
+      "source_variant": "B-vermilion",
+      "source_file": "png-384/03-tiger-tally.png",
+      "source_size": [
+        384,
+        384
+      ],
+      "source_sha256": "5c9f4400e492940a964a0d5d24e223cf114d4f93265bae64349b6914dde62f7f",
+      "transformation": "Proportional 384-to-128 downsample with Lanczos; original RGBA drawing and palette retained.",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "bytes": 10877,
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "aed7996c975437515861b4b595175e5e6af8dc6cb4eebe3030c50ba1f8fa06e8"
+    },
+    {
+      "id": "wind_horseshoe",
+      "file": "wind_horseshoe.png",
+      "source_variant": "B-vermilion",
+      "source_file": "png-384/04-wind-horseshoe.png",
+      "source_size": [
+        384,
+        384
+      ],
+      "source_sha256": "aea0f9f21a9d6f373aa84f4570e359efd908b5777545b207ec80fa2101701bba",
+      "transformation": "Proportional 384-to-128 downsample with Lanczos; original RGBA drawing and palette retained.",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "bytes": 8821,
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "347e40a5b83822709d07911ae5cb48713978ae497e2f039b2bd5d45aca48a1dd"
+    },
+    {
+      "id": "battle_tassel",
+      "file": "battle_tassel.png",
+      "source_variant": "B-vermilion",
+      "source_file": "png-384/05-battle-tassel.png",
+      "source_size": [
+        384,
+        384
+      ],
+      "source_sha256": "ccd5e0e801914a4cfc0ef90bb927bb1d657ac4d6f87210836c6be76c02451249",
+      "transformation": "Proportional 384-to-128 downsample with Lanczos; original RGBA drawing and palette retained.",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "bytes": 8308,
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "b92692cff7db5246d939c4602e86fe8a76f5bcd2cf27e52c440e35e80dabdc2a"
+    },
+    {
+      "id": "spring_bit",
+      "file": "spring_bit.png",
+      "source_variant": "B-vermilion",
+      "source_file": "png-384/06-spring-bit.png",
+      "source_size": [
+        384,
+        384
+      ],
+      "source_sha256": "67ca55dc57ff3aac19521857b7d43c86ebb4787f7779ac6997e12787e2b2ddd5",
+      "transformation": "Proportional 384-to-128 downsample with Lanczos; original RGBA drawing and palette retained.",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "bytes": 7247,
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "59cf269d773206363d4df775ba9d8942050e37e231cf8469e28283fe31531376"
+    },
+    {
+      "id": "gate_cannon_seal",
+      "file": "gate_cannon_seal.png",
+      "source_variant": "B-vermilion",
+      "source_file": "png-384/07-gate-cannon-seal.png",
+      "source_size": [
+        384,
+        384
+      ],
+      "source_sha256": "8b1404247df442475e7ae9343977bd4c06b4bd3599aeaca9d5d6273766c41599",
+      "transformation": "Proportional 384-to-128 downsample with Lanczos; original RGBA drawing and palette retained.",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "bytes": 11960,
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "229ea6eb3c2d3d78aa9eefbd1b314866f9d72da237586a70919650d333be5469"
+    },
+    {
+      "id": "roving_axle",
+      "file": "roving_axle.png",
+      "source_variant": "B-vermilion",
+      "source_file": "png-384/08-roving-axle.png",
+      "source_size": [
+        384,
+        384
+      ],
+      "source_sha256": "8a3f7e3eec50a722daedc9b91cdaf1ccbf5a8d855ace0e5c3b5d03d0e8cb2abf",
+      "transformation": "Proportional 384-to-128 downsample with Lanczos; original RGBA drawing and palette retained.",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "bytes": 10269,
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "a3861747f7f8adbc820fd3823df6ded0758c11246e0830056a8d010b38c497af"
+    },
+    {
+      "id": "chain_fire_fuse",
+      "file": "chain_fire_fuse.png",
+      "source_variant": "B-vermilion",
+      "source_file": "png-384/09-chain-fire-fuse.png",
+      "source_size": [
+        384,
+        384
+      ],
+      "source_sha256": "238699ae02f1b2969850195bc7aa5625c99e0a35e07d4244d28b55792e452aac",
+      "transformation": "Proportional 384-to-128 downsample with Lanczos; original RGBA drawing and palette retained.",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "bytes": 8475,
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "30cd3d93b812ea3d8293bb891841cfc56af8331438c3cf6ce23dd164265b47b7"
+    }
+  ]
+}

@@ -24,7 +24,8 @@ OUT = ROOT / 'verification/v0.14.0/chapter'
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
 KEY = 'yixing.route_run.v0149'
 ROUTE_FIELDS = ['chapter', 'current', 'pending', 'visited', 'done', 'prepared',
-                'reward_debt', 'reward_blocked', 'pending_homework', 'homework_awarded']
+                'reward_debt', 'reward_blocked', 'pending_homework', 'homework_awarded',
+                'treasure_id', 'treasure_claimed', 'treasure_choices']
 BATTLE_FIELDS = ['phase', 'turn', 'lives', 'energy', 'collection', 'deck', 'hand',
                  'discard', 'rewards', 'player', 'encounter_state']
 SMOKE_NAMES = {'chapter_transition', 'final_boss'}
@@ -193,7 +194,7 @@ async def main(smoke=False, validate_only=False):
                     difference = image_difference(before, after, box)
                     image = Image.open(io.BytesIO(after)).convert('RGB')
                     panel = image.crop(box)
-                    paper = sum(max(abs(c-t) for c, t in zip(rgb, (242, 229, 204))) <= 14
+                    paper = sum(max(abs(c-t) for c, t in zip(rgb, (252, 249, 241))) <= 6
                                 for rgb in panel.getdata()) / (panel.width*panel.height)
                     assert difference > 7 and paper > .58, (stem, step['label'], 'Shared popup not visibly open', difference, paper, box)
                     # Inspect every actual wrapped row, not a whole-screen change

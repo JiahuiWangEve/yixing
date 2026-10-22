@@ -5,6 +5,7 @@ const E = preload("res://encounters.gd")
 const C2 = preload("res://chapter_two.gd")
 const R = preload("res://rules.gd")
 const T = preload("res://theme.gd")
+const Palette = preload("res://palette.gd")
 const ATTACKS = ["sword", "sword_plus", "spear", "spear_plus", "diagonal", "cannon", "cannon_shot", "pierce", "pursuit", "shock", "advance", "retreat_strike", "knight_assault", "chain_assault", "airdrop", "sweep", "blood_edge", "blood_break", "last_stand"]
 const CREDIT_RULE = "每个敌方回合最多移动一次；移动或战术留守消耗1次加速，多余加速顺延。定身、堵路、攻击留位保留加速；镇四方延迟加速2轮。移动不额外攻击。"
 const REVIVAL_RULE = "击倒后在原位留下残影，不挡路、不作炮架。经过2个完整玩家回合，原位空闲时满血复归；复归当轮不行动。敌将阵亡后取消。"
@@ -47,9 +48,9 @@ func bleed_status(enemy: Dictionary) -> Dictionary:
 func enemy_statuses(enemy: Dictionary) -> Array:
 	var statuses: Array = []
 	if enemy.kind == "stake": return statuses
-	if enemy.get("heavy", false): statuses.append({"key": "heavy", "glyph": "重", "line": "厚血：只增加血量，不改变走法。", "color": T.GOLD})
-	if enemy.get("unyielding", false): statuses.append({"key": "unyielding", "glyph": "复", "line": "不屈：击倒后经过2个完整玩家回合满血复归；原位被占则等待。", "color": T.GOLD})
-	if enemy.get("reinforcement", false): statuses.append({"key": "reinforcement", "glyph": "援", "line": "增援棋子：计入场上增援数量上限。", "color": T.GOLD})
+	if enemy.get("heavy", false): statuses.append({"key": "heavy", "glyph": "重", "line": "厚血：只增加血量，不改变走法。", "color": Palette.INK_SECONDARY})
+	if enemy.get("unyielding", false): statuses.append({"key": "unyielding", "glyph": "复", "line": "不屈：击倒后经过2个完整玩家回合满血复归；原位被占则等待。", "color": Palette.INK_SECONDARY})
+	if enemy.get("reinforcement", false): statuses.append({"key": "reinforcement", "glyph": "援", "line": "增援棋子：计入场上增援数量上限。", "color": Palette.INK_SECONDARY})
 	if enemy.kind == "q": statuses.append({"key": "quick", "glyph": "疾", "line": "急行：每轮移动。", "color": T.DANGER})
 	if enemy.get("signal", false): statuses.append({"key": "signal", "glyph": "旗", "line": "旗卒：" + E.RULE_TEXT.river_signal + (" 已触发。" if game.encounter_state.get("river_triggered", false) else " 尚未触发。"), "color": T.DANGER})
 	if enemy.get("march_mark", false): statuses.append({"key": "march", "glyph": "步", "line": "连步标记：" + E.RULE_TEXT.double_step + " 当前正常移动进度%d/2。" % (int(enemy.get("march_normal_moves", enemy.get("normal_moves", 0))) % 2), "color": T.DANGER})
@@ -73,7 +74,7 @@ func enemy_statuses(enemy: Dictionary) -> Array:
 func player_statuses() -> Array:
 	var result: Array = []
 	if game.shield_charges > 0: result.append({"key": "guard", "glyph": "盾", "color": T.SAFE, "line": "固守：剩余%d次抵挡实际受击，不掉命、不撤退；下个玩家回合开始失效，不能抵挡空投自损。" % game.shield_charges})
-	if game.reload_ready: result.append({"key": "reload", "glyph": "填", "color": T.GOLD, "line": "装填：本回合下次成功炮击伤害+1，若击杀则抽1张；无效目标不消耗，重复使用不叠加。"})
+	if game.reload_ready: result.append({"key": "reload", "glyph": "填", "color": Palette.INK_SECONDARY, "line": "装填：本回合下次成功炮击伤害+1，若击杀则抽1张；无效目标不消耗，重复使用不叠加。"})
 	if game.tuna_active or game.tuna_turns > 0: result.append({"key": "tuna", "glyph": "纳", "color": T.SAFE, "line": "吐纳：%s后续%d个玩家回合基础能量+1；再次使用延长3回合，不叠加增量。" % ["本回合已生效；" if game.tuna_active else "", game.tuna_turns]})
 	if game.airdrop_recovery_turn > 0: result.append({"key": "recovery", "glyph": "休", "color": T.DANGER, "line": "空投休整：%s不能移动或出牌，敌方与被动效果照常结算。" % ("本回合" if game.recovery_active() else "下一玩家回合")})
 	return result
@@ -93,8 +94,8 @@ func enemy_info(enemy: Dictionary) -> Dictionary:
 	return {"key": "enemy:%s" % enemy.get("uid", enemy.pos), "title": title, "lines": lines, "anchor": piece_rect(enemy.pos)}
 func player_info() -> Dictionary:
 	var lines: Array = ["生命 %d；能量 %d。" % [game.lives, game.energy], "本回合主动位移 %d次。" % game.active_displacements]
-	if game.player_skill == "king": lines.append("凯旋：战斗胜利回复1命，上限5；无奖励战斗也生效。")
-	if game.player_skill == "artillery": lines.append("攻击姿态：正交走1格，炮击1费2伤。" if game.artillery_mode == "attack" else "行军姿态：正交走1～2格，炮击2费1伤。")
+	if game.player_skill == "king": lines.append("凯旋：战斗胜利回复1命，%s；无奖励战斗也生效。" % ("无上限" if game.unlimited_lives() else "上限5"))
+	if game.player_skill == "artillery": lines.append("攻击姿态：正交走1格，炮击%d费2伤。" % game.card_cost("cannon_shot") if game.artillery_mode == "attack" else "行军姿态：正交走1～2格，炮击2费1伤。")
 	for status in player_statuses(): lines.append(status.line)
 	return {"key": "player", "title": "我方", "lines": lines, "anchor": piece_rect(game.player)}
 func mechanism_tags() -> Array:
@@ -209,6 +210,7 @@ func preview(index: int, target: Vector2i) -> Dictionary:
 	elif id == "chain_assault": amount = 1 + int(game.active_displacements)
 	elif id == "airdrop": amount = 3
 	elif id == "pierce": amount = 0
+	if id != "pierce": amount += game.treasures.preview_bonus(id)
 	var general_down = false
 	for enemy in game.enemies:
 		if enemy.kind != "g": continue
@@ -226,15 +228,17 @@ func preview(index: int, target: Vector2i) -> Dictionary:
 		var down = amount >= hp
 		affected.append({"uid": enemy.uid, "pos": enemy.pos, "damage": amount, "hp_before": hp, "hp_after": maxi(0, hp - amount), "down": down, "delayed": id == "pierce", "unyielding": enemy.get("unyielding", false)})
 		if id == "pierce": lines.append("流血预览：立即0伤；新增本回合末1伤、下回合末1伤。目标死亡则余下流血失效。")
-		else: lines.append("%s：%d伤 → %s%s。" % [game.piece_name(enemy.kind), amount, "击倒" if down else "剩余%d血" % (hp - amount), "（不屈，之后可复归）" if down and enemy.get("unyielding", false) and not general_down and not (id == "airdrop" and game.lives <= 1) else ""])
-	if id == "airdrop": lines.append("自身扣1命：%s；下一玩家回合停行动。" % ("生命归零，直接失败，优先于敌将击倒" if game.lives <= 1 else "剩余%d命" % (game.lives - 1)))
+		else: lines.append("%s：%d伤 → %s%s。" % [game.piece_name(enemy.kind), amount, "击倒" if down else "剩余%d血" % (hp - amount), "（不屈，之后可复归）" if down and enemy.get("unyielding", false) and not general_down and not (id == "airdrop" and game.self_cost_is_lethal(1)) else ""])
+	if id == "airdrop": lines.append("自身扣1命：%s；下一玩家回合停行动。" % ("生命归零，直接失败，优先于敌将击倒" if game.self_cost_is_lethal(1) else ("替命金符触发，保留1命" if game.lives <= 1 and game.treasures.rescue_ready() else "剩余%d命" % (game.lives - 1))))
+	if game.treasures.preview_bonus(id) > 0 and id != "pierce": lines.append("踏阵长缨：本张攻击全部目标伤害+2，已计入预览。")
+	if id == "cannon_shot" and game.treasures.cannon_discount() > 0: lines.append("镇关炮印：本次费用−1，实际%d能量。" % game.card_cost(id))
 	if id == "shock" and not affected.is_empty() and not affected[0].down:
 		var destination: Vector2i = target + Vector2i(signi(target.x - game.player.x), signi(target.y - game.player.y))
 		lines.append("目标推退1格。" if R.inside(destination) and R.occupied(destination, game.enemies) < 0 and destination != game.player else "目标后方受阻，不发生推退。")
 	if id in ["advance", "knight_assault"] and not affected.is_empty(): lines.append("击倒后进入目标格。" if affected[0].down else "未击倒，不发生位移。")
 	if id == "retreat_strike": lines.append("先后退1格，再造成伤害。")
 	if id == "pursuit" or (id == "cannon_shot" and game.reload_ready): lines.append("击杀则按实际牌堆抽1张；抽牌内容不预判。")
-	return {"card": id, "target": target, "affected": affected, "lines": lines, "self_damage": 1 if id == "airdrop" else 0, "self_defeat": id == "airdrop" and game.lives <= 1}
+	return {"card": id, "target": target, "affected": affected, "lines": lines, "self_damage": 1 if id == "airdrop" else 0, "self_defeat": id == "airdrop" and game.self_cost_is_lethal(1)}
 func current_preview(target: Vector2i) -> Dictionary:
 	var index = int(game.selected)
 	if game.gesture.dragging:
@@ -249,7 +253,7 @@ func draw_enemy_status(enemy: Dictionary, point: Vector2):
 	var font_size = maxi(10, int(13 * scale))
 	var text = str(E.effective_countdown(game, enemy))
 	var width = game.FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-	game.text_at(badge + Vector2(-width * 0.5, font_size * 0.36), text, font_size, T.LIGHT)
+	game.text_at(badge + Vector2(-width * 0.5, font_size * 0.36), text, font_size, Palette.WHITE)
 	var segments = hp_segments(enemy)
 	if not segments.is_empty():
 		var total = game.CELL * 0.78;var gap = minf(1.5, total / float(segments.size() * 5));var width_per = (total - gap * (segments.size() - 1)) / segments.size()
@@ -280,7 +284,7 @@ func _draw_statuses(statuses: Array, point: Vector2):
 		else: game.draw_circle(rect.get_center(), rect.size.y * 0.5, status.color)
 		var font_size = maxi(7, int(rect.size.y - 1))
 		var width = game.FONT.get_string_size(status.glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-		game.text_at(rect.get_center() + Vector2(-width * 0.5, font_size * 0.36), status.glyph, font_size, T.LIGHT)
+		game.text_at(rect.get_center() + Vector2(-width * 0.5, font_size * 0.36), status.glyph, font_size, Palette.WHITE)
 func draw_player_status(): _draw_statuses(player_statuses(), game.player_visual)
 func draw_signals():
 	for marker in markers():
@@ -332,7 +336,7 @@ func draw_preview(target: Vector2i):
 		var width = game.FONT.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 		var rect = Rect2(point + Vector2(-width * 0.5 - 3, -(size + 4) * 0.5), Vector2(width + 6, size + 4))
 		game.panel(rect, T.DANGER)
-		game.text_at(rect.position + Vector2(3, size + 1), label, size, T.LIGHT)
+		game.text_at(rect.position + Vector2(3, size + 1), label, size, Palette.WHITE)
 	if data.self_defeat:
 		var p: Vector2 = game.cell_pos(target)
 		game.text_at(p + Vector2(-24, -game.CELL * 0.52), "自损败局", 12, T.DANGER)

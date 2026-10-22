@@ -31,7 +31,7 @@ def crop(data, box):
 def panel_visible(before, after, box):
     a, b = crop(before, box), crop(after, box)
     diff = sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / 3
-    paper = sum(max(abs(c - t) for c, t in zip(rgb, (242, 229, 204))) <= 14 for rgb in b.getdata()) / max(1, b.width * b.height)
+    paper = sum(max(abs(c - t) for c, t in zip(rgb, (252, 249, 241))) <= 6 for rgb in b.getdata()) / max(1, b.width * b.height)
     assert diff > 7 and paper > .58, ('Inspection panel not visibly rendered', diff, paper, box)
     return {'difference': round(diff, 3), 'paper_fraction': round(paper, 3)}
 

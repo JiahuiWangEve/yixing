@@ -3,6 +3,7 @@ extends RefCounted
 const PROFILES = preload("res://start_profiles.gd")
 const UPGRADES = preload("res://card_upgrades.gd")
 const FREE_MOVE = preload("res://free_move_card.gd")
+const TREASURES = preload("res://treasure_system.gd")
 const GROUPS = [
 	{"id": "common", "label": "公共"}, {"id": "king", "label": "将"},
 	{"id": "horse", "label": "马"}, {"id": "artillery", "label": "炮车"},
@@ -31,4 +32,7 @@ static func entries_for(group_id: String, cards: Dictionary) -> Array:
 				var id = "__free_" + identity + ("_" + stance if identity == "artillery" else "")
 				result.append({"id": id, "data": FREE_MOVE.data_for(identity, stance),
 					"source": "免费生成 · 非普通奖励", "upgrade_id": ""})
+		for id in TREASURES.TEMPORARY:
+			result.append({"id": id, "data": TREASURES.TEMP_CARDS[id].duplicate(),
+				"source": "宝物生成 · 回合末消失 · 非普通奖励", "upgrade_id": ""})
 	return result

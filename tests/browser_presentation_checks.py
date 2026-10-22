@@ -77,7 +77,7 @@ async def main():
                             number=cursor;stamp,data=frames[cursor];cursor+=1
                             im=Image.open(io.BytesIO(data)).convert('RGB')
                             x,y=int(probe[0]*im.width/w),int(probe[1]*im.height/h);patch=im.crop((x-1,y-1,x+2,y+2));rgb=ImageStat.Stat(patch).mean
-                            label=next((label for label,target in [('old-card',(242,229,204)),('upgraded-card',(234,213,172))] if max(abs(rgb[i]-target[i]) for i in range(3))<8),None)
+                            label=next((label for label,target in [('old-card',(252,249,241)),('upgraded-card',(229,223,210))] if max(abs(rgb[i]-target[i]) for i in range(3))<8),None)
                             frame_info.append({'frame':number,'timestamp':stamp,'probe_rgb':rgb,'phase':label})
                             if label and (label not in selected or label == 'upgraded-card'):selected[label]=(number,stamp,data)
                             if 'upgraded-card' in selected and label is None:finished=True

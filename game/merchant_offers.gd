@@ -1,4 +1,5 @@
 extends RefCounted
+const Palette = preload("res://palette.gd")
 # Presentation only: the route owns fixed offers and the atomic exchange.
 var game
 var face
@@ -91,4 +92,4 @@ func draw():
 	game.rewardui._button(leave_rect(), "离开")
 	if scroll_limit() > 0:
 		var height = maxf(24, area().size.y * area().size.y / (area().size.y + scroll_limit()))
-		game.draw_rect(Rect2(area().end.x + 7, area().position.y + (area().size.y - height) * scroll_y / scroll_limit(), 3, height), game.GOLD)
+		game.draw_rect(Rect2(area().end.x + 7, area().position.y + (area().size.y - height) * scroll_y / scroll_limit(), 3, height), Palette.BORDER_STRONG)

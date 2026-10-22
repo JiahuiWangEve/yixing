@@ -117,7 +117,7 @@ func draw_pass_zone():
 	var state = pass_zone_state()
 	if not state.visible: return
 	var rect: Rect2 = game.pass_drop_rect()
-	var outline: Color = game.GOLD if state.highlighted else (game.RED if state.inside else game.THEME.BORDER)
+	var outline: Color = game.THEME.SAFE if state.highlighted else (game.RED if state.inside else game.THEME.BORDER)
 	game.panel(rect, game.THEME.PAPER_SELECTED if state.highlighted else game.THEME.BUTTON, outline)
 	if state.inside: game.draw_rect(rect.grow(-3), outline, false, 3)
 	var x = rect.position.x + 8
@@ -144,12 +144,12 @@ func draw():
 	var polygon = PackedVector2Array()
 	var size = game.handui.card_size()
 	for point in [Vector2.ZERO, Vector2(size.x, 0), size, Vector2(0, size.y), Vector2.ZERO]: polygon.append(t * point)
-	game.draw_polyline(polygon, game.GOLD if valid_target() else Color(0.6, 0.7, 0.7, 0.7), 2)
+	game.draw_polyline(polygon, game.THEME.SAFE if valid_target() else Color(game.THEME.INK, 0.7), 2)
 	if valid_target():
 		var p = target_cell()
 		if p.x >= 0:
 			var danger = game.target_danger(game.hand[index], p)
-			game.draw_arc(game.cell_pos(p), game.CELL * 0.42 + sin(game.tick * 8) * 2, 0, TAU, 32, game.RED if danger else game.GOLD, 3)
+			game.draw_arc(game.cell_pos(p), game.CELL * 0.42 + sin(game.tick * 8) * 2, 0, TAU, 32, game.RED if danger else game.THEME.SAFE, 3)
 
 	draw_pass_zone() # Keep drop instructions legible above the translucent dragged card.
 
@@ -162,9 +162,9 @@ func _draw_free():
 	game.freecard.draw_card(rect, 0.2 if over_board or game.pass_drop_rect().has_point(pointer) else 0.9)
 	var polygon = PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y), rect.position])
 	var legal = valid_target()
-	var color: Color = game.GOLD if legal else Color(0.6, 0.7, 0.7, 0.7)
+	var color: Color = game.THEME.SAFE if legal else Color(game.THEME.INK, 0.7)
 	game.draw_polyline(polygon, color, 2)
 	if legal:
 		var target = target_cell()
 		var danger: bool = game.R.threatened(target, game.enemies)
-		game.draw_arc(game.cell_pos(target), game.CELL * 0.42 + sin(game.tick * 8) * 2, 0, TAU, 32, game.RED if danger else game.GOLD, 3)
+		game.draw_arc(game.cell_pos(target), game.CELL * 0.42 + sin(game.tick * 8) * 2, 0, TAU, 32, game.RED if danger else game.THEME.SAFE, 3)

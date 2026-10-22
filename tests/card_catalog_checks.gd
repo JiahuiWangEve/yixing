@@ -3,6 +3,7 @@ extends SceneTree
 const PROFILES = preload("res://start_profiles.gd")
 const UPGRADES = preload("res://card_upgrades.gd")
 const FREE = preload("res://free_move_card.gd")
+const TREASURES = preload("res://treasure_system.gd")
 const OUT = "res://../verification/v0.14.13/catalog/"
 const SIZES = [Vector2(1280,940),Vector2(390,844),Vector2(360,640),Vector2(844,390)]
 const GROUPS = ["common","king","horse","artillery","special"]
@@ -38,7 +39,7 @@ func drag(start: Vector2, finish: Vector2, canceled: bool = false):
 	touch(finish,false,canceled)
 func expected_ids(group: String) -> Array:
 	var ids = []
-	if group == "special": return ["fatigue","__free_king","__free_horse","__free_artillery_march","__free_artillery_attack"]
+	if group == "special": return ["fatigue","__free_king","__free_horse","__free_artillery_march","__free_artillery_attack"] + TREASURES.TEMPORARY
 	var source: Array = PROFILES.COMMON if group == "common" else PROFILES.DATA[group].deck + PROFILES.DATA[group].rewards
 	for id in source:
 		if game.CARDS.has(id) and id not in ids and (group == "common" or id not in PROFILES.COMMON): ids.append(id)

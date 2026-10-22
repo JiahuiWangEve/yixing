@@ -72,7 +72,7 @@ def validate():
     return replays
 
 
-def border_color_count(data, box, target, thickness):
+def border_color_count(data, box, target, thickness, tolerance=25):
     """Measure the production zone's outline, not merely a moving card's center."""
     image = Image.open(io.BytesIO(data)).convert('RGB')
     x0, y0, x1, y1 = box
@@ -80,7 +80,7 @@ def border_color_count(data, box, target, thickness):
     for y in range(max(0, y0), min(image.height, y1)):
         for x in range(max(0, x0), min(image.width, x1)):
             if min(x - x0, x1 - 1 - x, y - y0, y1 - 1 - y) > thickness: continue
-            if max(abs(pixels[x, y][i] - target[i]) for i in range(3)) < 25: count += 1
+            if max(abs(pixels[x, y][i] - target[i]) for i in range(3)) < tolerance: count += 1
     return count
 
 
@@ -132,7 +132,7 @@ async def main(full=False, validate_only=False):
                     data = await screenshot(label, selected_or_held=True)
                     zx, zy, zw, zh = replay['zone']
                     box = tuple(round(v) for v in [ox+zx*scale, oy+zy*scale, ox+(zx+zw)*scale, oy+(zy+zh)*scale])
-                    count = border_color_count(data, box, (230,212,176), max(w,h))
+                    count = border_color_count(data, box, (252,249,241), max(w,h), tolerance=6)
                     assert count > (box[2]-box[0])*(box[3]-box[1])*.15, (stem,label,'shared discard zone is not visible',count)
                     overlays.append({'label':label,'button_fill_pixels':count})
                 async def resume():
@@ -155,7 +155,7 @@ async def main(full=False, validate_only=False):
                     zx, zy, zw, zh = replay['zone']
                     box = tuple(round(v) for v in [ox + zx * scale, oy + zy * scale,
                                                    ox + (zx + zw) * scale, oy + (zy + zh) * scale])
-                    target = (139, 91, 40) if action['highlight'] == 'allowed' else (187, 75, 53)
+                    target = (56, 105, 95) if action['highlight'] == 'allowed' else (166, 56, 45)
                     thickness = max(4, round(6 * scale))
                     before_count = border_color_count(unhovered, box, target, thickness)
                     held_count = border_color_count(held, box, target, thickness)

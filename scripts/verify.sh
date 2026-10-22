@@ -48,6 +48,9 @@ run space-shortcut --script "$root/tests/space_shortcut_checks.gd"
 run hand-shortcuts --script "$root/tests/hand_shortcut_checks.gd"
 run merchant-ui --script "$root/tests/merchant_ui_checks.gd"
 run card-catalog --script "$root/tests/card_catalog_checks.gd"
+run treasure-combat --script "$root/tests/treasure_combat_checks.gd"
+run treasure-route --script "$root/tests/treasure_route_checks.gd"
+run treasure-ui --script "$root/tests/treasure_ui_checks.gd"
 
 run seal-map --script "$root/tests/seal_map_checks.gd"
 

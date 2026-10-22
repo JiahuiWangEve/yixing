@@ -1,4 +1,5 @@
 extends RefCounted
+const Palette = preload("res://palette.gd")
 # Add future preferences here; home entry indices remain stable.
 const SETTINGS_OPTIONS = [{"id": "sound", "label": "声音"}]
 const LESSON_NAMES = ["移动与抽牌", "攻击与能量", "移动牌与留牌", "危险与行动顺序", "破将、奖励与换牌"]
@@ -117,12 +118,12 @@ func draw():
 	for i in entries().size():
 		var rect = button_rect(i)
 		var locked = game.screen == "skill_selection" and i in [1, 2] and not game.skill_system.is_unlocked("horse" if i == 1 else "artillery")
-		game.panel(rect, game.THEME.BOARD if locked else game.THEME.BUTTON, game.GOLD if i == 0 else game.THEME.BORDER)
+		game.panel(rect, Palette.HAND if locked else Palette.SURFACE, Palette.ACCENT if i == 0 else Palette.BORDER)
 		var profile_entry = game.screen in ["skill_selection", "debug_profile"] and i < 3
-		game.text_at(rect.position + Vector2(20, 26 if profile_entry else 35), entries()[i], 20, game.THEME.GRID if locked else game.THEME.INK)
+		game.text_at(rect.position + Vector2(20, 26 if profile_entry else 35), entries()[i], 20, Palette.INK_SECONDARY if locked else Palette.INK)
 		if profile_entry:
 			var summaries = ["2 命 · 凯旋：胜利回1命（上限5）", "1 命 · 马步与进退攻击 · 击杀切入", "1 命 · 行军走 1–2 格 · 展开抽 3 张"]
-			game.text_at(rect.position + Vector2(20, 47), summaries[i], 14, game.THEME.GRID if locked else game.THEME.SAFE)
+			game.text_at(rect.position + Vector2(20, 47), summaries[i], 14, Palette.INK_SECONDARY if locked else Palette.LEGAL)
 	if game.screen == "home":
 		game.text_at(button_rect(4).position + Vector2(0, button_rect(4).size.y + 24), "关闭：整局悔棋3次；开启：不限次，可跳关", 14, game.THEME.LIGHT)
 	if game.screen == "skill_selection":
@@ -137,4 +138,4 @@ func draw():
 		game.text_at(Vector2(help_x, help_y), "炮车：展开抽3张；攻击走1格，行军走1～2格", 14, game.THEME.LIGHT)
 		game.text_at(Vector2(help_x, help_y + 22), "炮击须隔恰好一子；木桩也可被敌炮利用", 14, game.THEME.LIGHT)
 
-	game.text_at(Vector2(game.ui_size.x - 112, game.ui_size.y - 16), "游戏 " + game.BUILD_VERSION, 12, game.THEME.LIGHT.darkened(0.28))
+	game.text_at(Vector2(game.ui_size.x - 112, game.ui_size.y - 16), "游戏 " + game.BUILD_VERSION, 12, Palette.INK_SECONDARY)

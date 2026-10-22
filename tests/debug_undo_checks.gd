@@ -71,6 +71,9 @@ func run():
 		if game.screen == "game":
 			ready_action();game.debug_skip();game.presentation.clear();game.choose_reward(-1)
 		elif game.screen == "route_choice": game.route.complete()
+		elif game.screen == "treasure_choice":
+			check(game.normal_undos_remaining == 0, "pending treasure does not replenish exhausted undo budget")
+			check(game.route.choose_treasure(game.TREASURES.ids_for(game.player_skill)[1]), "actual chapter flow explicitly claims mandatory treasure")
 		else: game.route.enter(game.route.legal()[0])
 	check(game.normal_undos_remaining == 0, "actual chapter transition does not replenish")
 	game.route.save()

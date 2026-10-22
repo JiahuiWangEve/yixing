@@ -1,5 +1,6 @@
 extends RefCounted
 # Shared read-only inspection. No gameplay transaction is performed here.
+const Palette = preload("res://palette.gd")
 const MOUSE_DELAY = 0.3
 const TOUCH_DELAY = 0.4
 const MOVE_LIMIT = 12.0
@@ -24,9 +25,11 @@ func allowed() -> bool:
 	if game.screen == "map": return game.route.travel_target < 0 and not game.route.deck_view
 	return game.screen == "game" and game.phase in ["play", "discard"] and game.input_lock <= 0 and game.navigation_lock <= 0 and not game.gesture.active
 func context_key() -> Array:
-	return [game.screen, game.phase, game.turn, game.selected, game.free_selected, game.route.state.get("pending", -1), game.route.scroll_y, game.enemies.size(), game.ui_size, game.route.page]
+	return [game.screen, game.phase, game.turn, game.selected, game.free_selected, game.route.state.get("pending", -1), game.route.scroll_y, game.enemies.size(), game.ui_size, game.route.page, game.treasureui.inspection_context()]
 func lookup(pos: Vector2) -> Dictionary:
 	if not allowed(): return {}
+	var treasure = game.treasureui.inspect_at(pos)
+	if not treasure.is_empty(): return treasure
 	if game.screen == "map": return game.route.inspect_at(pos)
 	return game.inspect_information(pos)
 func clear():
@@ -103,10 +106,14 @@ func input_event(event) -> bool:
 			position = event.position
 			if data.has("node_id"):
 				if position.distance_to(start) >= MOVE_LIMIT or lookup(position).get("key") != data.get("key"): dismiss_map_drag()
+			elif data.has("treasure_id") and (position.distance_to(start) >= MOVE_LIMIT or lookup(position).get("key") != data.get("key")):
+				if consumed_hold:
+					visible = false;touch_moved = true;game.touch_dragged = true;game.route.pointer_dragged = true;game.queue_redraw()
+				else: clear()
 			elif position.distance_to(start) >= MOVE_LIMIT:
 				# Preserve the board's existing long-hold release capture.
 				if consumed_hold:
-					visible = false;game.touch_dragged = true;game.route.pointer_dragged = true;game.queue_redraw()
+					visible = false;touch_moved = true;game.touch_dragged = true;game.route.pointer_dragged = true;game.queue_redraw()
 				else: clear()
 		return false
 	if event is InputEventMouse:
@@ -145,7 +152,8 @@ func layout():
 	area = Rect2(x, y, width, height)
 func draw():
 	if not visible: return
-	var ink = game.route.INK if game.screen == "map" else game.THEME.INK
-	game.panel(area, game.route.PAPER_LIGHT if game.screen == "map" else game.THEME.PAPER, game.route.MUTED if game.screen == "map" else game.GOLD)
+	var ink = Palette.INK
+	game.panel(Rect2(area.position + Vector2(2, 3), area.size), Color(Palette.INK, 0.14))
+	game.panel(area, Palette.SURFACE, Palette.BORDER_STRONG)
 	game.text_at(area.position + Vector2(14, 27), data.get("title", ""), 20, ink)
 	for i in rows.size(): game.text_at(area.position + Vector2(14, 50 + i * (font_size + 4)), rows[i], font_size, ink)

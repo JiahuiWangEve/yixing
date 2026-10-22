@@ -131,7 +131,9 @@ func check_transition():
 		game.choose_reward(0);game.delete_reward(0)
 		check(game.collection == deck and route.chapter() == 1, "suppressed reward cannot grant a card or prematurely advance")
 		game.choose_reward(-1)
-		check(game.screen == "map" and route.chapter() == 2 and not route.state.done, "reward resolution opens a fresh second map")
+		check(game.screen == "treasure_choice" and route.chapter() == 1 and route.state.treasure_choices == game.TREASURES.ids_for(identity), "boss reward resolution waits for the mandatory role treasure")
+		check(route.choose_treasure(game.TREASURES.ids_for(identity)[1]), "one role treasure advances the chapter")
+		check(game.screen == "map" and route.chapter() == 2 and not route.state.done, "treasure claim opens a fresh second map")
 		check(route.state.current == -1 and route.state.pending == -1 and route.state.visited.is_empty() and route.legal() == [0], "chapter boundary clears old progress and seals")
 		check(route.state.seed != first_map_seed and route.state.run_seed == run_seed and game.seed_value == run_seed, "chapter boundary changes map seed without changing run seed")
 		check(game.collection == deck and game.lives == victory_lives and game.player_skill == identity, "chapter boundary preserves exact cards, fatigue, character and one-time victory health without extra healing")
@@ -157,6 +159,8 @@ func check_pending_carry():
 	game.collection = ["sword_plus", "fatigue", "spear_plus"]
 	game.lives = 1
 	game.choose_reward(-1)
+	check(game.screen == "treasure_choice" and route.chapter() == 1, "pending effects wait through the mandatory treasure choice")
+	check(route.choose_treasure("life_talisman"), "claim treasure before testing carried effects")
 	check(route.chapter() == 2 and route.state.prepared and route.state.reward_debt == 1 and route.state.pending_homework == ["spear_plus"], "all still-pending expedition effects cross the boundary")
 	check(route.resume() and route.state.prepared and route.state.pending_homework == ["spear_plus"], "carried preparation and exact homework survive save")
 	var deck = game.collection.duplicate()

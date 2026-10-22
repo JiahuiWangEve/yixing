@@ -77,9 +77,9 @@ async def main(smoke=False):
                     await tap((old[0]+old[2]/2, old[1]+old[3]/2))
                     assert await prefs() == before, (label, 'former sound hitbox changed preferences')
                     picture = Image.open(io.BytesIO(await shot(label))).convert('RGB').crop(box(old))
-                    # The removed button had a large, flat #e6d4b0 fill. Check its
+                    # A button would have the current flat paper surface. Check its
                     # absence as well as the now-inert old click coordinates.
-                    count = sum(1 for rgb in picture.getdata() if sum(abs(a-b) for a, b in zip(rgb, (230, 212, 176))) < 12)
+                    count = sum(1 for rgb in picture.getdata() if max(abs(a-b) for a, b in zip(rgb, (252, 249, 241))) <= 6)
                     assert count / (picture.width*picture.height) < .10, (label, 'old button fill remains')
                     assertions.append(label + ': former sound control absent and cannot toggle')
 

@@ -1,16 +1,20 @@
 extends Control
-const BUILD_VERSION = "v0.14.13"
+const BUILD_VERSION = "v0.15.0"
 const PASS_CARD_COST = 3
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
 var autosave_elapsed = 0.0
 const PROFILES = preload("res://start_profiles.gd")
 const THEME = preload("res://theme.gd")
+const Palette = preload("res://palette.gd")
 const FAN = preload("res://fan_hand.gd")
 const GESTURE = preload("res://card_input.gd")
 const SKILLS = preload("res://player_skills.gd")
 const FREE_MOVE = preload("res://free_move_card.gd")
 const HISTORY = preload("res://undo_history.gd")
+const TREASURES = preload("res://treasure_system.gd")
+var treasure_battle: Dictionary = {}
+var treasures = TREASURES.new(self)
 const UNTARGETED = ["sweep", "life", "breath", "deploy", "pack", "tuna", "suppress", "guard", "reload", "fatigue", "blood_break"]
 # One use per physical copy per stage; discarded unused copies still recycle.
 const CONSUMABLES = ["life", "breath", "deploy", "tuna", "guard", "permanent_stake", "airdrop", "blood_break"]
@@ -43,6 +47,7 @@ var normal_undos_remaining = NORMAL_UNDO_LIMIT
 var rewardui = REWARD_UI.new(self)
 var card_picker = preload("res://card_picker.gd").new(self)
 var information = preload("res://information_popup.gd").new(self)
+var treasureui = preload("res://treasure_ui.gd").new(self)
 var presentation = preload("res://presentation.gd").new(self)
 var board_info = preload("res://board_info.gd").new(self)
 var player_skill = "king"
@@ -155,6 +160,7 @@ func cancel_gesture():
 	if information != null: information.clear()
 	if gesture != null: gesture.cancel()
 	if route != null: route.cancel_pointer()
+	if treasureui != null: treasureui.cancel_pointer()
 	active_touch = -1;touch_dragged = true
 func can_undo_action() -> bool:
 	return screen == "game" and not tutorial.active and input_lock <= 0 and navigation_lock <= 0 and not presentation.active() and not card_picker.active and not encounter_info_open and (settings.debug_mode or normal_undos_remaining > 0)
@@ -184,7 +190,9 @@ func pass_card(index: int, free: bool = false) -> bool:
 	else:
 		sync_hand_ids()
 		var id: String = hand[index]
-		discard.append(hand.pop_at(index));hand_ids.remove_at(index)
+		var removed: String = hand.pop_at(index)
+		if removed not in TREASURES.TEMPORARY: discard.append(removed)
+		hand_ids.remove_at(index)
 		log_line("过牌「%s」" % CARDS[id][0])
 	selected = -1;free_selected = false;handui.sync()
 	notice = "已过牌，不触发效果，抽1张牌。"
@@ -257,6 +265,8 @@ const CARDS = {
 	"sword": ["短剑", 1, "对正交相邻敌子造成1点伤害", "攻"],
 	"diagonal": ["斜斩", 1, "对斜角相邻敌子造成1点伤害", "攻"],
 	"spear": ["长枪", 2, "直线两格内造成1点伤害，不穿透", "攻"],
+	"treasure_king_step": TREASURES.TEMP_CARDS.treasure_king_step,
+	"treasure_transfer": TREASURES.TEMP_CARDS.treasure_transfer,
 	"horse": ["踏马", 1, "按马步移动，遵守蹩马腿；抽1张", "移"],
 	"cannon": ["投石", 2, "直线隔恰好一子，造成1点伤害", "攻"],
 	"sweep": ["横扫", 2, "对自身周围3×3内所有敌子各造成1点伤害", "攻"],
@@ -353,7 +363,21 @@ func in_neighbor_square(p: Vector2i) -> bool:
 	var d = p - player
 	return d != Vector2i.ZERO and absi(d.x) <= 1 and absi(d.y) <= 1
 func record_active_displacement(origin: Vector2i):
-	if player != origin: active_displacements += 1
+	if player != origin:
+		active_displacements += 1
+		treasures.on_displacement()
+func unlimited_lives() -> bool: return treasures.has("longevity_seal")
+func life_limit() -> int: return -1 if unlimited_lives() else 5
+func can_heal() -> bool: return unlimited_lives() or lives < life_limit()
+func heal_lives(amount: int) -> int:
+	var before = lives
+	if amount > 0: lives = lives + amount if unlimited_lives() else mini(life_limit(), lives + amount)
+	return lives - before
+func lose_lives(amount: int):
+	lives -= maxi(0, amount)
+	if lives <= 0: treasures.rescue()
+func self_cost_is_lethal(amount: int) -> bool:
+	return amount > 0 and lives <= amount and not treasures.rescue_ready()
 func recovery_active() -> bool: return airdrop_recovery_turn > 0 and turn == airdrop_recovery_turn
 func clear_battle_card_effects():
 	airdrop_recovery_turn = 0
@@ -383,6 +407,7 @@ func resolve_bleeds():
 func damage_enemy(idx: int, impact_delay: float = 0.12, amount: int = 1, before_player_input: bool = false) -> bool:
 	if idx < 0 or idx >= enemies.size() or enemies[idx].kind == "stake": return false
 	var e = enemies[idx]
+	amount += treasures.damage_bonus()
 	e.hp = e.get("hp", enemy_health(e.kind)) - amount
 	if amount > 0: ENCOUNTERS.on_general_damage(self, e)
 	effect("hit", cell_pos(e.pos), cell_pos(e.pos), 0.24, impact_delay, {"piece": e})
@@ -391,6 +416,7 @@ func damage_enemy(idx: int, impact_delay: float = 0.12, amount: int = 1, before_
 		enemies.remove_at(idx)
 		pending_bleeds = pending_bleeds.filter(func(bleed): return bleed.enemy_uid != e.uid)
 		ENCOUNTERS.on_enemy_defeated(self, e, before_player_input)
+		treasures.on_enemy_defeated(e)
 		return true
 	return false
 
@@ -442,7 +468,7 @@ func home_rect() -> Rect2:
 	if mobile_layout: return Rect2(12, 12, 84, 46)
 	return Rect2(25, 20, 110, 40)
 func show_home():
-	if route.active() and screen in ["game", "map", "route_choice"]: route.save()
+	if route.active() and screen in ["game", "map", "route_choice", "treasure_choice"]: route.save()
 	rewardui.reset()
 	history.clear();cancel_gesture()
 	if tutorial.active: tutorial_resume_lesson = tutorial.lesson_index
@@ -471,7 +497,7 @@ func roll_rewards():
 		return
 	rewards = PROFILES.draw_rewards(player_skill, rng)
 	shuffle(rewards)
-func is_consumable(id: String) -> bool: return id in CONSUMABLES
+func is_consumable(id: String) -> bool: return id in CONSUMABLES or id in TREASURES.TEMPORARY
 func tutorial_allows(action: String, data: Dictionary = {}) -> bool:
 	return not tutorial.active or tutorial.allows(action, data)
 func tutorial_after(action: String, data: Dictionary = {}):
@@ -509,7 +535,9 @@ func discard_hand(index: int):
 	if screen != "game" or phase != "discard" or index < 0 or index >= hand.size(): return
 	if not tutorial_allows("discard", {"index": index}): return
 	history.record("discard");sync_hand_ids()
-	discard.append(hand.pop_at(index));hand_ids.remove_at(index);handui.sync();phase = "discard" if hand.size() > 6 else "play";selected = -1
+	var removed: String = hand.pop_at(index)
+	if removed not in TREASURES.TEMPORARY: discard.append(removed)
+	hand_ids.remove_at(index);handui.sync();phase = "discard" if hand.size() > 6 else "play";selected = -1
 	input_lock = maxf(input_lock, 0.18)
 	hand_page = mini(hand_page, maxi(0, (hand.size() - 1) / 2));hand_drawer = false;notice = "仍超出手牌上限，请继续弃置。" if phase == "discard" else "已弃置，继续行动。"
 	tutorial_after("discard", {"index": index})
@@ -565,6 +593,7 @@ func start_stage():
 	hand = [];handui.reset();discard = [];deck = collection.duplicate();shuffle(deck)
 	CAMPAIGN.setup(self)
 	plan_intents()
+	treasures.reset_battle()
 	phase = "play";initial_threat = 2.0;notice = "向前一步，抽取你的第一张牌。"
 	log_line("第%d关 · %s" % [stage, ENCOUNTERS.title(encounter_state.config) if ENCOUNTERS.active(self) else CAMPAIGN.stage_name(stage)])
 	board_info.begin_battle()
@@ -578,6 +607,7 @@ func _process(delta):
 	if card_picker.active and not card_picker.valid_context(): card_picker.close()
 	update_window_layout()
 	route.tick(delta)
+	treasureui.tick(delta)
 	information.tick(delta)
 	tick += delta
 	if input_lock <= 0: initial_threat = maxf(0, initial_threat - delta)
@@ -642,26 +672,31 @@ func basic_legal(p: Vector2i) -> bool:
 	var leg = player + Vector2i(signi(d.x) if absi(d.x) == 2 else 0, signi(d.y) if absi(d.y) == 2 else 0)
 	return R.occupied(leg, enemies) < 0
 func card_cost(id: String) -> int:
-	return 1 if id == "cannon_shot" and artillery_mode == "attack" else int(CARDS[id][1])
+	var cost = 1 if id == "cannon_shot" and artillery_mode == "attack" else int(CARDS[id][1])
+	return maxi(0, cost - treasures.cannon_discount()) if id == "cannon_shot" else cost
 func card_data(id: String) -> Array:
 	var data: Array = CARDS[id].duplicate()
 	data[1] = card_cost(id)
+	if id == "life" and unlimited_lives():
+		data[2] = str(data[2]).replace("上限5", "无上限")
+		data[4] = str(data[4]).replace("上限5", "无上限")
 	if id == "airdrop" and lives <= 1:
-		data[2] = "仅剩1命：使用后直接失败；空格落地，周围3×3各3伤；消耗"
+		data[2] = ("仅剩1命：替命金符保留1命；" if treasures.rescue_ready() else "仅剩1命：使用后直接失败；") + "空格落地，周围3×3各3伤；消耗"
 	if id == "last_stand": data[2] = "正交邻敌：当前%d伤（仅1命时3伤）" % KING_BLOOD.amount(self, id)
-	if id in ["blood_edge", "blood_break"] and lives <= 1: data[2] = "仅剩1命：使用后直接失败。" + str(data[2])
+	if id in ["blood_edge", "blood_break"] and lives <= 1: data[2] = ("仅剩1命：替命金符保留1命。" if treasures.rescue_ready() else "仅剩1命：使用后直接失败。") + str(data[2])
 	if id == "cannon_shot":
 		var amount = (2 if artillery_mode == "attack" else 1) + (1 if reload_ready else 0)
 		data[2] = "%s：%d费%d伤；直线隔恰好一子%s" % ["攻击姿态" if artillery_mode == "attack" else "行军姿态", data[1], amount, "；装填击杀抽1张" if reload_ready else ""]
 	if id == "chain_assault":
 		data[2] = "周围3×3选一个敌子；当前%d伤（1+已主动位移%d次）" % [1 + active_displacements, active_displacements]
 		data[4] = "当前%d伤（1+主动位移%d次）。周围3×3选一个敌子。免费、移动牌与攻击附带的成功位移，每次行动计1次；受击转移、失败与切姿态不计。" % [1 + active_displacements, active_displacements]
+	if treasures.preview_bonus(id) > 0: data[2] = "踏阵长缨：本张攻击伤害+2。" + str(data[2])
 	return data
 func target_danger(id: String, p: Vector2i) -> bool:
-	if id in KING_BLOOD.IDS: return KING_BLOOD.self_cost(id) > 0 and lives <= KING_BLOOD.self_cost(id)
+	if id in KING_BLOOD.IDS: return self_cost_is_lethal(KING_BLOOD.self_cost(id))
 	if id == "airdrop":
 		var survivors = enemies.filter(func(enemy): return enemy.kind == "stake" or int(enemy.hp) > 3 or absi(enemy.pos.x - p.x) > 1 or absi(enemy.pos.y - p.y) > 1)
-		return lives <= 1 or R.threatened(p, survivors)
+		return self_cost_is_lethal(1) or R.threatened(p, survivors)
 	if id in ["stake", "permanent_stake"]: return placement_danger(p)
 	if id in ["advance", "retreat_strike", "knight_assault"]: return TACTICS.attack_danger(self, id, p)
 	return CARDS[id][3] == "移" and movement_danger(id, p)
@@ -669,8 +704,8 @@ func can_commit_card(index: int, p: Vector2i) -> bool:
 	if recovery_active(): return false
 	if phase != "play" or index < 0 or index >= hand.size(): return false
 	var id: String = hand[index]
-	if energy < card_cost(id) or (CARDS[id][3] == "移" and card_move_used): return false
-	if id == "life": return lives < 5
+	if energy < card_cost(id) or (CARDS[id][3] == "移" and id not in TREASURES.TEMPORARY and card_move_used): return false
+	if id == "life": return can_heal()
 	if id == "breath": return true
 	if id == "sweep":
 		for e in enemies:
@@ -688,6 +723,7 @@ func card_legal(id: String, p: Vector2i) -> bool:
 	var idx = R.occupied(p, enemies)
 	if idx >= 0 and enemies[idx].kind == "stake": return false
 	match id:
+		"treasure_king_step", "treasure_transfer": return idx < 0 and dist == 1
 		"airdrop": return player_skill == "king" and idx < 0 and p != player
 		"fatigue": return true
 		"deploy": return player_skill == "artillery" and artillery_mode == "march"
@@ -718,6 +754,7 @@ func draw_card():
 func hand_rect(i: int) -> Rect2: return hand_visual_rect(i)
 func inspect_information(pos: Vector2) -> Dictionary: return board_info.inspect_at(pos)
 func _gui_input(event):
+	if treasureui.input_event(event): return
 	if information.input_event(event): return
 	if presentation.input_event(event): return
 	if card_picker.input_event(event): return
@@ -739,6 +776,7 @@ func _gui_input(event):
 			handle_click(event.position)
 		else: gesture.release(event.position)
 func handle_click(pos: Vector2):
+	if screen == "treasure_choice": return
 	if presentation.active(): return
 	if card_picker.active: card_picker.tap(pos);return
 	if encounter_info_open:
@@ -778,6 +816,7 @@ func handle_click(pos: Vector2):
 
 func _input(event):
 	if event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventKey:
+		if treasureui.input_event(event): get_viewport().set_input_as_handled();return
 		if information.input_event(event): get_viewport().set_input_as_handled();return
 	if screen == "settings" and event is InputEventKey:
 		if event.pressed and not event.echo and event.keycode == KEY_ESCAPE: show_home()
@@ -832,9 +871,9 @@ func play_card(i: int, p: Vector2i):
 	var id = hand[i]
 	if not tutorial_allows("play", {"index": i, "target": p, "card": id}): return
 	if energy < card_cost(id): notice = "能量不足。";return
-	if CARDS[id][3] == "移" and card_move_used: notice = "本回合已使用移动牌。";return
+	if CARDS[id][3] == "移" and id not in TREASURES.TEMPORARY and card_move_used: notice = "本回合已使用移动牌。";return
 	if id not in ["sweep", "life", "breath"] and not card_legal(id, p): notice = "当前姿态或目标无法使用此牌。";return
-	if id == "life" and lives >= 5: notice = "生命已满，保留此牌。";return
+	if id == "life" and not can_heal(): notice = "生命已满，保留此牌。";return
 	if id == "sweep":
 		var found = false
 		for e in enemies:
@@ -846,15 +885,16 @@ func play_card(i: int, p: Vector2i):
 	energy -= card_cost(id);hand.remove_at(i);selected = -1;handui.sync()
 	if not is_consumable(id): discard.append(id)
 	log_line("使用「%s」" % CARDS[id][0])
+	treasures.begin_card(id)
 	var idx = R.occupied(p, enemies)
-	if id in KING_BLOOD.IDS and KING_BLOOD.apply(self, id, p): return
+	if id in KING_BLOOD.IDS and KING_BLOOD.apply(self, id, p): treasures.end_card();return
 	if id in TACTICS.IDS: TACTICS.apply(self, id, p, idx)
 	match id:
 		"airdrop":
 			var origin = player
 			move_piece({}, cell_pos(origin), cell_pos(p), 0.0, true)
 			player = p;record_active_displacement(origin)
-			lives -= 1;airdrop_recovery_turn = turn + 1
+			lose_lives(1);airdrop_recovery_turn = turn + 1
 			for j in range(enemies.size() - 1, -1, -1):
 				if enemies[j].kind != "stake" and absi(enemies[j].pos.x - p.x) <= 1 and absi(enemies[j].pos.y - p.y) <= 1:
 					effect("sword", cell_pos(p), cell_pos(enemies[j].pos), 0.3, 0.28)
@@ -862,7 +902,7 @@ func play_card(i: int, p: Vector2i):
 			if lives <= 0:
 				phase = "dead";clear_battle_card_effects();ENCOUNTERS.cancel_pending(self)
 				notice = "空投自损，命数耗尽。";log_line(notice)
-				return # Self-cost defeat takes precedence over any simultaneous general kill.
+				treasures.end_card();return # Self-cost defeat takes precedence over any simultaneous general kill.
 			notice = "空投完成：扣1命，下一回合不能移动或出牌。"
 		"fatigue": notice = "疲惫已弃置；已扣能量不返还。"
 		"sword", "spear", "sword_plus", "spear_plus", "cannon", "diagonal", "cannon_shot":
@@ -872,16 +912,18 @@ func play_card(i: int, p: Vector2i):
 			var amount = (2 if id.ends_with("_plus") or (id == "cannon_shot" and artillery_mode == "attack") else 1) + (1 if loaded else 0)
 			if loaded: reload_ready = false
 			var killed = damage_enemy(idx, 0.3 if animation == "cannon" else 0.12, amount)
-			if loaded and killed: draw_card()
+			if loaded and killed and general_alive() and lives > 0: draw_card()
 		"deploy":
-			artillery_mode = "attack"
+			var previous_mode = artillery_mode
+			artillery_mode = "attack";treasures.on_stance_change(previous_mode, artillery_mode)
 			if free_card_uid > 0: refresh_free_card()
 			if not deploy_draw_used:
 				deploy_draw_used = true
 				for draw in 3: draw_card()
 			log_line("展开为攻击姿态。")
 		"pack":
-			artillery_mode = "march"
+			var previous_mode = artillery_mode
+			artillery_mode = "march";treasures.on_stance_change(previous_mode, artillery_mode)
 			if free_card_uid > 0: refresh_free_card()
 			log_line("转进行军，免费移动额度不变。")
 		"tuna":
@@ -892,6 +934,10 @@ func play_card(i: int, p: Vector2i):
 			var origin = player
 			move_piece({}, cell_pos(player), cell_pos(p), 0, id == "horse")
 			player = p;record_active_displacement(origin);card_move_used = true;draw_card()
+		"treasure_king_step", "treasure_transfer":
+			var origin = player
+			move_piece({}, cell_pos(player), cell_pos(p))
+			player = p;record_active_displacement(origin)
 		"suppress":
 			draw_card()
 			for enemy in enemies:
@@ -902,22 +948,25 @@ func play_card(i: int, p: Vector2i):
 			shield_charges = 1
 			effect("guard", cell_pos(player), cell_pos(player), 0.35)
 		"reload": reload_ready = true
-		"life": lives += 1;effect("life", cell_pos(player), cell_pos(player), 0.4)
+		"life": heal_lives(1);effect("life", cell_pos(player), cell_pos(player), 0.4)
 		"sweep":
 			for j in range(enemies.size() - 1, -1, -1):
 				if enemies[j].kind != "stake" and in_neighbor_square(enemies[j].pos):
 					effect("sword", cell_pos(player), cell_pos(enemies[j].pos), 0.3)
 					damage_enemy(j)
+	treasures.end_card()
 	if not general_alive(): settle_victory()
 	tutorial_after("play", {"index": i, "target": p, "card": id})
 func settle_victory():
 	if lives <= 0: return
-	if screen != "game" or phase not in ["play", "discard"]: return
+	if screen != "game" or phase not in ["play", "discard"] or treasure_battle.get("victory_settled", false): return
+	treasure_battle.victory_settled = true
+	treasures.end_turn()
 	cancel_gesture();clear_effects();rewardui.reset();clear_battle_card_effects()
 	ENCOUNTERS.cancel_pending(self)
 	if player_skill == "king" and not tutorial.active and (not route.active() or not route.state.get("victory_recorded", false)):
 		var previous_lives = lives
-		lives = mini(5, lives + 1)
+		heal_lives(1)
 		if lives > previous_lives: log_line("凯旋：胜利回复1命。")
 	if route.active():
 		history.clear()
@@ -948,7 +997,7 @@ func plan_intents():
 	for e in enemies: e.intent = Vector2i(-1, -1)
 func end_turn():
 	if screen != "game" or phase != "play" or not tutorial_allows("end_turn"): return
-	history.record("end_turn");cancel_gesture()
+	history.record("end_turn");cancel_gesture();treasures.end_turn()
 	if recovery_active(): log_line("空投休整：跳过本回合行动，敌方正常行动。")
 	selected = -1;free_selected = false;reload_ready = false
 	input_lock = 0.3
@@ -968,7 +1017,7 @@ func end_turn():
 				continue
 			effect("player_hit", cell_pos(e.pos), cell_pos(player), 0.26)
 			timeline = 0.26
-			lives -= 1;hit = true;attacker = e;log_line("被%s击中，失去一命。" % piece_name(e.kind))
+			lose_lives(1);hit = true;attacker = e;log_line("被%s击中，失去一命。" % piece_name(e.kind))
 			if lives <= 0: phase = "dead";clear_battle_card_effects();ENCOUNTERS.cancel_pending(self);notice = "命数耗尽。";return
 			var safe = R.safe_recoil(player, enemies)
 			if safe.is_empty(): phase = "dead";clear_battle_card_effects();ENCOUNTERS.cancel_pending(self);notice = "无安全位置可撤退。";return
@@ -1035,6 +1084,7 @@ func end_turn():
 	turn += 1;history.trim()
 	if airdrop_recovery_turn > 0 and turn > airdrop_recovery_turn: airdrop_recovery_turn = 0
 	shield_charges = 0;active_displacements = 0
+	treasures.start_turn()
 	plan_intents()
 	tuna_active = tuna_turns > 0
 	if tuna_active: tuna_turns -= 1
@@ -1089,14 +1139,15 @@ func context_hint() -> String:
 	if R.threatened(player, enemies): return "将军！结束回合前解除威胁。"
 	if free_selected: return "选择免费移动落点，或再次点牌取消。"
 	if player_skill == "artillery" and selected < 0:
-		return "攻击姿态：正交走1格；炮击1费2伤；转进牌切回行军。" if artillery_mode == "attack" else "行军姿态：正交走1～2格；展开抽3张（每回合首次）。"
+		return "攻击姿态：正交走1格；炮击%d费2伤；转进牌切回行军。" % card_cost("cannon_shot") if artillery_mode == "attack" else "行军姿态：正交走1～2格；展开抽3张（每回合首次）。"
 	if selected >= 0: return "点击高亮目标；再点选中牌取消。" if mobile_layout else "选择高亮目标；右键 / Esc 取消。"
 	if notice in ["能量不足。", "本回合已使用移动牌。", "牌库与弃牌堆已空。"]: return notice
 	return ""
 func _draw():
+	if screen == "treasure_choice": treasureui.draw();return
 	if card_picker.active: card_picker.draw();return
 	if screen in ["map", "route_choice"]:
-		route.draw();information.draw();presentation.draw();return
+		route.draw();treasureui.draw();information.draw();presentation.draw();return
 	if screen != "game":
 		frontend.draw()
 		return
@@ -1118,7 +1169,7 @@ func _draw():
 	for x in 9: draw_line(cell_pos(Vector2i(x, 0)), cell_pos(Vector2i(x, 9)), THEME.GRID, 1.5 if mobile_layout else 1.0, true)
 	for y in 10: draw_line(cell_pos(Vector2i(0, y)), cell_pos(Vector2i(8, y)), THEME.GRID, 1.5 if mobile_layout else 1.0, true)
 	draw_rect(Rect2(O + Vector2(-3, 4.15 * CELL), Vector2(8 * CELL + 6, 0.7 * CELL)), THEME.BOARD)
-	text_at(O + Vector2(CELL * 1.1, 4.63 * CELL), "楚 河", 22, GOLD);text_at(O + Vector2(CELL * 5.3, 4.63 * CELL), "汉 界", 22, GOLD)
+	text_at(O + Vector2(CELL * 1.1, 4.63 * CELL), "楚 河", 22, Palette.GRID);text_at(O + Vector2(CELL * 5.3, 4.63 * CELL), "汉 界", 22, Palette.GRID)
 	for top in [0, 7]:
 		draw_line(cell_pos(Vector2i(3, top)), cell_pos(Vector2i(5, top + 2)), THEME.GRID)
 		draw_line(cell_pos(Vector2i(5, top)), cell_pos(Vector2i(3, top + 2)), THEME.GRID)
@@ -1128,19 +1179,20 @@ func _draw():
 			var inspected = R.occupied(hover, enemies)
 			var visible_threat = (show_threat or initial_threat > 0) and R.threatened(p, enemies)
 			if inspected >= 0 and R.attacks(enemies[inspected], p, enemies): visible_threat = true
-			if visible_threat and input_lock <= 0: draw_circle(v, 13, Color(THEME.DANGER, 0.24))
+			if visible_threat and input_lock <= 0:
+				draw_circle(v, 13, Color(THEME.DANGER, 0.14));draw_arc(v, 13, 0, TAU, 24, THEME.DANGER, 1.5)
 			if input_lock <= 0 and free_selected and basic_legal(p) and ( not tutorial.active or tutorial.is_free_practice() or p in tutorial.target_cells()):
-				draw_circle(v, 19, Color(THEME.DANGER, 0.27) if R.threatened(p, enemies) else Color(THEME.SAFE, 0.25))
+				draw_arc(v, 19, 0, TAU, 28, THEME.DANGER if R.threatened(p, enemies) else THEME.SAFE, 2.5)
 			if input_lock <= 0 and selected >= 0 and hand[selected] not in UNTARGETED and card_legal(hand[selected], p) and ( not tutorial.active or tutorial.is_free_practice() or p in tutorial.target_cells()):
 				var danger = target_danger(hand[selected], p)
-				draw_circle(v, 19, Color(THEME.DANGER, 0.27) if danger else Color(THEME.SAFE, 0.25));draw_arc(v, 20, 0, TAU, 24, RED if danger else GOLD, 2)
+				draw_arc(v, 20, 0, TAU, 28, THEME.DANGER if danger else THEME.SAFE, 2.5)
 	if tutorial.active and input_lock <= 0:
 		for cell in tutorial.target_cells():
-			draw_arc(cell_pos(cell), 25, 0, TAU, 32, GOLD, 3)
+			draw_arc(cell_pos(cell), 25, 0, TAU, 32, Palette.LEGAL, 3)
 	if input_lock <= 0 and selected < 0 and basic_legal(hover) and phase == "play" and ( not tutorial.active or tutorial.is_free_practice()):
 		var target = cell_pos(hover); var start = cell_pos(player); var dir = (target - start).normalized()
 		var danger_color = RED if R.threatened(hover, enemies) else THEME.SAFE
-		draw_circle(target, 20, Color(THEME.DANGER, 0.27) if R.threatened(hover, enemies) else Color(THEME.SAFE, 0.25));draw_line(start, target, danger_color, 3)
+		draw_arc(target, 20, 0, TAU, 28, danger_color, 2.5);draw_line(start, target, danger_color, 3)
 		draw_line(target, target - dir.rotated(0.5) * 13, danger_color, 3);draw_line(target, target - dir.rotated( - 0.5) * 13, danger_color, 3)
 	if ENCOUNTERS.active(self): draw_encounter_signals()
 	for e in enemies:
@@ -1171,9 +1223,9 @@ func _draw():
 		if fx.kind == "player_hit": player_flash = maxf(player_flash, 1 - clampf(fx.age / fx.duration, 0, 1))
 	pv.x += sin(tick * 90) * 4 * player_flash
 	if mobile_layout: draw_set_transform(pv, 0, Vector2.ONE * minf(1.0, CELL / 54.0));pv = Vector2.ZERO
-	draw_circle(pv, 24, THEME.DANGER.lerp(Color.WHITE, player_flash));draw_arc(pv, 20, 0, TAU, 32, GOLD, 2);text_at(pv + Vector2(-14, 9), ("炮" if artillery_mode == "attack" else "行") if player_skill == "artillery" else ("马" if player_skill == "horse" else "帅"), 28, THEME.LIGHT)
+	draw_circle(pv, 24, THEME.DANGER.lerp(Color.WHITE, player_flash));draw_arc(pv, 20, 0, TAU, 32, GOLD, 2);text_at(pv + Vector2(-14, 9), ("炮" if artillery_mode == "attack" else "行") if player_skill == "artillery" else ("马" if player_skill == "horse" else "帅"), 28, Palette.WHITE)
 	draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
-	text_at((Vector2(24, 500) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(397, 609), "命 %s" % "●".repeat(lives), 20, THEME.LIGHT)
+	text_at((Vector2(24, 500) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(397, 609), ("命 %d%s" % [lives, "/∞" if unlimited_lives() else "/5"]), 20, THEME.LIGHT)
 	text_at((Vector2(200, 500) if compact_landscape else Vector2(150, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(550, 609), "能量 %d" % energy, 20, THEME.LIGHT)
 	var confirm = selected >= 0 and (phase == "discard" or (phase == "play" and hand[selected] in UNTARGETED))
 	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else (("跳过回合" if mobile_layout else "跳过回合 [空格]") if recovery_active() else ("结束回合" if mobile_layout else "结束回合 [空格]"))), 18, THEME.INK)
@@ -1193,7 +1245,7 @@ func _draw():
 	if presentation.active(): presentation.draw();return
 	if phase == "reward" and input_lock <= 0: rewardui.draw()
 	if phase in ["dead", "win"] and input_lock <= 0:
-		draw_rect(Rect2(Vector2.ZERO, ui_size), THEME.OVERLAY);text_at(Vector2(24, ui_size.y * 0.4) if mobile_layout else Vector2(410, 380), ("山河已定 · 两章通关" if route.active() else "六关突破 · 原型通关") if phase == "win" else "此局已尽 · 再弈一局", 28 if mobile_layout else 36, THEME.HEADING)
+		draw_rect(Rect2(Vector2.ZERO, ui_size), Palette.PAPER);text_at(Vector2(24, ui_size.y * 0.4) if mobile_layout else Vector2(410, 380), ("山河已定 · 两章通关" if route.active() else "六关突破 · 原型通关") if phase == "win" else "此局已尽 · 再弈一局", 28 if mobile_layout else 36, THEME.HEADING)
 		text_at(Vector2(24, ui_size.y * 0.4 + 50) if mobile_layout else Vector2(430, 435), "重新开局，再行山河" if phase == "win" else "可悔棋，或重新开局", 20, THEME.LIGHT)
 		if phase == "win" and route.rewards_blocked():
 			text_at(Vector2(24, ui_size.y * 0.4 + 90) if mobile_layout else Vector2(410, 480), route.homework_summary(), 18, THEME.LIGHT)
@@ -1203,6 +1255,7 @@ func _draw():
 	panel(UNDO_RECT, THEME.BUTTON, GOLD if history.can_undo() else THEME.BORDER);text_at(UNDO_RECT.position + Vector2(8, 29), undo_label(), 14 if mobile_layout else 16)
 	panel(home_rect(), THEME.BUTTON);text_at(home_rect().position + Vector2(10, 29 if mobile_layout else 27), "首页" if mobile_layout else "返回首页", 18)
 
+	treasureui.draw()
 	information.draw()
 
 func draw_stake(position: Vector2, alpha: float = 1.0):
@@ -1246,12 +1299,12 @@ func draw_effects():
 					draw_line(b + Vector2(0, -16), b + Vector2(0, 16), GOLD, 2)
 					text_at(b + Vector2(-8, -34), "援", 16, GOLD)
 			"sword":
-				draw_arc(b, 22, -1.2 + t * 1.2, 1.0 + t * 1.2, 18, Color(1, 0.9, 0.65, fade), 5)
+				draw_arc(b, 22, -1.2 + t * 1.2, 1.0 + t * 1.2, 18, Color(Palette.INK_SECONDARY, fade), 5)
 			"spear":
 				var tip = a.lerp(b, minf(1, t * 2)); var direction = (b - a).normalized()
-				draw_line(tip - direction * 36, tip, Color(1, 0.88, 0.58, fade), 4)
-				draw_line(tip, tip - direction.rotated(0.5) * 12, Color(1, 0.95, 0.8, fade), 3)
-				draw_line(tip, tip - direction.rotated( - 0.5) * 12, Color(1, 0.95, 0.8, fade), 3)
+				draw_line(tip - direction * 36, tip, Color(Palette.INK_SECONDARY, fade), 4)
+				draw_line(tip, tip - direction.rotated(0.5) * 12, Color(Palette.INK_SECONDARY, fade), 3)
+				draw_line(tip, tip - direction.rotated( - 0.5) * 12, Color(Palette.INK_SECONDARY, fade), 3)
 			"cannon":
 				var v = a.lerp(b, t) - Vector2(0, sin(t * PI) * 50)
 				draw_circle(v, 7, Color(0.8, 0.85, 0.8, 1));draw_line(v, v - (b - a).normalized() * 15, Color(0.8, 0.85, 0.8, 0.4), 4)
@@ -1261,21 +1314,21 @@ func draw_effects():
 					var v = b + direction * (12 + t * 35) + Vector2(0, t * t * 22)
 					draw_colored_polygon(PackedVector2Array([v + direction * 7, v + direction.rotated(2) * 6, v + direction.rotated(-2) * 6]), Color(0.85, 0.77, 0.6, fade))
 			"player_hit":
-				draw_line(a, b, Color(1, 0.35, 0.25, fade), 4)
-				draw_arc(b, 27 + t * 14, 0, TAU, 32, Color(1, 0.3, 0.2, fade), 3)
-				text_at(b + Vector2(-15, -34 - t * 15), "−1", 24, Color(1, 0.55, 0.4, fade))
+				draw_line(a, b, Color(Palette.DANGER, fade), 4)
+				draw_arc(b, 27 + t * 14, 0, TAU, 32, Color(Palette.DANGER, fade), 3)
+				text_at(b + Vector2(-15, -34 - t * 15), "−1", 24, Color(Palette.DANGER, fade))
 			"recoil":
 				for j in 4:
 					var u = maxf(0, t - j * 0.12); var v = a.lerp(b, u * u * (3 - 2 * u))
 					draw_circle(v, 23, Color(0.8, 0.3, 0.2, (1 - float(j) / 4) * 0.22 * fade))
-				draw_arc(b, 27, 0, TAU, 32, Color(0.5, 0.9, 0.8, sin(t * PI)), 2)
+				draw_arc(b, 27, 0, TAU, 32, Color(Palette.LEGAL, sin(t * PI)), 2)
 			"stun":
-				draw_arc(b, 29 + t * 8, 0, TAU, 32, Color(0.5, 1, 0.9, fade), 3)
-				draw_line(b + Vector2(-13, -18), b + Vector2(13, 18), Color(0.6, 1, 0.9, fade), 3)
-				draw_line(b + Vector2(13, -18), b + Vector2(-13, 18), Color(0.6, 1, 0.9, fade), 3)
+				draw_arc(b, 29 + t * 8, 0, TAU, 32, Color(Palette.LEGAL, fade), 3)
+				draw_line(b + Vector2(-13, -18), b + Vector2(13, 18), Color(Palette.LEGAL, fade), 3)
+				draw_line(b + Vector2(13, -18), b + Vector2(-13, 18), Color(Palette.LEGAL, fade), 3)
 			"push":
 				var v = a.lerp(b, t)
-				draw_arc(v, 20, - 0.7 + (b - a).angle(), 0.7 + (b - a).angle(), 12, Color(0.8, 0.95, 0.7, fade), 4)
+				draw_arc(v, 20, - 0.7 + (b - a).angle(), 0.7 + (b - a).angle(), 12, Color(Palette.LEGAL, fade), 4)
 			"life":
 				draw_arc(b, 27 + t * 16, 0, TAU, 32, Color(THEME.SAFE, fade), 3)
 				text_at(b + Vector2(-16, -30 - t * 24), "+1", 24, Color(THEME.SAFE, fade))

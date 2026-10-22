@@ -60,7 +60,7 @@ static func plan(game, id: String, target: Vector2i) -> Dictionary:
 	var cost = self_cost(id)
 	return {"card": id, "target": target, "cells": area, "targets": victims,
 		"amount": amount(game, id), "self_cost": cost,
-		"self_defeat": cost > 0 and game.lives <= cost,
+		"self_defeat": game.self_cost_is_lethal(cost),
 		"legal": id in IDS and game.player_skill == "king" and game.lives > 0 and not victims.is_empty()}
 
 static func legal(game, id: String, target: Vector2i) -> bool:
@@ -80,7 +80,7 @@ static func preview(game, id: String, target: Vector2i) -> Dictionary:
 		var revival = "（不屈，之后可复归）" if down and enemy.get("unyielding", false) and not general_down and not state.self_defeat else ""
 		lines.append("%s：%d伤 → %s%s。" % [game.piece_name(enemy.kind), state.amount, "击倒" if down else "剩余%d血" % (hp - state.amount), revival])
 	if state.self_cost > 0:
-		lines.append("自身扣1命：%s；护盾不抵消自损、不撤退、不跳过回合。" % ("生命归零，直接失败，优先于敌将击倒与凯旋" if state.self_defeat else "剩余%d命" % (game.lives - state.self_cost)))
+		lines.append("自身扣1命：%s；护盾不抵消自损、不撤退、不跳过回合。" % ("生命归零，直接失败，优先于敌将击倒与凯旋" if state.self_defeat else ("替命金符触发，保留1命" if game.lives <= state.self_cost and game.treasures.rescue_ready() else "剩余%d命" % (game.lives - state.self_cost))))
 	elif id == "last_stand":
 		lines.append("出牌时恰好1命，造成3伤。" if game.lives == 1 else "出牌时不是1命，造成1伤。")
 	return {"card": id, "target": target, "affected": affected, "lines": lines,
@@ -91,7 +91,7 @@ static func apply(game, id: String, target: Vector2i) -> bool:
 	if not state.legal: return false
 	# Direct life debit follows airdrop: guard and recoil hooks never run.
 	# Still damage all victims, then signal main to stop before victory/healing.
-	game.lives -= state.self_cost
+	game.lose_lives(state.self_cost)
 	for index in range(game.enemies.size() - 1, -1, -1):
 		if game.enemies[index] not in state.targets: continue
 		game.effect("spear" if id == "blood_edge" else "sword", game.cell_pos(game.player), game.cell_pos(game.enemies[index].pos), 0.3)

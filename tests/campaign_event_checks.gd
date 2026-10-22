@@ -205,6 +205,8 @@ func check_reward_debt():
 		if tier == "boss":
 			check(game.phase == "reward" and not route.state.done, "first boss homework receipt precedes chapter transition")
 			game.choose_reward(-1)
+			check(game.screen == "treasure_choice" and route.chapter() == 1 and game.collection == deck, "homework does not suppress the mandatory treasure reward")
+			check(route.choose_treasure(game.TREASURES.ids_for(game.player_skill)[1]), "homework boss still grants one role treasure")
 			check(route.chapter() == 2 and game.collection == deck, "boss copied cards survive chapter transition")
 		else: check(route.resume() and game.collection == deck, "debug homework reward receipt survives reload in " + tier)
 func fatigue_fixture(identity: String = "king"):

@@ -80,7 +80,7 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           python3 tests/browser_release_smoke.py 2>&1 | tee build/release-smoke.log
-          python3 tests/browser_card_catalog_checks.py 2>&1 | tee build/card-catalog-smoke.log
+          python3 tests/browser_treasure_checks.py 2>&1 | tee build/treasure-smoke.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -94,6 +94,8 @@ jobs:
             build/merchant-ui-smoke.log
             build/map-single-tap-smoke.log
             build/card-catalog-smoke.log
+            build/treasure-smoke.log
+            verification/v0.15.0/
             verification/v0.14.13/
             verification/v0.14.12/
             verification/v0.14.11/
@@ -183,6 +185,8 @@ jobs:
             if ! python3 "tests/browser_${suite}_checks.py" > "build/${suite}-browser.log" 2>&1; then failed=1; fi
             cat "build/${suite}-browser.log"
           done
+          if ! python3 tests/browser_treasure_checks.py --full > build/treasure-browser.log 2>&1; then failed=1; fi
+          cat build/treasure-browser.log
           if ! python3 tests/browser_card_catalog_checks.py --full > build/card-catalog-browser.log 2>&1; then failed=1; fi
           cat build/card-catalog-browser.log
           if ! python3 tests/browser_merchant_ui_checks.py --full > build/merchant-ui-browser.log 2>&1; then failed=1; fi
@@ -205,6 +209,7 @@ jobs:
           name: yixing-regression-${{ github.sha }}
           path: |
             build/*browser.log
+            verification/v0.15.0/
             verification/v0.14.13/
             verification/v0.14.12/
             verification/v0.14.11/

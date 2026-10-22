@@ -2,7 +2,7 @@ extends SceneTree
 # Offline fixture driver. The exported build contains no QA API: browser tests
 # replay these validated ordinary saves using real Continue/touch/reload inputs.
 const OUT = "res://../verification/v0.14.0/chapter/"
-const ROUTE_FIELDS = ["chapter", "current", "pending", "visited", "done", "prepared", "reward_debt", "reward_blocked", "pending_homework", "homework_awarded"]
+const ROUTE_FIELDS = ["chapter", "current", "pending", "visited", "done", "prepared", "reward_debt", "reward_blocked", "pending_homework", "homework_awarded", "treasure_id", "treasure_claimed", "treasure_choices"]
 const BATTLE_FIELDS = ["phase", "turn", "lives", "energy", "collection", "deck", "hand", "discard", "rewards", "player", "encounter_state"]
 var game
 var steps: Array = []
@@ -52,7 +52,7 @@ func victory(label: String):
 func reward_return():
 	var target = game.rewardui.confirm_rect().get_center() if game.route.rewards_blocked() else game.rewardui.choice_rect(2).get_center()
 	game.input_lock = 0;game.navigation_lock = 0;game.choose_reward(-1)
-	step("tap", "skip-reward-next-chapter", [point(target)])
+	step("tap", "skip-reward-treasure-choice", [point(target)])
 func enter(id: int):
 	game.route.focus_current()
 	var target = game.route.position(game.route.state.nodes[id])
@@ -178,6 +178,14 @@ func transition(size: Vector2):
 	victory("chapter-one-boss-reward")
 	check(game.phase == "reward" and not game.route.state.done, "first boss offers rewards instead of ending run")
 	reward_return()
+	check(game.screen == "treasure_choice" and game.route.chapter() == 1 and game.route.state.treasure_choices == game.TREASURES.ids_for("king"), "first boss opens mandatory role treasure choice")
+	reload_step()
+	game.treasureui.sync()
+	var treasure_target = game.treasureui.card_rect(0).intersection(game.treasureui.area()).get_center()
+	check(game.treasureui.choice_at(treasure_target) == "longevity_seal", "chapter fixture treasure card is visible and correctly hit-tested")
+	check(game.route.choose_treasure("longevity_seal"), "first boss treasure claim succeeds")
+	step("tap", "choose-longevity-seal-next-chapter", [point(treasure_target)])
+	check(game.route.state.treasure_id == "longevity_seal" and game.route.state.treasure_claimed, "chosen treasure persists in new chapter")
 	check(game.route.state.chapter == 2 and game.screen == "map" and game.route.state.current == -1 and game.route.state.pending == -1, "first boss advances to fresh chapter two map")
 	check(game.collection == initial_collection and game.lives == victory_lives, "chapter transition preserves deck and one-time king victory healing without an extra boundary heal")
 	reload_step();enter(0);mechanism_panels()

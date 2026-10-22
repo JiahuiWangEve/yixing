@@ -1,4 +1,5 @@
 extends RefCounted
+const Palette = preload("res://palette.gd")
 # One shared modal: permanent-card transactions and the read-only current catalog.
 # Transaction modes never commit before confirm; catalog mode never commits at all.
 const UPGRADES = preload("res://card_upgrades.gd")
@@ -229,7 +230,7 @@ func _draw_incoming_preview():
 	var area = incoming_preview_rect()
 	var transform = Transform2D(Vector2(area.size.x / 156, 0), Vector2(0, area.size.y / 156), area.position)
 	face.draw_data(game, game.CARDS[incoming_card], game.is_consumable(incoming_card), transform)
-	game.draw_rect(area.grow(2), game.GOLD, false, 2)
+	game.draw_rect(area.grow(2), Palette.BORDER_STRONG, false, 2)
 	if game.compact_landscape:
 		game.text_at(Vector2(24, area.end.y + 28), "换入后永久牌张数不变", 16, game.THEME.LIGHT)
 	else:
@@ -244,7 +245,7 @@ func _draw_catalog():
 	for tab in CATALOG.GROUPS.size():
 		var rect = catalog_tab_rect(tab)
 		game.rewardui._button(rect, CATALOG.GROUPS[tab].label)
-		if catalog_tab == tab: game.draw_rect(rect.grow(-2), game.GOLD, false, 2)
+		if catalog_tab == tab: game.draw_rect(rect.grow(-2), Palette.ACCENT, false, 2)
 	game.rewardui._button(cancel_rect(), "返回")
 	if catalog_detail:
 		game.rewardui._button(catalog_back_rect(), "返回列表")
@@ -255,7 +256,7 @@ func _draw_catalog():
 func _draw_scrollbar():
 	if scroll_limit() <= 0: return
 	var area = grid_rect();var height = maxf(24, area.size.y * area.size.y / (area.size.y + scroll_limit()))
-	game.draw_rect(Rect2(area.end.x + 7, area.position.y + (area.size.y - height) * scroll_y / scroll_limit(), 3, height), game.GOLD)
+	game.draw_rect(Rect2(area.end.x + 7, area.position.y + (area.size.y - height) * scroll_y / scroll_limit(), 3, height), Palette.BORDER_STRONG)
 func draw():
 	if not active: return
 	refresh_layout_only()
@@ -286,7 +287,7 @@ func _draw_cards():
 		var origin = rect.position - grid_rect().position
 		var transform = Transform2D(Vector2(rect.size.x / 156, 0), Vector2(0, rect.size.y / 156), origin)
 		face.draw_data(canvas, catalog_entries[index].data if action == "catalog" else game.CARDS[id], game.is_consumable(id), transform, 1.0, false, selected == index)
-		if selected == index: canvas.draw_rect(Rect2(origin, rect.size).grow(2), game.GOLD, false, 3)
+		if selected == index: canvas.draw_rect(Rect2(origin, rect.size).grow(2), Palette.ACCENT, false, 3)
 		var caption = "第%d张%s" % [index + 1, " · 已选" if selected == index else ""]
 		if action == "catalog": caption = str(catalog_entries[index].source) + (" · 可强化" if not str(catalog_entries[index].upgrade_id).is_empty() else "")
 		canvas.draw_string(game.FONT, origin + Vector2(4, rect.size.y + 23), caption, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 8 if action == "catalog" else -1, 16, game.THEME.LIGHT)

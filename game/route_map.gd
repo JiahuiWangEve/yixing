@@ -1,4 +1,5 @@
 extends RefCounted
+const Palette = preload("res://palette.gd")
 # Chapter state lives outside battle undo snapshots. Forward-only edges and stored
 # rewards make navigation deterministic, independently of combat RNG.
 # Flat, transparent woodcut symbols: the paper remains visible through the ink gaps.
@@ -11,11 +12,11 @@ const SYMBOLS = {
 	"boss": preload("res://assets/map/seals/boss.svg")
 }
 const VICTORY_SEAL = preload("res://assets/map/seals/victory_seal.svg")
-const PAPER = Color("f3f0e7")
-const PAPER_LIGHT = Color("f8f5ed")
-const INK = Color("161713")
-const MUTED = Color("706f66")
-const RED = Color("b32922")
+const PAPER = Color("f3efe5")
+const PAPER_LIGHT = Color("fcf9f1")
+const INK = Color("292723")
+const MUTED = Color("625e55")
+const RED = Color("a6382d")
 const STAMP_SECONDS = 0.42
 var stamp_node = -1
 var stamp_elapsed = STAMP_SECONDS
@@ -252,7 +253,7 @@ func chapter_seed(run_seed: int, chapter_number: int) -> int:
 	return run_seed ^ (CHAPTER_SEED_SALT * (chapter_number - 1))
 func generate(seed_number: int, chapter_number: int = 1):
 	state = GENERATOR.generate(seed_number, clampi(chapter_number, 1, LAST_CHAPTER), game.player_skill)
-	state.merge({"current": -1, "visited": [], "pending": -1, "prepared": false, "reward_debt": 0, "pending_homework": [], "homework_awarded": [], "reward_blocked": false, "victory_recorded": false, "last_result": "", "done": false})
+	state.merge({"treasure_id": "", "treasure_claimed": false, "treasure_choices": [], "current": -1, "visited": [], "pending": -1, "prepared": false, "reward_debt": 0, "pending_homework": [], "homework_awarded": [], "reward_blocked": false, "victory_recorded": false, "last_result": "", "done": false})
 	choices = [];deck_view = false;choice_mode = "root";pending_choice = {};merchant_offer = -1;page = 0;reset_view()
 	# Chapter geometry and scenery must never reuse the previous map's cache.
 	road_cache_key = 0;road_cache.clear();decoration_key = "";decoration_cache.clear();redraw_key = 0
@@ -309,7 +310,7 @@ func options() -> Array:
 		result.append({"label": "轻装上阵 · 删除一张永久牌" if not game.collection.is_empty() else "轻装上阵 · 牌组已空", "action": "select_remove" if not game.collection.is_empty() else "disabled"})
 		result.append({"label": "养精蓄锐 · 下一战初始多抽2张" if not state.prepared else "已养精蓄锐 · 额外抽牌不叠加", "action": "prepare" if not state.prepared else "disabled"})
 	elif node.event_id == "herbalist":
-		result.append({"label": "药庐疗养 · 生命+1（上限5）" if game.lives < 5 else "生命已达上限5 · 无需疗养", "action": "heal" if game.lives < 5 else "disabled"})
+		result.append({"label": ("药庐疗养 · 生命+1（无上限）" if game.unlimited_lives() else "药庐疗养 · 生命+1（上限5）") if game.can_heal() else "生命已达上限5 · 无需疗养", "action": "heal" if game.can_heal() else "disabled"})
 		result.append({"label": "取调息方 · 获得一张调息", "action": "breath"})
 	elif node.event_id == "merchant":
 		for i in node.offers.size():
@@ -367,8 +368,8 @@ func resolve(index: int):
 			if choice.offer < 0 or choice.offer >= state.nodes[state.pending].offers.size(): return
 			game.collection[i] = state.nodes[state.pending].offers[choice.offer];outcome = "换得" + game.CARDS[game.collection[i]][0]
 		"heal":
-			if game.lives >= 5: return
-			game.lives += 1;outcome = "药庐疗养：生命+1，现有%d" % game.lives
+			if not game.can_heal(): return
+			game.heal_lives(1);outcome = "药庐疗养：生命+1，现有%d" % game.lives
 		"breath": game.collection.append("breath");outcome = "已获得一张调息"
 	state.last_result = outcome
 	complete()
@@ -425,16 +426,29 @@ func complete():
 	game.selected = -1;game.free_selected = false;game.handui.reset();game.reinforcement_pending = 0
 	game.phase = "play";game.screen = "map";choices = [];page = 0;reset_view()
 	if completed_boss:
-		# The boss reward is resolved before this boundary. Keep the expedition
-		# itself intact: no healing, no deck reset and no lost future commitments.
-		var carry = {"prepared": state.prepared, "reward_debt": state.reward_debt, "pending_homework": state.pending_homework.duplicate(), "last_result": state.last_result}
-		var run_seed = state.get("run_seed", state.seed)
-		generate(run_seed, chapter() + 1)
-		for key in ["prepared", "reward_debt", "pending_homework"]: state[key] = carry[key]
-		state.last_result = "第一章已突破，进入第二章 · 坚城。" + carry.last_result
+		# The card reward and homework delivery have already settled. Persist
+		# this separate, mandatory chapter reward before showing its choices.
+		state.treasure_choices = game.TREASURES.ids_for(game.player_skill)
+		game.screen = "treasure_choice"
 	else:
 		stamp_node = state.current;stamp_elapsed = 0.0
 	save()
+func choose_treasure(id: String) -> bool:
+	if game.screen != "treasure_choice" or game.tutorial.active or not active(): return false
+	if chapter() != 1 or state.get("treasure_claimed", false) or not state.get("treasure_id", "").is_empty(): return false
+	if id not in state.get("treasure_choices", []) or id not in game.TREASURES.ids_for(game.player_skill): return false
+	if state.pending != -1 or state.current < 0 or state.nodes[state.current].kind != "boss": return false
+	var carry = {"prepared": state.prepared, "reward_debt": state.reward_debt, "pending_homework": state.pending_homework.duplicate(), "last_result": state.last_result}
+	var run_seed = state.get("run_seed", state.seed)
+	# One synchronous transaction: no intermediate save can grant twice.
+	generate(run_seed, 2)
+	for key in ["prepared", "reward_debt", "pending_homework"]: state[key] = carry[key]
+	state.treasure_id = id;state.treasure_claimed = true;state.treasure_choices = []
+	state.last_result = "获得" + game.TREASURES.DATA[id].name + "，进入第二章 · 坚城。" + carry.last_result
+	game.treasure_battle = {};game.screen = "map";game.phase = "play"
+	game.cancel_gesture();game.information.clear();reset_view();save();game.queue_redraw()
+	return true
+
 func save():
 	if not active(): return
 	var config = ConfigFile.new()
@@ -442,7 +456,7 @@ func save():
 	config.set_value("run", "normal_undos_remaining", game.normal_undos_remaining)
 	config.set_value("run", "route", state)
 	config.set_value("run", "battle", game.history.capture())
-	config.set_value("run", "screen", game.screen if game.screen in ["game", "map", "route_choice"] else "map")
+	config.set_value("run", "screen", game.screen if game.screen in ["game", "map", "route_choice", "treasure_choice"] else "map")
 	save_error = config.save(SAVE)
 	# IndexedDB flushes asynchronously; a same-format synchronous snapshot keeps
 	# a refresh immediately after arrival/reward from loading the prior state.
@@ -461,6 +475,8 @@ func resume() -> bool:
 	var saved = config.get_value("run", "route", {})
 	var battle = config.get_value("run", "battle", {})
 	var saved_screen = config.get_value("run", "screen", "map")
+	# New optional run fields do not invalidate an otherwise valid demo save.
+	if battle is Dictionary and not battle.has("treasure_battle"): battle.treasure_battle = {}
 	if not valid_snapshot(saved, battle, saved_screen): return false
 	var remaining = config.get_value("run", "normal_undos_remaining", game.NORMAL_UNDO_LIMIT)
 	if not remaining is int or remaining < 0 or remaining > game.NORMAL_UNDO_LIMIT: return false
@@ -479,7 +495,7 @@ func resume() -> bool:
 func valid_snapshot(saved, battle, saved_screen) -> bool:
 	# Validate the entire current-version envelope before touching live state.
 	if not saved is Dictionary or not battle is Dictionary: return false
-	if saved_screen not in ["map", "game", "route_choice"]: return false
+	if saved_screen not in ["map", "game", "route_choice", "treasure_choice"]: return false
 	for key in ["seed", "nodes", "current", "visited", "pending", "prepared", "reward_debt", "pending_homework", "homework_awarded", "reward_blocked", "victory_recorded", "last_result", "done"]:
 		if not saved.has(key): return false
 	if not saved.nodes is Array or saved.nodes.size() < 9 or saved.nodes.size() > 40 or not saved.visited is Array: return false
@@ -496,7 +512,7 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 	for key in ["pending_homework", "homework_awarded"]:
 		if not saved[key] is Array: return false
 		for card in saved[key]:
-			if card not in game.CARDS: return false
+			if card not in game.CARDS or card in game.TREASURES.TEMPORARY: return false
 	if saved.done: return false
 	if not GENERATOR.validate_structure(saved): return false
 	for node in saved.nodes:
@@ -509,10 +525,10 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 			if not node.get("offers") is Array or node.offers.size() != 3: return false
 			var unique = {}
 			for offer in node.offers:
-				if offer not in game.CARDS or unique.has(offer): return false
+				if offer not in game.CARDS or offer in game.TREASURES.TEMPORARY or unique.has(offer): return false
 				unique[offer] = true
 		for card in node.loot:
-			if card not in game.CARDS: return false
+			if card not in game.CARDS or card in game.TREASURES.TEMPORARY: return false
 	var previous = -1
 	for id in saved.visited:
 		if not id is int or id < 0 or id >= saved.nodes.size(): return false
@@ -524,8 +540,23 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 		if saved_screen == "map": return false
 		var combat = saved.nodes[saved.pending].kind in ["battle", "elite", "boss"]
 		if (saved_screen == "game") != combat: return false
-	elif saved_screen != "map": return false
+	elif saved_screen not in ["map", "treasure_choice"]: return false
+	var treasure_id = saved.get("treasure_id", "")
+	if not treasure_id is String or (not treasure_id.is_empty() and treasure_id not in game.TREASURES.DATA): return false
+	if not saved.get("treasure_claimed", false) is bool or not saved.get("treasure_choices", []) is Array: return false
+	if not treasure_id.is_empty():
+		if saved_chapter != 2 or not saved.get("treasure_claimed", false): return false
+		if game.TREASURES.DATA[treasure_id].role != battle.get("player_skill", ""): return false
+	elif saved.get("treasure_claimed", false): return false
+	if saved_screen == "treasure_choice":
+		if saved_chapter != 1 or saved.current < 0 or saved.nodes[saved.current].kind != "boss" or not treasure_id.is_empty(): return false
+		if battle.get("phase", "") != "play" or battle.get("lives", 0) <= 0: return false
+		if saved.get("treasure_choices", []) != game.TREASURES.ids_for(battle.get("player_skill", "")): return false
+	elif not saved.get("treasure_choices", []).is_empty(): return false
+	if saved_screen == "map" and saved_chapter == 1 and saved.current >= 0 and saved.nodes[saved.current].kind == "boss": return false
 	if not battle.has("rng_state") or not battle.rng_state is int: return false
+	if not game.TREASURES.valid_battle_state(battle.get("treasure_battle", {})): return false
+	if not str(battle.get("treasure_battle", {}).get("active_card", "")).is_empty(): return false
 	for key in game.HISTORY.FIELDS:
 		if not battle.has(key): return false
 		var current_value = game.get(key)
@@ -535,7 +566,7 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 	if battle.player_skill not in game.PROFILES.DATA or battle.phase not in ["play", "discard", "reward", "win", "dead"]: return false
 	for key in ["collection", "deck", "discard", "hand", "rewards"]:
 		for card in battle[key]:
-			if card not in game.CARDS: return false
+			if card not in game.CARDS or (key != "hand" and card in game.TREASURES.TEMPORARY): return false
 	if not battle.airdrop_recovery_turn is int or battle.airdrop_recovery_turn < 0 or battle.airdrop_recovery_turn > battle.turn + 1: return false
 	if battle.active_displacements < 0 or battle.shield_charges not in [0, 1] or battle.next_enemy_uid < 1: return false
 	if not battle.encounter_state.is_empty():
@@ -584,13 +615,13 @@ func position(node: Dictionary) -> Vector2:
 func home_rect() -> Rect2: return Rect2(24, 12, 100, 44)
 func deck_rect() -> Rect2: return Rect2(game.ui_size.x - 144, 12, 120, 44)
 func button(rect: Rect2, label: String, primary: bool = false):
-	game.panel(rect, INK if primary else PAPER_LIGHT, INK if primary else Color("aaa89c"))
+	game.panel(rect, Palette.ACCENT if primary else PAPER_LIGHT, Palette.ACCENT if primary else Palette.BORDER)
 	var text_size = 18 if rect.size.y >= 58 else 16
 	var width = game.FONT.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, text_size).x
 	if width > rect.size.x - 16:
-		game.wrapped_text(label, Rect2(rect.position + Vector2(8, 2), rect.size - Vector2(16, 4)), 14, PAPER_LIGHT if primary else INK)
+		game.wrapped_text(label, Rect2(rect.position + Vector2(8, 2), rect.size - Vector2(16, 4)), 14, Palette.WHITE if primary else INK)
 		return
-	game.text_at(rect.get_center() + Vector2(-width * 0.5, text_size * 0.36), label, text_size, PAPER_LIGHT if primary else INK)
+	game.text_at(rect.get_center() + Vector2(-width * 0.5, text_size * 0.36), label, text_size, Palette.WHITE if primary else INK)
 var page = 0
 func row_rect(index: int) -> Rect2: return Rect2(24, 176 + index * 54, game.ui_size.x - 48, 46)
 func capacity() -> int: return maxi(1, int((game.ui_size.y - 260) / 54))
@@ -695,7 +726,7 @@ func draw_route_edge(node: Dictionary, target: Dictionary, cache_ready: bool = f
 	var traversed = node.id in state.visited and target.id in state.visited
 	var available = node.id == state.current and target.id in legal()
 	var selected = available and target.id == selected_node
-	var color = INK if available or traversed else Color("a5a399")
+	var color = INK if available or traversed else Palette.BORDER_STRONG
 	var points: PackedVector2Array = edge.solid if traversed else edge.dashed
 	game.draw_set_transform(Vector2(0, -scroll_y))
 	if not points.is_empty(): game.draw_multiline(points, color, 2.4 if selected else (1.9 if available or traversed else 1.3), true)
@@ -758,7 +789,7 @@ func draw_map():
 	game.draw_rect(Rect2(0, area.end.y, game.ui_size.x, game.ui_size.y - area.end.y), PAPER)
 	game.draw_rect(Rect2(0, area.position.y, area.position.x, area.size.y), PAPER)
 	game.draw_rect(Rect2(area.end.x, area.position.y, game.ui_size.x - area.end.x, area.size.y), PAPER)
-	game.draw_rect(area, Color("c4c1b5"), false, 1)
+	game.draw_rect(area, Palette.BORDER, false, 1)
 	if scroll_limit() > 0:
 		var track = Rect2(area.end.x - 6, area.position.y + 8, 3, area.size.y - 16)
 		game.draw_rect(track, Color(0.27, 0.25, 0.20, 0.12))
@@ -799,7 +830,7 @@ func inspect_at(pos: Vector2) -> Dictionary:
 	return {"key": "node-%d" % node.id, "node_id": node.id, "title": names[node.kind], "lines": [nature[node.kind]], "anchor": hit_rect(node)}
 func draw_deck():
 	var area = map_rect().grow(-12)
-	game.panel(area, PAPER_LIGHT, Color("a08a66"))
+	game.panel(area, PAPER_LIGHT, Palette.BORDER_STRONG)
 	var counts = {}
 	for id in game.collection: counts[id] = counts.get(id, 0) + 1
 	game.text_at(area.position + Vector2(16, 32), "永久牌组", 24, INK)

@@ -1,5 +1,5 @@
 extends RefCounted
-const FIELDS = ["airdrop_recovery_turn", "encounter_state", "active_displacements", "shield_charges", "pending_bleeds", "next_enemy_uid", "reload_ready", "artillery_mode", "deploy_draw_used", "tuna_turns", "tuna_active", "player_skill", "free_card_uid", "free_selected", "player", "enemies", "deck", "discard", "hand", "hand_ids", "next_card_uid", "collection", "rewards", "stage", "turn", "lives", "energy", "basic_used", "card_move_used", "reinforcement_turns", "reinforcement_pending", "phase", "debug_target", "debug_remaining", "debug_reward_total", "logs", "notice", "initial_threat", "seed_value"]
+const FIELDS = ["treasure_battle", "airdrop_recovery_turn", "encounter_state", "active_displacements", "shield_charges", "pending_bleeds", "next_enemy_uid", "reload_ready", "artillery_mode", "deploy_draw_used", "tuna_turns", "tuna_active", "player_skill", "free_card_uid", "free_selected", "player", "enemies", "deck", "discard", "hand", "hand_ids", "next_card_uid", "collection", "rewards", "stage", "turn", "lives", "energy", "basic_used", "card_move_used", "reinforcement_turns", "reinforcement_pending", "phase", "debug_target", "debug_remaining", "debug_reward_total", "logs", "notice", "initial_threat", "seed_value"]
 var game
 var entries: Array = []
 var oldest_turn = 1
@@ -26,6 +26,7 @@ func undo() -> bool:
 	if not can_undo(): return false
 	var snapshot: Dictionary = entries.pop_back().state
 	game.rewardui.reset()
+	game.treasureui.feedback = ""
 	game.cancel_gesture()
 	game.clear_effects()
 	for key in FIELDS:

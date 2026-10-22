@@ -1,4 +1,5 @@
 extends RefCounted
+const Palette = preload("res://palette.gd")
 
 
 
@@ -380,9 +381,9 @@ func _visual_exposed_point(i: int) -> Vector2:
 func draw():
 	sync()
 	var area: Rect2 = game.hand_area()
-	var border = game.THEME.BORDER.darkened(0.35)
+	var border = Palette.BORDER_STRONG
 	if _discard_time > 0.0: border = border.lerp(game.THEME.DANGER, sin((_discard_time / DISCARD_PULSE_SECONDS) * PI) * 0.85)
-	game.panel(area, game.THEME.BACKGROUND, border)
+	game.panel(area, Palette.HAND, border)
 	for i in _order: _draw_visual_card(i, _visual_transform(i), 0.62 if _is_free(i) and game.phase == "discard" else 1.0)
 	game.draw_set_transform_matrix(Transform2D.IDENTITY)
 	# Paint these last so a raised/overlapping card cannot hide another key.

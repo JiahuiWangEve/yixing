@@ -1,4 +1,5 @@
 extends RefCounted
+const Palette = preload("res://palette.gd")
 
 
 
@@ -124,11 +125,11 @@ func title() -> String:
 	if game.debug_remaining > 0: return "预选奖励 %d / %d" % [game.debug_reward_total - game.debug_remaining + 1, game.debug_reward_total]
 	return "第一章突破 · 结算后进军坚城" if advances_chapter() else "破阵成功 · 选择本关奖励"
 func _button(rect: Rect2, label: String, enabled: bool = true, danger: bool = false):
-	game.panel(rect, game.THEME.BUTTON if enabled else game.THEME.BOARD, game.THEME.DANGER if danger and enabled else game.THEME.BORDER)
+	game.panel(rect, Palette.SURFACE if enabled else Palette.HAND, game.THEME.DANGER if danger and enabled else game.THEME.BORDER)
 	var font_size = 18 if game.mobile_layout else 20
 	while font_size > 14 and game.FONT.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > rect.size.x - 24: font_size -= 1
 	var width = game.FONT.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-	game.text_at(Vector2(rect.position.x + (rect.size.x - width) * 0.5, rect.position.y + (rect.size.y + font_size) * 0.5 - 3), label, font_size, game.THEME.INK if enabled else game.THEME.GRID)
+	game.text_at(Vector2(rect.position.x + (rect.size.x - width) * 0.5, rect.position.y + (rect.size.y + font_size) * 0.5 - 3), label, font_size, Palette.INK if enabled else Palette.INK_SECONDARY)
 func _count(id: String) -> int:
 	var count = 0
 	for card in game.collection:
@@ -136,7 +137,7 @@ func _count(id: String) -> int:
 	return count
 
 func draw():
-	game.draw_rect(Rect2(Vector2.ZERO, game.ui_size), game.THEME.OVERLAY)
+	game.draw_rect(Rect2(Vector2.ZERO, game.ui_size), Palette.PAPER)
 	game.text_at(title_position(), title(), 24 if game.mobile_layout else 30, game.THEME.HEADING)
 	if game.route.rewards_blocked():
 		var pos = title_position() + Vector2(0, 50)
@@ -160,10 +161,10 @@ func _draw_choice():
 	for i in 3:
 		var rect = choice_rect(i)
 		var enabled = i != 1 or not game.collection.is_empty()
-		game.panel(rect, game.THEME.PAPER if enabled else game.THEME.BOARD, game.GOLD if enabled else game.THEME.BORDER)
+		game.panel(rect, Palette.SURFACE if enabled else Palette.HAND, game.GOLD if enabled else game.THEME.BORDER)
 		var portrait = game.mobile_layout and not game.compact_landscape
-		game.text_at(rect.position + Vector2(20, 38 if portrait else 54), labels[i], 28, game.GOLD if enabled else game.THEME.GRID)
-		game.text_at(rect.position + Vector2(20, 70 if portrait else 96), subtitles[i], 17, game.INK if enabled else game.THEME.GRID)
+		game.text_at(rect.position + Vector2(20, 38 if portrait else 54), labels[i], 28, Palette.INK if enabled else Palette.INK_SECONDARY)
+		game.text_at(rect.position + Vector2(20, 70 if portrait else 96), subtitles[i], 17, Palette.INK if enabled else Palette.INK_SECONDARY)
 		if i == 1:
 			game.text_at(rect.position + Vector2(20, 91 if portrait else 128), "当前牌组：%d 张" % game.collection.size(), 14, game.THEME.GRID)
 	var footer = "三种选择都会消耗本轮奖励；返回不消耗。"
@@ -182,12 +183,12 @@ func _draw_add():
 			face.draw_data(game, game.CARDS[id], game.is_consumable(id), transform)
 			continue
 		game.panel(rect, game.THEME.PAPER, game.GOLD)
-		game.text_at(pos + Vector2(20, 36 if game.mobile_layout else 45), game.CARDS[id][0], 26 if game.mobile_layout else 30, game.GOLD)
+		game.text_at(pos + Vector2(20, 36 if game.mobile_layout else 45), game.CARDS[id][0], 26 if game.mobile_layout else 30, Palette.INK)
 		game.text_at(pos + Vector2(20, 65 if game.mobile_layout else 80), "费用 %d" % game.CARDS[id][1], 19)
 		if game.is_consumable(id):
 			var tag = Rect2(pos + Vector2(rect.size.x - 68, 12), Vector2(54, 27))
 			game.panel(tag, game.THEME.DANGER)
-			game.text_at(tag.position + Vector2(9, 20), "消耗", 18, game.THEME.LIGHT)
+			game.text_at(tag.position + Vector2(9, 20), "消耗", 18, Palette.WHITE)
 		game.wrapped_text(game.CARDS[id][2], Rect2(pos + Vector2(20, 72 if game.mobile_layout else 96), Vector2(rect.size.x - 40, rect.size.y - (78 if game.mobile_layout else 102))), 16, game.INK)
 	_button(back_rect(), "返回奖励选择")
 
