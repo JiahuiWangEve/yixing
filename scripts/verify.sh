@@ -102,3 +102,7 @@ run board-info --script "$root/tests/board_info_checks.gd"
 run board-info-web-fixtures --script "$root/tests/board_info_web_fixtures.gd"
 
 run map-single-tap-fixtures --script "$root/tests/map_single_tap_web_fixtures.gd"
+
+run card-description --script "$root/tests/card_description_checks.gd"
+run attack-targeting --script "$root/tests/attack_targeting_checks.gd"
+run attack-ui --script "$root/tests/attack_ui_checks.gd"

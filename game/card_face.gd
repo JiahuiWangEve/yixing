@@ -45,10 +45,8 @@ func text_layout(data: Array, dimensions: Vector2, focused: bool, consumable: bo
 	var start_y = 52.0 if large else 43.0
 	var name_bottom = (50.0 if large else 44.0) + float(str(data[0]).length() - 1) * (26.0 if large else 20.0) + 4.0
 	var text: String = str(data[4]) if focused and data.size() > 4 else str(data[2])
-	# A temporary card already explains its lifetime and never returns next battle.
-	# Existing permanent-card rules use both stage and battle wording.
-	var has_consumable_rule = text.contains("移除") and (text.contains("临时") or text.contains("下关恢复") or text.contains("下场恢复"))
-	if focused and consumable and not has_consumable_rule: text += "\n消耗：使用后本关移除，下关恢复。"
+	var has_consumable_rule = text.contains("消耗：一局战斗只能用一次。") or text.contains("回合结束消失")
+	if focused and consumable and not has_consumable_rule: text += "\n消耗：一局战斗只能用一次。"
 	var font_size = 18 if large else 14
 	var lines: Array = []
 	var full_from = 0

@@ -180,7 +180,7 @@ func _draw_add():
 		var pos = rect.position
 		if game.rewards.size() > 3:
 			var transform = Transform2D(Vector2(rect.size.x / 156, 0), Vector2(0, rect.size.y / 156), pos)
-			face.draw_data(game, game.CARDS[id], game.is_consumable(id), transform)
+			face.draw_data(game, game.descriptions.data(id), game.is_consumable(id), transform)
 			continue
 		game.panel(rect, game.THEME.PAPER, game.GOLD)
 		game.text_at(pos + Vector2(20, 36 if game.mobile_layout else 45), game.CARDS[id][0], 26 if game.mobile_layout else 30, Palette.INK)
@@ -189,7 +189,7 @@ func _draw_add():
 			var tag = Rect2(pos + Vector2(rect.size.x - 68, 12), Vector2(54, 27))
 			game.panel(tag, game.THEME.DANGER)
 			game.text_at(tag.position + Vector2(9, 20), "消耗", 18, Palette.WHITE)
-		game.wrapped_text(game.CARDS[id][2], Rect2(pos + Vector2(20, 72 if game.mobile_layout else 96), Vector2(rect.size.x - 40, rect.size.y - (78 if game.mobile_layout else 102))), 16, game.INK)
+		game.wrapped_text(game.descriptions.data(id)[2], Rect2(pos + Vector2(20, 72 if game.mobile_layout else 96), Vector2(rect.size.x - 40, rect.size.y - (78 if game.mobile_layout else 102))), 16, game.INK)
 	_button(back_rect(), "返回奖励选择")
 
 func _draw_remove():
@@ -207,7 +207,7 @@ func _draw_remove():
 		if game.is_consumable(id): name += " · 消耗"
 		game.text_at(rect.position + Vector2(16, 27), name + ("  ✓" if active else ""), 21, game.INK)
 		game.text_at(rect.position + Vector2(rect.size.x - 166, 27), "费用 %d · 共 %d 张" % [game.CARDS[id][1], _count(id)], 15, game.THEME.GRID)
-		game.wrapped_text(game.CARDS[id][2], Rect2(rect.position + Vector2(16, 34), Vector2(rect.size.x - 32, 26)), 14, game.THEME.GRID)
+		game.wrapped_text(game.descriptions.data(id)[2], Rect2(rect.position + Vector2(16, 34), Vector2(rect.size.x - 32, 26)), 14, game.THEME.GRID)
 	if indices.is_empty():
 		var empty_rect = Rect2(row_rect(0).position, row_rect(0).size + Vector2(0, 80))
 		game.panel(empty_rect, game.THEME.PAPER, game.THEME.BORDER)

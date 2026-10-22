@@ -235,11 +235,13 @@ func check_pointer_input():
 				else:
 					game.select_card(0);game.handle_click(game.cell_pos(target))
 				check(game.hand.is_empty() and victim.hp == 4 and game.player == Vector2i(4,5) and game.lives == 3, "pointer direction applies full line " + str([size,drag,distance]))
-		fresh();game.configure_layout(size);game.sync_hand_views();add("p",Vector2i(4,3))
+		fresh();game.configure_layout(size);game.sync_hand_views();add("p",Vector2i(4,3));add("p",Vector2i(5,4))
+		var invalid_before = game.history.capture()
+		var invalid_history = game.history.entries.duplicate(true)
 		game.gesture.press(game.handui.exposed_point(0));game.gesture.motion(game.cell_pos(Vector2i(5,4)))
-		check(not game.gesture.valid_target(), "diagonal drag is invalid " + str(size))
+		check(not game.gesture.valid_target(), "explicit occupied diagonal drag is invalid " + str(size))
 		game.gesture.release(game.cell_pos(Vector2i(5,4)))
-		check(game.hand == ["blood_edge"] and game.lives == 4 and game.energy == 9, "invalid drag spends nothing")
+		check(game.history.capture() == invalid_before and game.history.entries == invalid_history, "invalid aimed drag never redirects or changes cards, life, energy, RNG or history")
 	game.configure_layout(Vector2(1280,940))
 
 func check_triumph():

@@ -17,13 +17,13 @@ import time
 
 from PIL import Image
 from playwright.async_api import async_playwright
-from browser_chapter_checks import ROOT, URL, KEY, assert_rendered, boot, parse_save as chapter_save, variant_json
+from browser_chapter_checks import ROOT, URL, KEY, assert_rendered, boot, inspection_save, parse_save as chapter_save, variant_json
 
 OUT = ROOT / 'verification/v0.14.5/pass'
 MATRIX = {(1280, 940), (390, 844), (360, 780), (844, 390)}
 EXTRA_BATTLE = ['airdrop_recovery_turn', 'basic_used', 'card_move_used', 'free_card_uid', 'hand_ids',
                 'next_card_uid', 'active_displacements', 'shield_charges', 'pending_bleeds', 'reload_ready',
-                'artillery_mode', 'deploy_draw_used', 'tuna_turns', 'tuna_active']
+                'artillery_mode', 'deploy_draw_used', 'tuna_turns', 'tuna_active', 'treasure_battle']
 
 
 def parse_save(text):
@@ -32,6 +32,7 @@ def parse_save(text):
     battle = variant_json(text.split('\nbattle=', 1)[1].rsplit('\nscreen=', 1)[0])
     result['victory_recorded'] = route['victory_recorded']
     result.update({key: battle[key] for key in EXTRA_BATTLE})
+    result['rng_state'] = str(battle['rng_state'])
     return result
 
 
@@ -57,7 +58,8 @@ def validate():
                 else: points.append(action['point'])
             previous = step['expected']
         assert labels == {'cancel-held-drag-keeps-card', 'pass-consumable-draws-one-no-effect',
-                          'insufficient-energy-no-change', 'zero-cost-pass-multitouch-once',
+                          'insufficient-energy-no-change', 'zero-cost-pass-multitouch-canceled',
+                          'zero-cost-pass-after-multitouch-cancel',
                           'free-card-pass-keeps-basic-quota', 'reload-preserves-free-card-removal',
                           'basic-move-still-available', 'unaffordable-generated-pass-no-change',
                           'next-turn-before-printed-zero-pass', 'next-turn-before-generated-pass'}
@@ -116,6 +118,7 @@ async def main(full=False, validate_only=False):
                 async def tap(pos):
                     xy = screen_point(pos);await page.touchscreen.tap(xy['x'], xy['y'])
                 async def snapshot(): return parse_save(await page.evaluate('(key)=>localStorage.getItem(key)', KEY))
+                async def full_snapshot(): return inspection_save(await page.evaluate('(key)=>localStorage.getItem(key)', KEY))
                 async def expect(expected, label):
                     deadline = time.monotonic() + 8
                     while True:
@@ -168,7 +171,13 @@ async def main(full=False, validate_only=False):
                         await send_touch('touchStart', [{**b, 'id': 1}, second])
                         await send_touch('touchEnd', [{**b, 'id': 1}])
                         await page.wait_for_timeout(100)
-                        assert await snapshot() == expected_before, (stem, label, 'Second finger prematurely commits first finger')
+                        assert await snapshot() == expected_before, (stem, label, 'Second finger cancellation changed gameplay')
+                        third = {**screen_point(action['second']), 'id': 3}
+                        await send_touch('touchStart', [{**b, 'id': 1}, third])
+                        await send_touch('touchMove', [{**b, 'id': 1}, {**b, 'id': 3}])
+                        await send_touch('touchEnd', [{**b, 'id': 1}])
+                        await page.wait_for_timeout(100)
+                        assert await snapshot() == expected_before, (stem, label, 'Third finger restarted canceled gesture')
                     await send_touch('touchCancel' if action['mode'] == 'cancel' else 'touchEnd', [])
                 try:
                     fixture = (OUT / 'fixtures' / replay['fixture']).read_text()
@@ -180,6 +189,7 @@ async def main(full=False, validate_only=False):
                     previous = replay['initial']
                     for number, step in enumerate(replay['steps']):
                         label = str(number) + '-' + step['label']
+                        blocked_before = await full_snapshot() if step['kind'] == 'blocked' else None
                         if step['kind'] == 'reload':
                             await page.reload();await boot(page);await resume()
                         else:
@@ -197,6 +207,8 @@ async def main(full=False, validate_only=False):
                             # cannot hide a late duplicate/canceled commit.
                             await page.wait_for_timeout(max(step['wait_ms'], 1150 if step['kind'] == 'blocked' else 0))
                         await expect(step['expected'], step['label']);await screenshot(label + '-settled')
+                        if blocked_before is not None:
+                            assert await full_snapshot() == blocked_before, (stem, step['label'], 'Blocked action changed full saved state or RNG')
                         previous = step['expected']
                     await page.wait_for_timeout(1150)
                     await expect(previous, 'no-delayed-duplicate-commit')

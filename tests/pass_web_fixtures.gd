@@ -2,7 +2,7 @@ extends SceneTree
 # Ordinary production saves and real input coordinates. No runtime QA hooks.
 const OUT = "res://../verification/v0.14.5/pass/"
 const ROUTE_FIELDS = ["chapter", "current", "pending", "visited", "done", "prepared", "reward_debt", "reward_blocked", "pending_homework", "homework_awarded", "treasure_id", "treasure_claimed", "treasure_choices", "victory_recorded"]
-const BATTLE_FIELDS = ["phase", "turn", "lives", "energy", "collection", "deck", "hand", "discard", "rewards", "player", "encounter_state", "airdrop_recovery_turn", "basic_used", "card_move_used", "free_card_uid", "hand_ids", "next_card_uid", "active_displacements", "shield_charges", "pending_bleeds", "reload_ready", "artillery_mode", "deploy_draw_used", "tuna_turns", "tuna_active"]
+const BATTLE_FIELDS = ["phase", "turn", "lives", "energy", "collection", "deck", "hand", "discard", "rewards", "player", "encounter_state", "airdrop_recovery_turn", "basic_used", "card_move_used", "free_card_uid", "hand_ids", "next_card_uid", "active_displacements", "shield_charges", "pending_bleeds", "reload_ready", "artillery_mode", "deploy_draw_used", "tuna_turns", "tuna_active", "treasure_battle"]
 var game
 var checks = 0
 var failures = 0
@@ -28,6 +28,7 @@ func summary():
 	var result = {"screen": game.screen}
 	for key in ROUTE_FIELDS: result[key] = game.route.state[key]
 	for key in BATTLE_FIELDS: result[key] = game.get(key)
+	result.rng_state = str(game.rng.state) # Keep all 64 bits through JSON/browser tooling.
 	result.encounters = []
 	for node in game.route.state.nodes: result.encounters.append(node.encounter)
 	result.enemies = []
@@ -53,15 +54,22 @@ func drag(index: int, label: String, mode: String = "release", free: bool = fals
 	var preview: Vector2 = Vector2(game.pass_drop_rect().position.x - 50, to.y)
 	var second: Vector2 = game.cell_pos(Vector2i(0, 0))
 	var action = {"action": "drag", "from": point(from), "preview": point(preview), "to": point(to), "second": point(second), "mode": mode, "highlight": "allowed" if allowed else "blocked"}
+	var before = game.history.capture()
+	var before_history = game.history.entries.duplicate(true)
 	touch(from, true);move(preview);move(to)
 	check(game.gesture.dragging and game.pass_drop_rect().has_point(game.gesture.pointer), label + " holds over side zone")
 	check(game.can_pass_card(index, free) == allowed, label + " eligibility matches highlight")
 	if mode == "multitouch":
 		touch(second, true, 2);touch(second, false, 2)
+		check(not game.gesture.active and game.battle_multitouch and game.history.capture() == before and game.history.entries == before_history, label + " second touch cancels without gameplay or history changes")
+		touch(second, true, 3);move(to, 3);touch(to, false, 3)
+		check(not game.gesture.active and game.battle_multitouch and game.history.capture() == before and game.history.entries == before_history, label + " third touch cannot restart while primary remains held")
 		touch(to, false)
 	elif mode == "cancel": touch(to, false, 1, true)
 	else: touch(to, false)
-	step(label, [action], "blocked" if mode == "cancel" or not allowed else "action")
+	var blocked = mode in ["cancel", "multitouch"] or not allowed
+	if blocked: check(game.history.capture() == before and game.history.entries == before_history, label + " all releases preserve complete state, RNG and undo history")
+	step(label, [action], "blocked" if blocked else "action")
 func pass_input(index: int, label: String, free: bool = false, allowed: bool = true, mode: String = "release"):
 	if mode != "select":
 		drag(index, label, mode, free, allowed)
@@ -103,7 +111,9 @@ func replay(size: Vector2):
 	check(summary() == before, "generated card also requires three energy")
 	var end_turn = game.END_TURN_RECT.get_center()
 	tap(end_turn);step("next-turn-before-printed-zero-pass", [input_tap(end_turn)])
-	pass_input(1, "zero-cost-pass-multitouch-once", false, true, "multitouch")
+	before = summary();pass_input(1, "zero-cost-pass-multitouch-canceled", false, true, "multitouch")
+	check(summary() == before and game.energy == 3 and game.hand == ["spear", "breath", "sword"] and game.discard == ["airdrop"] and game.deck == ["fatigue", "spear"], "multitouch spends nothing, draws nothing and preserves the printed-zero card")
+	pass_input(1, "zero-cost-pass-after-multitouch-cancel")
 	check(game.energy == 0 and game.hand == ["spear", "sword", "spear"] and game.discard == ["airdrop", "breath"] and game.deck == ["fatigue"], "printed-zero card still pays three and draws once without resolving breath or double-committing")
 	tap(end_turn);step("next-turn-before-generated-pass", [input_tap(end_turn)])
 	pass_input(-1, "free-card-pass-keeps-basic-quota", true)

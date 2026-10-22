@@ -51,7 +51,7 @@ func _selection() -> int:
 	if _has_free() and game.free_selected and game.phase == "play": return 0
 	return _visual_index(game.selected) if game.selected >= 0 and game.selected < game.hand.size() else -1
 func _data(i: int) -> Array:
-	if _is_free(i): return game.FREE_MOVE.data_for(game.player_skill, game.artillery_mode)
+	if _is_free(i): return game.descriptions.data("__free_" + game.player_skill + ("_" + game.artillery_mode if game.player_skill == "artillery" else ""), true)
 	return game.card_data(game.hand[_ordinary_index(i)])
 func _consumable(i: int) -> bool:
 	return not _is_free(i) and game.is_consumable(game.hand[_ordinary_index(i)])

@@ -58,7 +58,7 @@ func draw():
 	var scale_x = maxf(0.035, absf(cos(progress * PI)))
 	var position = center - dimensions * 0.5
 	var transform = Transform2D(Vector2(dimensions.x * scale_x / 156,0),Vector2(0,dimensions.y / 156),center - Vector2(dimensions.x * scale_x * 0.5,dimensions.y * 0.5))
-	face.draw_data(game, game.CARDS[id], game.is_consumable(id), transform, 1, false, progress >= 0.5)
+	face.draw_data(game, game.descriptions.data(id), game.is_consumable(id), transform, 1, false, progress >= 0.5)
 	if progress > 0.5 and progress < 1:
 		game.draw_rect(Rect2(position, dimensions).grow(5), Color(Palette.ACCENT, sin((progress-0.5)*PI*2)), false, 4)
 	var title = "兵书 · 口诀领悟" if progress < 0.5 else "强化完成 · " + game.CARDS[new_id][0]

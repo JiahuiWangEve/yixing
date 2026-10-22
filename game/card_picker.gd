@@ -61,6 +61,7 @@ func set_catalog_tab(index: int):
 	if not active or action != "catalog" or index < 0 or index >= CATALOG.GROUPS.size(): return
 	catalog_tab = index
 	catalog_entries = CATALOG.entries_for(CATALOG.GROUPS[index].id, game.CARDS)
+	for entry in catalog_entries: entry.data = game.descriptions.data(entry.id)
 	indices = range(catalog_entries.size())
 	selected = -1;catalog_detail = false;catalog_upgraded = false;catalog_grid_scroll = 0
 	scroll_y = 0;pointer = -2;dragged = false
@@ -79,7 +80,7 @@ func catalog_id() -> String:
 func catalog_data() -> Array:
 	if action != "catalog" or selected not in indices: return []
 	var entry: Dictionary = catalog_entries[selected]
-	return game.CARDS[catalog_id()] if catalog_upgraded and not str(entry.upgrade_id).is_empty() else entry.data
+	return game.descriptions.data(catalog_id())
 func catalog_has_upgrade() -> bool:
 	return action == "catalog" and selected in indices and not str(catalog_entries[selected].upgrade_id).is_empty()
 func toggle_catalog_variant():
@@ -217,7 +218,7 @@ func description() -> String:
 	var id: String = snapshot[selected]
 	var name: String = game.CARDS[id][0]
 	match action:
-		"view": return "%s · %d费 · %s" % [name, game.CARDS[id][1], game.CARDS[id][2]]
+		"view": return "%s · %d费 · %s" % [name, game.CARDS[id][1], game.descriptions.data(id)[2]]
 		"upgrade": return "强化「%s」第%d张 → %s：%s" % [name, selected + 1, game.CARDS[UPGRADES.upgraded_id(id)][0], UPGRADES.description(id)]
 		"remove": return "永久删除「%s」第%d张，仅移除这一张。" % [name, selected + 1]
 		"focus": return "立即复制「%s」，并加入疲惫：抽到扣1能量，最低0；留在手中每轮扣1；2费打出。" % name
@@ -229,7 +230,7 @@ func description() -> String:
 func _draw_incoming_preview():
 	var area = incoming_preview_rect()
 	var transform = Transform2D(Vector2(area.size.x / 156, 0), Vector2(0, area.size.y / 156), area.position)
-	face.draw_data(game, game.CARDS[incoming_card], game.is_consumable(incoming_card), transform)
+	face.draw_data(game, game.descriptions.data(incoming_card), game.is_consumable(incoming_card), transform)
 	game.draw_rect(area.grow(2), Palette.BORDER_STRONG, false, 2)
 	if game.compact_landscape:
 		game.text_at(Vector2(24, area.end.y + 28), "换入后永久牌张数不变", 16, game.THEME.LIGHT)
@@ -286,7 +287,7 @@ func _draw_cards():
 		var index: int = indices[slot];var id: String = str(catalog_entries[index].id) if action == "catalog" else str(snapshot[index])
 		var origin = rect.position - grid_rect().position
 		var transform = Transform2D(Vector2(rect.size.x / 156, 0), Vector2(0, rect.size.y / 156), origin)
-		face.draw_data(canvas, catalog_entries[index].data if action == "catalog" else game.CARDS[id], game.is_consumable(id), transform, 1.0, false, selected == index)
+		face.draw_data(canvas, catalog_entries[index].data if action == "catalog" else game.descriptions.data(id), game.is_consumable(id), transform, 1.0, false, selected == index)
 		if selected == index: canvas.draw_rect(Rect2(origin, rect.size).grow(2), Palette.ACCENT, false, 3)
 		var caption = "第%d张%s" % [index + 1, " · 已选" if selected == index else ""]
 		if action == "catalog": caption = str(catalog_entries[index].source) + (" · 可强化" if not str(catalog_entries[index].upgrade_id).is_empty() else "")

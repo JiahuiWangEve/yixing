@@ -90,7 +90,7 @@ func run():
 				check(picker.active and picker.catalog_detail and readonly_snapshot() == baseline,"all shortcuts consumed without gameplay/save mutation")
 				if not entry.upgrade_id.is_empty():
 					tap(picker.catalog_variant_rect().get_center())
-					check(picker.catalog_upgraded and picker.catalog_id() == entry.upgrade_id and picker.catalog_data() == game.CARDS[entry.upgrade_id],"same-card upgraded face")
+					check(picker.catalog_upgraded and picker.catalog_id() == entry.upgrade_id and picker.catalog_data() == game.descriptions.data(entry.upgrade_id),"same-card upgraded face")
 					tap(picker.catalog_variant_rect().get_center())
 					check(not picker.catalog_upgraded and picker.selected == slot,"toggle restores same base card")
 				else:
@@ -117,21 +117,23 @@ func run():
 		var before = readonly_snapshot();var data: Array = FREE.data_for(spec[0],spec[1])
 		check(data.size() >= 4 and data[1] == 0,"zero-cost free movement has full data")
 		check(readonly_snapshot() == before,"free movement helper has no state/RNG side effects")
-	# Focused consumable text must include the rule exactly once, whatever the stage wording.
+	# Every displayed permanent consumable uses the user's exact per-copy wording once.
 	for id in game.CONSUMABLES:
-		var data: Array = game.CARDS[id]
-		var original: String = str(data[4]) if data.size() > 4 else str(data[2])
+		var data: Array = game.descriptions.data(id)
+		var original: String = str(data[4])
 		var layout = picker.face.text_layout(data,Vector2(432,10000),true,true)
 		var rendered = "".join(layout.lines)
-		var expected = original if id in ["airdrop","deploy","tuna"] else original + "消耗：使用后本关移除，下关恢复。"
-		check(rendered == expected.replace("\n",""),"consumable complete rule appears exactly once: " + id)
-		check(rendered.count("下关恢复") + rendered.count("下场恢复") == 1,"exactly one recovery explanation: " + id)
-	for effect in ["本场移除，下场恢复。","本关移除，下关恢复。"]:
+		check(rendered == original.replace("\n",""),"consumable complete rule appears exactly once: " + id)
+		check(rendered.count("消耗：一局战斗只能用一次。") == 1 and not rendered.contains("下关恢复") and not rendered.contains("下场恢复"),"exactly one normalized consumable explanation: " + id)
+	for effect in ["消耗：一局战斗只能用一次。","命+1。消耗：一局战斗只能用一次。"]:
 		var data = ["测试",1,effect,"术"]
 		check("".join(picker.face.text_layout(data,Vector2(432,10000),true,true).lines) == effect,"existing complete synthetic rule unchanged")
-	var incomplete = ["测试",1,"消耗","术"]
-	check("".join(picker.face.text_layout(incomplete,Vector2(432,10000),true,true).lines) == "消耗消耗：使用后本关移除，下关恢复。","partial consumable text still receives full rule")
-	check("".join(picker.face.text_layout(game.CARDS.sword,Vector2(432,10000),true,false).lines) == str(game.CARDS.sword[2]),"nonconsumable text remains unchanged")
+	var incomplete = ["测试",1,"命+1。","术"]
+	check("".join(picker.face.text_layout(incomplete,Vector2(432,10000),true,true).lines) == "命+1。消耗：一局战斗只能用一次。","missing consumable detail receives exact rule")
+	for id in game.TREASURES.TEMPORARY:
+		var temporary = "".join(picker.face.text_layout(game.descriptions.data(id),Vector2(432,10000),true,true).lines)
+		check(temporary.contains("回合结束消失") and not temporary.contains("一局战斗只能用一次"),"temporary lifetime is not permanent exhaustion: " + id)
+	check("".join(picker.face.text_layout(game.CARDS.sword,Vector2(432,10000),true,false).lines) == str(game.CARDS.sword[2]),"nonconsumable renderer does not invent rules")
 	# Existing permanent deck viewer remains physical-instance based, not catalog.
 	game.screen = "map";game.collection = ["sword","sword","sword_plus"]
 	picker.open("view","全部永久牌组",range(game.collection.size()),Callable(),Callable())

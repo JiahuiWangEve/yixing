@@ -82,7 +82,7 @@ func draw():
 		if not rect.intersects(area()): continue
 		var id: String = offers[i]
 		var transform = Transform2D(Vector2(rect.size.x / 156, 0), Vector2(0, rect.size.y / 156), rect.position)
-		face.draw_data(game, game.CARDS[id], game.is_consumable(id), transform)
+		face.draw_data(game, game.descriptions.data(id), game.is_consumable(id), transform)
 	# Fixed masks keep cards behind the rules and the always-reachable leave button.
 	game.draw_rect(Rect2(0, 0, game.ui_size.x, area().position.y), game.THEME.BACKGROUND)
 	game.draw_rect(Rect2(0, area().end.y, game.ui_size.x, game.ui_size.y - area().end.y), game.THEME.BACKGROUND)

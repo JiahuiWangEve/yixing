@@ -242,8 +242,9 @@ func preview(index: int, target: Vector2i) -> Dictionary:
 func current_preview(target: Vector2i) -> Dictionary:
 	var index = int(game.selected)
 	if game.gesture.dragging:
-		if game.gesture.free_move or not game.BOARD_RECT.has_point(game.gesture.pointer) or game.pass_drop_rect().has_point(game.gesture.pointer): return {}
+		if game.gesture.free_move or game.pass_drop_rect().has_point(game.gesture.pointer): return {}
 		index = game.hand_ids.find(game.gesture.uid)
+		target = game.gesture.preview_target()
 	return preview(index, target)
 
 func draw_enemy_status(enemy: Dictionary, point: Vector2):
@@ -338,5 +339,5 @@ func draw_preview(target: Vector2i):
 		game.panel(rect, T.DANGER)
 		game.text_at(rect.position + Vector2(3, size + 1), label, size, Palette.WHITE)
 	if data.self_defeat:
-		var p: Vector2 = game.cell_pos(target)
+		var p: Vector2 = game.cell_pos(data.get("target", target))
 		game.text_at(p + Vector2(-24, -game.CELL * 0.52), "自损败局", 12, T.DANGER)

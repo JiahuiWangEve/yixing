@@ -7,13 +7,19 @@ var active = false
 var dragging = false
 var free_move = false
 var source = ""
+var source_card = ""
+var source_turn = -1
 var pass_armed = false
 var pass_pressed = false
 var pass_click_moved = false
 const DRAG_THRESHOLD = 12.0
+const PLAY_DRAG_THRESHOLD = 28.0
+const UPWARD_CLEARANCE = 16.0
+const INVALID_TARGET = Vector2i(-1, -1)
 func _init(owner): game = owner
 func cancel():
 	active = false;dragging = false;free_move = false;uid = -1;source = "";pass_armed = false;pass_pressed = false;pass_click_moved = false
+	source_card = "";source_turn = -1
 func press(position: Vector2, kind: String = "mouse") -> bool:
 	if active: return true
 	# The shared overlay owns pointer-down before any overlapping hand card.
@@ -22,6 +28,7 @@ func press(position: Vector2, kind: String = "mouse") -> bool:
 		game.sync_hand_ids()
 		free_move = game.free_selected
 		uid = game.free_card_uid if free_move else game.hand_ids[game.selected]
+		source_card = "" if free_move else game.hand[game.selected];source_turn = game.turn
 		down = position;pointer = position;active = true;dragging = false;source = kind;pass_pressed = true
 		return true
 	if game.phase == "play" and game.recovery_active(): return false
@@ -32,12 +39,14 @@ func press(position: Vector2, kind: String = "mouse") -> bool:
 
 		if not game.free_card_available() or game.input_lock > 0 or game.navigation_lock > 0: return true
 		uid = game.free_card_uid;free_move = true;down = position;pointer = position;active = true;dragging = false;source = kind;pass_armed = position.x < game.pass_drop_rect().position.x - 12
+		source_card = "";source_turn = game.turn
 		return true
 	var index = game.handui.hit_index(position)
 	if index < 0: return false
 	if game.input_lock > 0 or game.navigation_lock > 0: return true
 	game.sync_hand_ids()
 	uid = game.hand_ids[index];free_move = false;down = position;pointer = position;active = true;dragging = false;source = kind;pass_armed = position.x < game.pass_drop_rect().position.x - 12
+	source_card = game.hand[index];source_turn = game.turn
 	return true
 func motion(position: Vector2):
 	if not active: return
@@ -53,6 +62,9 @@ func release(position: Vector2, canceled: bool = false):
 	pointer = position
 	var chosen_uid = uid
 	var chosen_free = free_move
+	var chosen_card = source_card
+	var chosen_turn = source_turn
+	var origin = down
 	var clicked_pass = pass_pressed
 	var was_dragging = dragging or pass_click_moved or position.distance_to(down) >= DRAG_THRESHOLD
 	var over_pass = was_dragging and game.pass_drop_rect().has_point(position)
@@ -60,19 +72,22 @@ func release(position: Vector2, canceled: bool = false):
 	cancel()
 	if canceled or game.screen != "game" or game.input_lock > 0 or game.navigation_lock > 0: return
 	if game.card_picker.active or game.encounter_info_open or game.presentation.active(): return
+	if game.turn != chosen_turn: return
+	var index = game.hand_ids.find(chosen_uid) if not chosen_free else -1
+	if not chosen_free and (index < 0 or index >= game.hand.size() or game.hand[index] != chosen_card): return
 	if clicked_pass:
 		if was_dragging or not game.pass_zone_visible() or not game.pass_drop_rect().has_point(position): return
 		if chosen_free:
 			if chosen_uid == game.free_card_uid: game.pass_card(-1, true)
 		else:
-			game.pass_card(game.hand_ids.find(chosen_uid))
+			game.pass_card(index)
 		return
 	if over_pass:
 		if not deliberate_pass: return
 		if chosen_free:
 			if chosen_uid == game.free_card_uid: game.pass_card(-1, true)
 		else:
-			game.pass_card(game.hand_ids.find(chosen_uid))
+			game.pass_card(index)
 		return # Invalid side drops never fall through to normal card use.
 	if chosen_free:
 		if chosen_uid != game.free_card_uid or not game.free_card_available(): return
@@ -82,10 +97,12 @@ func release(position: Vector2, canceled: bool = false):
 			var target = game.board_cell(position)
 			if game.basic_legal(target): game.basic_move(target)
 		return
-	var index = game.hand_ids.find(chosen_uid)
-	if index < 0: return
 	if not was_dragging:
 		game.select_card(index)
+		return
+	if game.attack_targets.is_attack(chosen_card):
+		var attack_target = _attack_release_target(index, position, origin)
+		if attack_target != INVALID_TARGET and game.can_commit_card(index, attack_target): game.play_card(index, attack_target)
 		return
 	if game.phase != "play" or not game.BOARD_RECT.has_point(position): return
 	var card: String = game.hand[index]
@@ -94,15 +111,42 @@ func release(position: Vector2, canceled: bool = false):
 	if game.can_commit_card(index, target): game.play_card(index, target)
 func target_cell() -> Vector2i:
 	return game.board_cell(pointer) if dragging else Vector2i(-1, -1)
-func valid_target() -> bool:
-	if game.pass_drop_rect().has_point(pointer): return false
-	if not dragging or game.phase != "play" or not game.BOARD_RECT.has_point(pointer): return false
+
+func _attack_release_target(index: int, position: Vector2, origin: Vector2) -> Vector2i:
+	if game.phase != "play" or game.pass_drop_rect().has_point(position) or game.full_hand_area().has_point(position): return INVALID_TARGET
+	if position.distance_to(origin) < PLAY_DRAG_THRESHOLD: return INVALID_TARGET
+	var on_board: bool = game.BOARD_RECT.has_point(position)
+	var upward: bool = origin.y - position.y >= PLAY_DRAG_THRESHOLD and position.y <= game.full_hand_area().position.y - UPWARD_CLEARANCE
+	if not on_board and not upward: return INVALID_TARGET
+	var cell: Vector2i = game.board_cell(position) if on_board else INVALID_TARGET
+	var id: String = game.hand[index]
+	var explicit_aim = false
+	if id == "airdrop": explicit_aim = on_board
+	elif id == "blood_edge": explicit_aim = on_board and (game.R.occupied(cell, game.enemies) >= 0 or game.KING_BLOOD.direction(game.player, cell) != Vector2i.ZERO)
+	elif id not in ["sweep", "blood_break"]: explicit_aim = on_board and game.R.occupied(cell, game.enemies) >= 0
+	return game.attack_targets.resolve_release(index, cell, explicit_aim)
+
+func preview_target() -> Vector2i:
+	# The same pure resolution drives the release hint and the eventual action.
+	# A pointer over an empty generic board square may resolve a unique victim;
+	# an explicit invalid aim must remain invalid rather than redirecting it.
+	if not active or not dragging or pass_pressed or source_turn != game.turn: return INVALID_TARGET
+	if game.screen != "game" or game.phase != "play" or game.input_lock > 0 or game.navigation_lock > 0: return INVALID_TARGET
+	if game.card_picker.active or game.encounter_info_open or game.presentation.active(): return INVALID_TARGET
+	if game.pass_drop_rect().has_point(pointer): return INVALID_TARGET
 	if free_move:
-		return uid == game.free_card_uid and game.free_card_available() and game.basic_legal(target_cell())
+		if game.BOARD_RECT.has_point(pointer) and uid == game.free_card_uid and game.free_card_available() and game.basic_legal(target_cell()): return target_cell()
+		return INVALID_TARGET
 	var index = game.hand_ids.find(uid)
-	if index < 0: return false
+	if index < 0 or index >= game.hand.size() or game.hand[index] != source_card: return INVALID_TARGET
 	var card: String = game.hand[index]
-	return game.can_commit_card(index, game.player if card in game.UNTARGETED else target_cell())
+	if game.attack_targets.is_attack(card): return _attack_release_target(index, pointer, down)
+	if not game.BOARD_RECT.has_point(pointer): return INVALID_TARGET
+	var target: Vector2i = game.player if card in game.UNTARGETED else target_cell()
+	return target if game.can_commit_card(index, target) else INVALID_TARGET
+
+func valid_target() -> bool:
+	return preview_target() != INVALID_TARGET
 func pass_zone_state() -> Dictionary:
 	var visible: bool = game.pass_zone_visible()
 	var chosen_free: bool = free_move if active else game.free_selected
@@ -146,7 +190,7 @@ func draw():
 	for point in [Vector2.ZERO, Vector2(size.x, 0), size, Vector2(0, size.y), Vector2.ZERO]: polygon.append(t * point)
 	game.draw_polyline(polygon, game.THEME.SAFE if valid_target() else Color(game.THEME.INK, 0.7), 2)
 	if valid_target():
-		var p = target_cell()
+		var p = preview_target()
 		if p.x >= 0:
 			var danger = game.target_danger(game.hand[index], p)
 			game.draw_arc(game.cell_pos(p), game.CELL * 0.42 + sin(game.tick * 8) * 2, 0, TAU, 32, game.RED if danger else game.THEME.SAFE, 3)

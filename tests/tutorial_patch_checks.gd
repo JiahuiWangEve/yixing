@@ -46,7 +46,7 @@ func check_assault_damage():
 			add_piece("p", target, hp)
 			if unsafe_landing: add_piece("r", Vector2i(6, 0), 3)
 			var label = "assault HP%d landing danger %s" % [hp, str(unsafe_landing)]
-			check(game.card_cost("knight_assault") == 2 and str(game.card_data("knight_assault")[2]).contains("2伤"), label + " card says two cost and two damage")
+			check(game.card_cost("knight_assault") == 2 and str(game.card_data("knight_assault")[2]).contains("伤害2"), label + " card says two cost and two damage")
 			check(game.can_commit_card(0, target), label + " legal knight target")
 			var before = rules_snapshot()
 			var preview: Dictionary = game.board_info.preview(0, target)

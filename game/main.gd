@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.15.0"
+const BUILD_VERSION = "v0.15.1"
 const PASS_CARD_COST = 3
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
@@ -50,6 +50,8 @@ var information = preload("res://information_popup.gd").new(self)
 var treasureui = preload("res://treasure_ui.gd").new(self)
 var presentation = preload("res://presentation.gd").new(self)
 var board_info = preload("res://board_info.gd").new(self)
+var descriptions = preload("res://card_description.gd").new(self)
+var attack_targets = preload("res://attack_targeting.gd").new(self)
 var player_skill = "king"
 var artillery_mode = "march"
 var deploy_draw_used = false
@@ -83,6 +85,8 @@ var CANCEL_RECT = Rect2()
 var DRAWER_RECT = Rect2()
 var touch_start = Vector2.ZERO
 var active_touch = -1
+var battle_touch_contacts: Dictionary = {}
+var battle_multitouch = false
 var touch_dragged = false
 var touch_seen = false
 var delivering_touch = false
@@ -99,6 +103,7 @@ func install_web_input_cancel():
 	for event_name in WEB_CANCEL_EVENTS:
 		web_window.addEventListener(event_name, web_cancel_callback, true)
 func on_web_input_cancel(_arguments: Array):
+	battle_touch_contacts.clear();battle_multitouch = false
 	cancel_gesture()
 	if card_picker.active: card_picker.pointer = -2;card_picker.dragged = true
 func _exit_tree():
@@ -157,6 +162,7 @@ func sync_hand_ids():
 	while hand_ids.size() < hand.size(): hand_ids.append(next_card_uid);next_card_uid += 1
 func drag_card_uid() -> int: return gesture.uid if gesture.dragging else -1
 func cancel_gesture():
+	if not battle_touch_contacts.is_empty(): battle_multitouch = true
 	if information != null: information.clear()
 	if gesture != null: gesture.cancel()
 	if route != null: route.cancel_pointer()
@@ -221,7 +227,8 @@ func confirm_card():
 	if phase == "discard": discard_hand(selected)
 	elif phase == "play" and hand[selected] in UNTARGETED: play_card(selected, player)
 func _notification(what):
-	if what in [NOTIFICATION_WM_WINDOW_FOCUS_OUT, NOTIFICATION_WM_MOUSE_EXIT]: cancel_gesture()
+	if what in [NOTIFICATION_WM_WINDOW_FOCUS_OUT, NOTIFICATION_WM_MOUSE_EXIT]:
+		battle_touch_contacts.clear();battle_multitouch = false;cancel_gesture()
 
 func reward_rect(i: int) -> Rect2: return rewardui.add_rect(i)
 func skip_reward_rect() -> Rect2:
@@ -675,23 +682,7 @@ func card_cost(id: String) -> int:
 	var cost = 1 if id == "cannon_shot" and artillery_mode == "attack" else int(CARDS[id][1])
 	return maxi(0, cost - treasures.cannon_discount()) if id == "cannon_shot" else cost
 func card_data(id: String) -> Array:
-	var data: Array = CARDS[id].duplicate()
-	data[1] = card_cost(id)
-	if id == "life" and unlimited_lives():
-		data[2] = str(data[2]).replace("上限5", "无上限")
-		data[4] = str(data[4]).replace("上限5", "无上限")
-	if id == "airdrop" and lives <= 1:
-		data[2] = ("仅剩1命：替命金符保留1命；" if treasures.rescue_ready() else "仅剩1命：使用后直接失败；") + "空格落地，周围3×3各3伤；消耗"
-	if id == "last_stand": data[2] = "正交邻敌：当前%d伤（仅1命时3伤）" % KING_BLOOD.amount(self, id)
-	if id in ["blood_edge", "blood_break"] and lives <= 1: data[2] = ("仅剩1命：替命金符保留1命。" if treasures.rescue_ready() else "仅剩1命：使用后直接失败。") + str(data[2])
-	if id == "cannon_shot":
-		var amount = (2 if artillery_mode == "attack" else 1) + (1 if reload_ready else 0)
-		data[2] = "%s：%d费%d伤；直线隔恰好一子%s" % ["攻击姿态" if artillery_mode == "attack" else "行军姿态", data[1], amount, "；装填击杀抽1张" if reload_ready else ""]
-	if id == "chain_assault":
-		data[2] = "周围3×3选一个敌子；当前%d伤（1+已主动位移%d次）" % [1 + active_displacements, active_displacements]
-		data[4] = "当前%d伤（1+主动位移%d次）。周围3×3选一个敌子。免费、移动牌与攻击附带的成功位移，每次行动计1次；受击转移、失败与切姿态不计。" % [1 + active_displacements, active_displacements]
-	if treasures.preview_bonus(id) > 0: data[2] = "踏阵长缨：本张攻击伤害+2。" + str(data[2])
-	return data
+	return descriptions.data(id, true)
 func target_danger(id: String, p: Vector2i) -> bool:
 	if id in KING_BLOOD.IDS: return self_cost_is_lethal(KING_BLOOD.self_cost(id))
 	if id == "airdrop":
@@ -814,7 +805,30 @@ func handle_click(pos: Vector2):
 	elif basic_legal(target): basic_move(target)
 	elif free_selected and not full_hand_area().has_point(pos): cancel_selection()
 
+# Once a second finger or cancellation interrupts a battle gesture, consume all
+# outstanding releases. No third finger can restart it before every finger lifts.
+func battle_touch_guard(event) -> bool:
+	if screen != "game":
+		battle_touch_contacts.clear();battle_multitouch = false;return false
+	if event is InputEventScreenTouch:
+		if event.canceled:
+			battle_touch_contacts.erase(event.index);cancel_gesture()
+			battle_multitouch = not battle_touch_contacts.is_empty()
+			return true
+		if event.pressed:
+			battle_touch_contacts[event.index] = true
+			if battle_touch_contacts.size() > 1 or battle_multitouch:
+				cancel_gesture();battle_multitouch = true;return true
+		else:
+			battle_touch_contacts.erase(event.index)
+			if battle_multitouch:
+				if battle_touch_contacts.is_empty(): battle_multitouch = false
+				return true
+	elif event is InputEventScreenDrag and battle_multitouch: return true
+	return false
+
 func _input(event):
+	if battle_touch_guard(event): get_viewport().set_input_as_handled();return
 	if event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventKey:
 		if treasureui.input_event(event): get_viewport().set_input_as_handled();return
 		if information.input_event(event): get_viewport().set_input_as_handled();return
@@ -1140,7 +1154,9 @@ func context_hint() -> String:
 	if free_selected: return "选择免费移动落点，或再次点牌取消。"
 	if player_skill == "artillery" and selected < 0:
 		return "攻击姿态：正交走1格；炮击%d费2伤；转进牌切回行军。" % card_cost("cannon_shot") if artillery_mode == "attack" else "行军姿态：正交走1～2格；展开抽3张（每回合首次）。"
-	if selected >= 0: return "点击高亮目标；再点选中牌取消。" if mobile_layout else "选择高亮目标；右键 / Esc 取消。"
+	if selected >= 0:
+		if selected < hand.size() and hand[selected] == "airdrop": return "选择空格落点；再点选中牌取消。" if mobile_layout else "选择空格落点；右键 / Esc 取消。"
+		return "点击高亮目标；再点选中牌取消。" if mobile_layout else "选择高亮目标；右键 / Esc 取消。"
 	if notice in ["能量不足。", "本回合已使用移动牌。", "牌库与弃牌堆已空。"]: return notice
 	return ""
 func _draw():
@@ -1173,6 +1189,16 @@ func _draw():
 	for top in [0, 7]:
 		draw_line(cell_pos(Vector2i(3, top)), cell_pos(Vector2i(5, top + 2)), THEME.GRID)
 		draw_line(cell_pos(Vector2i(5, top)), cell_pos(Vector2i(3, top + 2)), THEME.GRID)
+	var attack_index = selected
+	if gesture.dragging: attack_index = -1 if gesture.free_move else hand_ids.find(gesture.uid)
+	var attack_view: Dictionary = attack_targets.state(attack_index)
+	for p in attack_view.get("range_cells", []):
+		var center = cell_pos(p)
+		var side = CELL * 0.78
+		draw_rect(Rect2(center - Vector2.ONE * side * 0.5, Vector2.ONE * side), Color(Palette.LEGAL, 0.07))
+		draw_rect(Rect2(center - Vector2.ONE * side * 0.5, Vector2.ONE * side), Color(Palette.LEGAL, 0.52), false, 1.5)
+	for p in attack_view.get("enemy_cells", []):
+		draw_arc(cell_pos(p), CELL * 0.49, 0, TAU, 36, Palette.LEGAL, 3)
 	for y in 10:
 		for x in 9:
 			var p = Vector2i(x, y); var v = cell_pos(p)
@@ -1183,7 +1209,7 @@ func _draw():
 				draw_circle(v, 13, Color(THEME.DANGER, 0.14));draw_arc(v, 13, 0, TAU, 24, THEME.DANGER, 1.5)
 			if input_lock <= 0 and free_selected and basic_legal(p) and ( not tutorial.active or tutorial.is_free_practice() or p in tutorial.target_cells()):
 				draw_arc(v, 19, 0, TAU, 28, THEME.DANGER if R.threatened(p, enemies) else THEME.SAFE, 2.5)
-			if input_lock <= 0 and selected >= 0 and hand[selected] not in UNTARGETED and card_legal(hand[selected], p) and ( not tutorial.active or tutorial.is_free_practice() or p in tutorial.target_cells()):
+			if input_lock <= 0 and selected >= 0 and selected < hand.size() and not attack_targets.is_attack(hand[selected]) and hand[selected] not in UNTARGETED and card_legal(hand[selected], p) and ( not tutorial.active or tutorial.is_free_practice() or p in tutorial.target_cells()):
 				var danger = target_danger(hand[selected], p)
 				draw_arc(v, 20, 0, TAU, 28, THEME.DANGER if danger else THEME.SAFE, 2.5)
 	if tutorial.active and input_lock <= 0:
