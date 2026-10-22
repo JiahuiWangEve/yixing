@@ -42,7 +42,7 @@ async def main():
             w, h = map(int, replay['viewport']); uw, uh = replay['logical_size']
             scale = min(w / uw, h / uh); ox = (w - uw * scale) / 2; oy = (h - uh * scale) / 2
             context = await browser.new_context(viewport={'width': w, 'height': h}, has_touch=w < h)
-            page = await context.new_page(); errors = []; screenshots = []
+            page = await context.new_page(); cdp = await context.new_cdp_session(page); errors = []; screenshots = []; keypad_events = []
             page.on('pageerror', lambda e: errors.append(str(e)))
             page.on('console', lambda m: errors.append(m.text) if m.type == 'error' and ('SCRIPT ERROR' in m.text or 'Parse Error' in m.text) else None)
             def point(pos): return ox + pos[0] * scale, oy + pos[1] * scale
@@ -50,6 +50,34 @@ async def main():
                 if w < h: await page.touchscreen.tap(*point(pos))
                 else: await page.mouse.click(*point(pos)); await page.mouse.move(1, 1)
                 await page.wait_for_timeout(450)
+            async def press(code):
+                if code.startswith('Numpad') and code[-1].isdigit():
+                    # Playwright maps plain Numpad1 to End (NumLock off).
+                    # Emit the real NumLock-on browser event, without Shift:
+                    # Shift+Numpad1 would correctly be rejected by the game.
+                    digit = code[-1]
+                    event = {'code': code, 'key': digit, 'location': 3,
+                             'windowsVirtualKeyCode': 96 + int(digit),
+                             'isKeypad': True, 'modifiers': 0}
+                    await page.evaluate("""() => {
+                        window.__handShortcutKey = null;
+                        window.addEventListener('keydown', e => {
+                            window.__handShortcutKey = {key: e.key, code: e.code,
+                                location: e.location, shift: e.shiftKey,
+                                ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey,
+                                trusted: e.isTrusted};
+                        }, {once: true, capture: true});
+                    }""")
+                    await cdp.send('Input.dispatchKeyEvent', {'type': 'keyDown', **event})
+                    await cdp.send('Input.dispatchKeyEvent', {'type': 'keyUp', **event})
+                    received = await page.evaluate('window.__handShortcutKey')
+                    keypad_events.append(received)
+                    print('KEYPAD DOM', received, flush=True)
+                    assert received == {'key': digit, 'code': code, 'location': 3,
+                                        'shift': False, 'ctrl': False, 'alt': False,
+                                        'meta': False, 'trusted': True}, received
+                else:
+                    await page.keyboard.press(code)
             async def snap(): return battle(await page.evaluate('(key)=>localStorage.getItem(key)', KEY))
             async def shot(label):
                 path = output / f"{replay['name']}-{label}.png"
@@ -65,18 +93,18 @@ async def main():
                 assert gameplay(await snap()) == gameplay(initial)
                 baseline = await shot('dense-hand-initial')
                 if w > h:
-                    await page.keyboard.press('Numpad1'); await page.wait_for_timeout(1200)
+                    await press('Numpad1'); await page.wait_for_timeout(1200)
                     assert (await snap())['free_selected'], 'numpad 1 must select free movement first'
                     assert gameplay(await snap()) == gameplay(initial), 'selection must not play or spend'
                     await shot('numpad-free-selected')
-                    await page.keyboard.press('Numpad1'); await page.wait_for_timeout(1200)
+                    await press('Numpad1'); await page.wait_for_timeout(1200)
                     assert not (await snap())['free_selected'], 'same key toggles same as click'
                     await page.keyboard.down('2'); await page.keyboard.down('2'); await page.keyboard.up('2')
                     await page.wait_for_timeout(500)
                     selected = await shot('number-life-selected')
                     assert pixels_changed(baseline, selected) > 200, 'keyboard selection must visibly raise/highlight card'
                     for combo in ['Shift+2', 'Control+2', 'Alt+2', 'Meta+2', '8', '9', '0', 'Numpad8']:
-                        await page.keyboard.press(combo)
+                        await press(combo)
                     await page.wait_for_timeout(1100)
                     assert gameplay(await snap()) == gameplay(initial), 'modified/extra keys or repeats played a card'
                     guarded = await shot('modifier-repeat-protected')
@@ -86,7 +114,7 @@ async def main():
                     await click(replay['life']); await page.wait_for_timeout(350)
                     mouse_selected = await shot('mouse-life-selected')
                     assert pixels_changed(selected, mouse_selected) < 100, 'keyboard and mouse selection differ visually'
-                    await page.keyboard.press('Escape'); await page.keyboard.press('Numpad2'); await click(replay['confirm'])
+                    await page.keyboard.press('Escape'); await press('Numpad2'); await click(replay['confirm'])
                     await page.wait_for_timeout(1200)
                     after = await snap()
                     assert after['lives'] == initial['lives'] + 1 and after['hand'] == initial['hand'][1:], 'numpad selected wrong hand card'
@@ -94,18 +122,18 @@ async def main():
                     await shot('confirmed-exact-card')
                 else:
                     for code in ['1', '2', '7', 'Numpad1', 'Numpad2']:
-                        await page.keyboard.press(code)
+                        await press(code)
                     await page.wait_for_timeout(1200)
                     assert await snap() == initial, 'mobile keyboard selected or changed persisted state'
                     mobile = await shot('mobile-no-number-selection')
                     assert pixels_changed(baseline, mobile) < 100, 'mobile keyboard changed visible selection'
                 assert not errors, errors
-                reports.append({'viewport': [w,h], 'screenshots': screenshots, 'errors': errors})
+                reports.append({'viewport': [w,h], 'screenshots': screenshots, 'keypad_events': keypad_events, 'errors': errors})
                 print('PASS hand shortcuts', replay['name'], flush=True)
             except Exception:
                 await page.screenshot(path=str(output / f"{replay['name']}-failure.png")); raise
             finally:
-                await context.close()
+                await cdp.detach(); await context.close()
         await browser.close()
     (output / 'results.json').write_text(json.dumps(reports, ensure_ascii=False, indent=2))
     print('HAND SHORTCUT WEB RESULT 2 viewports')
