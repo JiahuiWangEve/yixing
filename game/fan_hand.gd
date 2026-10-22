@@ -50,12 +50,7 @@ func _selection() -> int:
 	if _has_free() and game.free_selected and game.phase == "play": return 0
 	return _visual_index(game.selected) if game.selected >= 0 and game.selected < game.hand.size() else -1
 func _data(i: int) -> Array:
-	if _is_free(i):
-		if game.player_skill == "artillery":
-			if game.artillery_mode == "attack": return ["炮步", 0, "攻击姿态：免费正交走1格，移动抽1张；每回合一次", "移"]
-			return ["行军", 0, "免费正交走1–2格，不穿透；每回合1次，移动抽1张", "移"]
-		return ["马步" if game.player_skill == "horse" else "帅步", 0, 
-			"免费马步，遵守蹩腿；每回合1次，移动抽1张，与点格共用" if game.player_skill == "horse" else "免费正交走1格；每回合1次，移动抽1张，与点格共用", "移"]
+	if _is_free(i): return game.FREE_MOVE.data_for(game.player_skill, game.artillery_mode)
 	return game.card_data(game.hand[_ordinary_index(i)])
 func _consumable(i: int) -> bool:
 	return not _is_free(i) and game.is_consumable(game.hand[_ordinary_index(i)])

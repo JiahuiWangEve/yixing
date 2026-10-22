@@ -13,7 +13,7 @@ func entries() -> Array:
 				match option.id:
 					"sound": result.append(option.label + "：" + ("关闭" if game.audio_system.muted else "开启"))
 			result.append("返回首页");return result
-		"skill_selection": return ["将 · 四向一步", "马 · 马步移动" if game.skill_system.is_unlocked("horse") else "马 · 通关后解锁", "炮车 · 行军与驻扎" if game.skill_system.is_unlocked("artillery") else "炮车 · 通关后解锁", "返回首页"]
+		"skill_selection": return ["将 · 四向一步", "马 · 马步移动" if game.skill_system.is_unlocked("horse") else "马 · 通关后解锁", "炮车 · 行军与驻扎" if game.skill_system.is_unlocked("artillery") else "炮车 · 通关后解锁", "返回首页", "查看全部卡牌"]
 		"debug_profile": return ["将 · 2命与恢复", "马 · 1命与机动", "炮车 · 1命与炮击", "返回首页"]
 		"tutorial_menu":
 			var result = ["继续上次小节：%d" % (game.tutorial_resume_lesson + 1)]
@@ -60,6 +60,7 @@ func activate(i: int):
 				1: game.skill_system.choose("horse")
 				2: game.skill_system.choose("artillery")
 				3: game.show_home()
+				4: game.card_picker.open_catalog()
 		"debug_profile":
 			if i < 3:
 				game.player_skill = ["king", "horse", "artillery"][i]
@@ -125,13 +126,13 @@ func draw():
 	if game.screen == "home":
 		game.text_at(button_rect(4).position + Vector2(0, button_rect(4).size.y + 24), "关闭：整局悔棋3次；开启：不限次，可跳关", 14, game.THEME.LIGHT)
 	if game.screen == "skill_selection":
-		var bottom = button_rect(3).end.y
+		var bottom = button_rect(entries().size() - 1).end.y
 		var footer = "解锁记录仅保存在当前浏览器；清除数据后会重置"
 		if game.skill_system.horse_unlocked and game.skill_system.save_error != OK: footer = "马与炮车已解锁；本地保存暂不可用"
 		game.text_at(Vector2(24 if game.mobile_layout else 420, bottom + 28), footer, 14, game.THEME.LIGHT)
 
 	if game.screen in ["skill_selection", "debug_profile"]:
-		var help_y = button_rect(3).end.y + (52 if game.screen == "skill_selection" else 28)
+		var help_y = button_rect(entries().size() - 1).end.y + (52 if game.screen == "skill_selection" else 28)
 		var help_x = 24 if game.mobile_layout else 420
 		game.text_at(Vector2(help_x, help_y), "炮车：展开抽3张；攻击走1格，行军走1～2格", 14, game.THEME.LIGHT)
 		game.text_at(Vector2(help_x, help_y + 22), "炮击须隔恰好一子；木桩也可被敌炮利用", 14, game.THEME.LIGHT)

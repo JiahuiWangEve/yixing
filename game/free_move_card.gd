@@ -3,9 +3,14 @@ extends RefCounted
 var game
 func _init(owner): game = owner
 func visible() -> bool: return game.handui._has_free()
-func title() -> String:
-	if game.player_skill == "artillery": return "炮步" if game.artillery_mode == "attack" else "行军"
-	return "马步" if game.player_skill == "horse" else "帅步"
+# Pure shared data: the battle hand and read-only catalog must show the same cards.
+static func data_for(identity: String, stance: String = "march") -> Array:
+	if identity == "artillery":
+		if stance == "attack": return ["炮步", 0, "攻击姿态：免费正交走1格，移动抽1张；每回合一次", "移"]
+		return ["行军", 0, "免费正交走1–2格，不穿透；每回合1次，移动抽1张", "移"]
+	return ["马步" if identity == "horse" else "帅步", 0,
+		"免费马步，遵守蹩腿；每回合1次，移动抽1张，与点格共用" if identity == "horse" else "免费正交走1格；每回合1次，移动抽1张，与点格共用", "移"]
+func title() -> String: return str(data_for(game.player_skill, game.artillery_mode)[0])
 func description() -> String: return str(game.handui._data(0)[2]) if visible() else ""
 func bounds() -> Rect2: return game.handui.free_bounds()
 func hit_test(position: Vector2) -> bool: return game.handui.free_hit(position)
