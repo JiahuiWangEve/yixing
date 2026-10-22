@@ -27,9 +27,10 @@ static func attack_danger(game, id: String, target: Vector2i) -> bool:
 	var board = game.enemies.duplicate(true)
 	var i = R.occupied(target, board)
 	if i < 0: return false
-	var killed = int(board[i].get("hp", game.enemy_health(board[i].kind))) <= 1
+	var damage = 2 if id == "knight_assault" else 1
+	var killed = int(board[i].get("hp", game.enemy_health(board[i].kind))) <= damage
 	if killed: board.remove_at(i)
-	else: board[i].hp -= 1
+	else: board[i].hp -= damage
 	var destination: Vector2i = game.player
 	if id == "retreat_strike": destination = game.player - (target - game.player)
 	elif killed: destination = target
@@ -42,7 +43,7 @@ static func apply(game, id: String, p: Vector2i, index: int):
 				game.player = origin - (p - origin)
 				game.move_piece({}, game.cell_pos(origin), game.cell_pos(game.player))
 			game.effect("sword", game.cell_pos(game.player), game.cell_pos(p), 0.3, 0.28 if id == "retreat_strike" else 0.0)
-			var killed: bool = game.damage_enemy(index, 0.4 if id == "retreat_strike" else 0.12)
+			var killed: bool = game.damage_enemy(index, 0.4 if id == "retreat_strike" else 0.12, 2 if id == "knight_assault" else 1)
 			if killed and id != "retreat_strike":
 				game.player = p
 				game.move_piece({}, game.cell_pos(origin), game.cell_pos(p), 0.2, id == "knight_assault")

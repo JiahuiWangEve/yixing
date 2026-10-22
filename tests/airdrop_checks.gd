@@ -82,8 +82,10 @@ func check_sacrifice_priority():
 	check(game.collection == collection and not game.route.state.victory_recorded and game.route.state.reward_debt == 1, "no victory rewards/homework before self-loss")
 	game.debug_skip();check(game.phase == "dead", "debug victory cannot escape already dead")
 	undo_after_effects(game);check(game.lives == 1 and game.phase == "play" and game.general_alive() and game.hand == ["airdrop"] and game.airdrop_recovery_turn == 0, "undo restores whole sacrifice before action")
-	game.lives = 2;game.play_card(0, Vector2i(4,1))
-	check(game.lives == 1 and game.phase == "reward" and game.airdrop_recovery_turn == 0, "surviving general kill wins and clears recovery")
+	game.lives = 2
+	var surviving_lives = mini(5, 2 - 1 + 1) if game.player_skill == "king" else 2 - 1
+	game.play_card(0, Vector2i(4,1))
+	check(game.lives == surviving_lives and game.phase == "reward" and game.airdrop_recovery_turn == 0, "surviving general kill pays sacrifice before one capped king victory heal and clears recovery")
 func check_recovery():
 	fresh();game.hand = ["airdrop", "fatigue", "breath", "sword"];game.tuna_turns = 2
 	game.play_card(0, Vector2i(4,6));next_turn()

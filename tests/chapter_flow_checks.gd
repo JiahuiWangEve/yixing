@@ -37,13 +37,18 @@ func finish_combat(reward_index: int = -1):
 	game.debug_skip()
 	if game.phase == "reward": game.choose_reward(reward_index)
 
-func march_to_boss():
+func march_to_boss() -> int:
+	var expected_lives = game.lives
 	for id in FIRST_PATH:
 		check(id in route.legal(), "path advances legally to node " + str(id))
 		route.enter(id)
-		if game.screen == "game": finish_combat()
+		if game.screen == "game":
+			expected_lives = mini(5, expected_lives + 1) if game.player_skill == "king" else expected_lives
+			finish_combat()
 		else: leave_node()
+		check(game.lives == expected_lives, "each victory grants only king one capped life; non-combat nodes do not heal")
 	check(route.legal() == [15], "all eight-step routes lead to the boss")
+	return expected_lives
 
 func check_generation():
 	fresh()
@@ -102,14 +107,15 @@ func check_transition():
 		fresh(identity)
 		game.collection = ["sword_plus", "sword", "fatigue", "deploy"]
 		game.lives = 2
-		march_to_boss()
+		var entering_lives = march_to_boss()
+		var victory_lives = mini(5, entering_lives + 1) if identity == "king" else entering_lives
 		var deck = game.collection.duplicate()
 		var first_map_seed = route.state.seed
 		var run_seed = route.state.run_seed
 		route.state.pending_homework = ["spear_plus"]
 		route.state.reward_debt = 1
 		route.enter(15)
-		check(game.lives == 2 and game.player_skill == identity, "entering first boss preserves health and identity")
+		check(game.lives == entering_lives and game.player_skill == identity, "entering first boss preserves accumulated victory health and identity")
 		game.debug_skip();deck.append("spear_plus")
 		check(game.phase == "reward" and not route.state.done and route.chapter() == 1, "first boss waits for reward resolution instead of ending the run")
 		check(game.collection == deck and route.state.pending_homework.is_empty(), "boss victory awards the exact queued card before chapter transition")
@@ -118,18 +124,18 @@ func check_transition():
 		check(not game.history.can_undo(), "first boss receipt cannot be undone")
 		check(route.resume() and game.collection == deck and route.state.homework_awarded == ["spear_plus"], "boss receipt resumes without reissuing homework")
 		game.debug_skip();route.battle_victory()
-		check(game.collection == deck, "repeated victory cannot duplicate boss homework")
+		check(game.collection == deck and game.lives == victory_lives, "repeated victory cannot duplicate boss homework or capped triumph healing")
 		game.choose_reward(0);game.delete_reward(0)
 		check(game.collection == deck and route.chapter() == 1, "suppressed reward cannot grant a card or prematurely advance")
 		game.choose_reward(-1)
 		check(game.screen == "map" and route.chapter() == 2 and not route.state.done, "reward resolution opens a fresh second map")
 		check(route.state.current == -1 and route.state.pending == -1 and route.state.visited.is_empty() and route.legal() == [0], "chapter boundary clears old progress and seals")
 		check(route.state.seed != first_map_seed and route.state.run_seed == run_seed and game.seed_value == run_seed, "chapter boundary changes map seed without changing run seed")
-		check(game.collection == deck and game.lives == 2 and game.player_skill == identity, "chapter boundary preserves exact cards, fatigue, health and character")
+		check(game.collection == deck and game.lives == victory_lives and game.player_skill == identity, "chapter boundary preserves exact cards, fatigue, character and one-time victory health without extra healing")
 		check(not route.state.prepared and route.state.pending_homework.is_empty() and route.state.reward_debt == 0 and not route.rewards_blocked(), "settled commitments do not leak into second chapter")
 		check(game.enemies.is_empty() and game.hand.is_empty() and game.encounter_state.is_empty() and not game.history.can_undo(), "chapter boundary clears battle and undo state")
 		check(route.stamp_node == -1 and route.selected_node == -1 and route.travel_target == -1, "new map has no old victory animation or pending march")
-		check(route.resume() and route.chapter() == 2 and game.collection == deck and game.lives == 2, "second map immediately resumes with persistent expedition state")
+		check(route.resume() and route.chapter() == 2 and game.collection == deck and game.lives == victory_lives, "second map immediately resumes with persistent expedition state and no repeated healing")
 		game.input_lock = 0;game.navigation_lock = 0
 		route.enter(0)
 		check(game.screen == "game" and game.encounter_state.config.id == "c2_heavy_pawns", "second entrance starts the promised new encounter")
@@ -162,16 +168,17 @@ func check_final_boss():
 	fresh()
 	route.generate(game.seed_value, 2)
 	game.lives = 2
-	march_to_boss()
+	var entering_lives = march_to_boss()
+	var victory_lives = mini(5, entering_lives + 1) if game.player_skill == "king" else entering_lives
 	route.state.pending_homework = ["sword_plus"];route.state.reward_debt = 1
 	var deck = game.collection.duplicate()
 	route.enter(15)
 	check(game.encounter_state.config.id == "c2_inner_city", "second map ends at the inner-city encounter")
 	game.debug_skip();deck.append("sword_plus")
 	check(game.phase == "win" and route.state.done and route.chapter() == 2, "second boss reaches the final ending")
-	check(game.collection == deck and game.lives == 2 and route.state.pending_homework.is_empty(), "final victory settles homework without free healing")
+	check(game.collection == deck and game.lives == victory_lives and route.state.pending_homework.is_empty(), "final victory settles homework and only king gains one capped triumph life")
 	game.debug_skip();route.complete()
-	check(route.state.done and game.phase == "win" and game.collection == deck, "ending cannot reset the map or duplicate final rewards")
+	check(route.state.done and game.phase == "win" and game.collection == deck and game.lives == victory_lives, "ending cannot reset the map or duplicate final rewards or triumph healing")
 	check(not route.resume(), "finished expedition cannot replay rewards on resume")
 
 func check_saves():

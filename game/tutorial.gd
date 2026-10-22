@@ -3,7 +3,7 @@ extends RefCounted
 
 
 const RULES = preload("res://rules.gd")
-const LESSON_NAMES = ["移动与抽牌", "出牌与能量", "移动牌与手牌上限", "威胁与敌方阶段", "胜负、奖励与援军"]
+const LESSON_NAMES = ["移动与抽牌", "出牌与能量", "移动牌与手牌上限", "威胁与敌方阶段", "胜负、奖励与换牌"]
 var active = false
 var lesson_index = 0
 var step_index = 0
@@ -86,6 +86,11 @@ func tick(delta: float):
 		_feedback = ""
 		_feedback_time = 0.0
 
+func pass_step() -> bool:
+	return active and not lesson_complete and not _retry_pending and _pending_step < 0 and step_index >= 0 and step_index < _steps.size() and str(_steps[step_index].action) == "pass"
+func can_pass(index: int, free: bool = false) -> bool:
+	return pass_step() and _presentation_finished() and not free and _card_at({"index": index}) == str(_steps[step_index].card)
+
 func allows(action: String, data: Dictionary = {}) -> bool:
 	if not active: return true
 	if lesson_complete or _retry_pending or _pending_step >= 0 or not _presentation_finished(): return false
@@ -94,12 +99,12 @@ func allows(action: String, data: Dictionary = {}) -> bool:
 	if spec.get("free", false):
 		allowed = action in ["move", "end_turn", "select", "cancel", "play", "discard"]
 	elif action == "cancel":
-		allowed = str(spec.action) in ["cancel", "play", "select", "discard"]
+		allowed = str(spec.action) in ["cancel", "play", "select", "discard", "pass"]
 	elif action == "select":
 		if str(spec.action) == "discard":
 			allowed = not _card_at(data).is_empty()
 		else:
-			allowed = str(spec.action) in ["select", "play"] and _card_at(data) == str(spec.get("card", ""))
+			allowed = str(spec.action) in ["select", "play", "pass"] and _card_at(data) == str(spec.get("card", ""))
 	elif action == str(spec.action):
 		allowed = true
 		if action == "move" and spec.has("target"):
@@ -107,6 +112,8 @@ func allows(action: String, data: Dictionary = {}) -> bool:
 		elif action == "play":
 			allowed = _card_at(data) == str(spec.get("card", ""))
 			if spec.has("target"): allowed = allowed and data.get("target", Vector2i(-1, -1)) == spec.target
+		elif action == "pass":
+			allowed = can_pass(int(data.get("index", -1)))
 		elif action == "discard":
 			allowed = not _card_at(data).is_empty()
 		elif action == "reward":
@@ -177,44 +184,42 @@ func _build_steps() -> Array:
 	match lesson_index:
 		0:
 			return [
-				_step("move", "0张普通牌；点亮格或用帅步移动，固定抽短剑。", 0, {"target": Vector2i(4, 7), "label": "固定抽牌练习"}), 
+				_step("move", "0张普通牌；点亮格或用帅步移动，固定抽短剑。", 0, {"target": Vector2i(4, 7), "label": "固定抽牌练习"}),
 				_step("end_turn", "基础移动已用；点结束回合（电脑空格），观察手牌。", 0),
 				_step("move", "回合不自动抽牌；移动恢复，再走亮格。", 0, {"target": Vector2i(5, 7)})]
 		1:
 			return [
-				_step("select", "预置手牌：先点选短剑，尚不花能量。", 0, {"card": "sword", "label": "选牌与一命卒"}), 
-				_step("cancel", "再次点短剑取消；也可按 Esc。", 0), 
-				_step("play", "选短剑，再点亮格的卒；一击扣一血。", 0, {"card": "sword", "target": Vector2i(4, 5)}), 
-				_step("end_turn", "短剑花一气；结束回合，余牌会保留。", 0), 
+				_step("select", "预置手牌：先点选短剑，尚不花能量。", 0, {"card": "sword", "label": "选牌与一命卒"}),
+				_step("cancel", "再次点短剑取消；也可按 Esc。", 0),
+				_step("play", "选短剑，再点亮格的卒；一击扣一血。", 0, {"card": "sword", "target": Vector2i(4, 5)}),
+				_step("end_turn", "短剑花一气；结束回合，余牌会保留。", 0),
 				_step("play", "新预设：象有三血；用短剑击中亮格。", 1, {"card": "sword", "target": Vector2i(5, 3), "label": "三血象练习"}),
 				_step("play", "象还剩两血；再用短剑击中亮格。", 1, {"card": "sword", "target": Vector2i(5, 3)}),
 				_step("play", "象还剩一血；第三剑击败它，观察碎裂。", 1, {"card": "sword", "target": Vector2i(5, 3)}),
 				_step("end_turn", "三气已用完；结束回合回三气，踏马保留。", 1)]
 		2:
 			return [
-				_step("move", "固定抽牌：基础移动到亮格，抽到踏马。", 0, {"target": Vector2i(4, 7), "label": "移动接攻击"}), 
-				_step("play", "基础移动已用；踏马仍能走，并抽短剑。", 0, {"card": "horse", "target": Vector2i(6, 6)}), 
-				_step("play", "两种移动各限一次；用新抽的短剑杀卒。", 0, {"card": "sword", "target": Vector2i(6, 5)}), 
-				_step("end_turn", "基础与牌移动都已用；结束回合恢复。", 0), 
-				_step("move", "新预设六张手牌；走亮格抽第七张。", 1, {"target": Vector2i(4, 7), "label": "七张强制弃牌"}), 
+				_step("move", "固定抽牌：基础移动到亮格，抽到踏马。", 0, {"target": Vector2i(4, 7), "label": "移动接攻击"}),
+				_step("play", "付费移动牌需先点击选中，再点亮格。用踏马移动并抽短剑。", 0, {"card": "horse", "target": Vector2i(6, 6)}),
+				_step("play", "两种移动各限一次；用新抽的短剑杀卒。", 0, {"card": "sword", "target": Vector2i(6, 5)}),
+				_step("end_turn", "基础与牌移动都已用；结束回合恢复。", 0),
+				_step("move", "新预设六张手牌；走亮格抽第七张。", 1, {"target": Vector2i(4, 7), "label": "七张强制弃牌"}),
 				_step("discard", "手牌上限六：选一张，再点确认弃牌。", 1)]
 		3:
 			return [
-				_step("move", "卒的倒计时三只管移动；先走亮格解围。", 0, {"target": Vector2i(3, 6), "label": "攻击不等倒计时"}), 
-				_step("end_turn", "已离开攻击格；安全后再结束回合。", 0), 
-				_step("end_turn", "新预设当前安全；结束回合观察卒前进。", 1, {"label": "移动后不连击"}), 
-				_step("move", "卒刚移动不会连击；现在走亮格避险。", 1, {"target": Vector2i(3, 7)}), 
-				_step("end_turn", "你有一回合反应；解围后结束回合。", 1), 
+				_step("move", "卒的倒计时三只管移动；先走亮格解围。", 0, {"target": Vector2i(3, 6), "label": "攻击不等倒计时"}),
+				_step("end_turn", "已离开攻击格；安全后再结束回合。", 0),
+				_step("end_turn", "新预设当前安全；结束回合观察卒前进。", 1, {"label": "移动后不连击"}),
+				_step("move", "卒刚移动不会连击；现在走亮格避险。", 1, {"target": Vector2i(3, 7)}),
+				_step("end_turn", "你有一回合反应；解围后结束回合。", 1),
 				_step("end_turn", "自由测验：选安全路线，活过敌方阶段。", 2, {"free": true, "label": "自由避险测验"})]
 		4:
 			return [
-				_step("play", "预置三张短剑；将有三血，先出一剑。", 0, {"card": "sword", "target": Vector2i(4, 0), "label": "三血将与破阵奖励"}), 
-				_step("play", "将剩两血；再用短剑击中亮格。", 0, {"card": "sword", "target": Vector2i(4, 0)}), 
-				_step("play", "将剩一血；最后一剑真正破阵。", 0, {"card": "sword", "target": Vector2i(4, 0)}), 
-				_step("reward", "破阵奖励：加一张新牌或永久删一张，也可跳过。", 0), 
-				_step("end_turn", "新预设第三关；结束第一个敌方阶段。", 1, {"label": "第三关三阶段援军"}), 
-				_step("end_turn", "尚无援军；结束第二个敌方阶段。", 1), 
-				_step("end_turn", "结束第三个敌方阶段，观察马援军落地。", 1)]
+				_step("play", "预置三张短剑；将有三血，先出一剑。", 0, {"card": "sword", "target": Vector2i(4, 0), "label": "三血将与破阵奖励"}),
+				_step("play", "将剩两血；再用短剑击中亮格。", 0, {"card": "sword", "target": Vector2i(4, 0)}),
+				_step("play", "将剩一血；最后一剑真正破阵。", 0, {"card": "sword", "target": Vector2i(4, 0)}),
+				_step("reward", "破阵奖励：加一张新牌或永久删一张，也可跳过。", 0),
+				_step("pass", "选短剑点右侧弃置，或长按拖入松手：3费抽1张。", 1, {"card": "sword", "label": "付费弃牌重抽"})]
 	return []
 
 func _load_section(section: int):
@@ -275,8 +280,10 @@ func _load_section(section: int):
 				game.hand = ["sword", "sword", "sword"]
 				_general()
 			else:
-				game.stage = 3
 				game.player = Vector2i(4, 9)
+				game.hand = ["sword"]
+				game.deck = ["spear"]
+				game.energy = 3
 				_general()
 	game.player_visual = game.cell_pos(game.player)
 	game.plan_intents()
@@ -323,11 +330,11 @@ func _card_at(data: Dictionary) -> String:
 func _capture(action: String, data: Dictionary):
 	_last_action = action
 	_before = {
-		"player": game.player, "lives": game.lives, "energy": game.energy, 
-		"turn": game.turn, "stage": game.stage, "hand": game.hand.duplicate(), 
-		"basic_used": game.basic_used, "card_move_used": game.card_move_used, 
-		"card": _card_at(data), "enemies": game.enemies.duplicate(true), 
-		"reinforcement_turns": game.reinforcement_turns, 
+		"player": game.player, "lives": game.lives, "energy": game.energy,
+		"turn": game.turn, "stage": game.stage, "hand": game.hand.duplicate(), "collection": game.collection.duplicate(),
+		"basic_used": game.basic_used, "card_move_used": game.card_move_used,
+		"card": _card_at(data), "enemies": game.enemies.duplicate(true),
+		"reinforcement_turns": game.reinforcement_turns,
 		"reward_mode": str(data.get("mode", "add")), "collection_size": game.collection.size(), "reward_index": int(data.get("index", -2))}
 
 func _observed_success(action: String, data: Dictionary) -> bool:
@@ -352,6 +359,8 @@ func _observed_success(action: String, data: Dictionary) -> bool:
 			if card == "sword":
 				if int(previous.hp) == 1: return after_index < 0
 				return after_index >= 0 and int(game.enemies[after_index].hp) == int(previous.hp) - 1
+		"pass":
+			return game.energy == int(_before.energy) - 3 and game.hand == ["spear"] and game.deck.is_empty() and game.discard == ["sword"] and game.player == _before.player and game.enemies == _before.enemies and game.collection == _before.collection
 		"discard":
 			return _before.hand.size() == 7 and game.hand.size() == 6 and game.phase == "play" and game.energy == _before.energy
 		"reward":
@@ -362,14 +371,7 @@ func _observed_success(action: String, data: Dictionary) -> bool:
 			if game.hand != _before.hand: return false
 			if lesson_index == 3 and step_index == 2:
 				return game.player == _before.player and game.lives == 1 and RULES.occupied(Vector2i(4, 6), game.enemies) >= 0 and RULES.threatened(game.player, game.enemies)
-			if lesson_index == 4 and step_index >= 4:
-				var count = game.reinforcement_turns
-				if count != step_index - 3: return false
-				var horses = []
-				for enemy in game.enemies:
-					if enemy.kind == "h": horses.append(enemy)
-				if step_index < 6: return horses.is_empty() and game.lives == 1
-				return horses.size() == 1 and horses[0].pos.y == 0 and horses[0].cd == 3 and game.lives == 1
+
 			return game.lives == int(_before.lives)
 	return false
 
@@ -384,7 +386,7 @@ func _result_hint() -> String:
 	if lesson_index == 1 and step_index in [3, 7]: return "能量恢复三气；没有打出的踏马仍在手里。"
 	if lesson_index == 2 and step_index == 3: return "基础移动与移动牌次数都恢复了。"
 	if lesson_index == 2 and step_index == 4: return "已抽到第七张；必须弃一张才能继续。"
-	if lesson_index == 4 and step_index == 6: return "马援军已落地，倒计时三；本阶段不会行动。"
+	if lesson_index == 4 and step_index == 4: return "完成：3费弃置抽1张；不触发效果，不永久删牌。"
 	if lesson_index == 1 and step_index == 4: return "象受伤但未死；还剩两血。"
 	if lesson_index == 1 and step_index == 5: return "象还剩一血；第三剑可击败它。"
 	if lesson_index == 1 and step_index == 6: return "三剑击败三血象；三气用完，踏马仍在手里。"
@@ -408,5 +410,5 @@ func _completion_hint() -> String:
 		1: return "卒一血、象三血；回合恢复三气，保留手牌。"
 		2: return "两种移动各一次；超六张要选牌确认弃置。"
 		3: return "先攻击后移动；一命受击失败，先解围。"
-		4: return "破将得奖励；第三关起每三敌方阶段来援军。"
+		4: return "完成：3费弃置抽1张；不触发效果，不永久删牌。"
 	return "练习完成。"

@@ -1,7 +1,7 @@
 extends RefCounted
 # Add future preferences here; home entry indices remain stable.
 const SETTINGS_OPTIONS = [{"id": "sound", "label": "声音"}]
-const LESSON_NAMES = ["移动与抽牌", "攻击与能量", "移动牌与留牌", "危险与行动顺序", "破将、奖励与增援"]
+const LESSON_NAMES = ["移动与抽牌", "攻击与能量", "移动牌与留牌", "危险与行动顺序", "破将、奖励与换牌"]
 var game
 func _init(owner): game = owner
 func entries() -> Array:
@@ -96,13 +96,12 @@ func draw():
 	var origin = (Vector2(24, 60) if game.compact_landscape else Vector2(24, 90)) if game.mobile_layout else Vector2(420, 100)
 	game.text_at(origin, titles.get(game.screen, "弈 行"), 32, game.THEME.HEADING)
 	if game.screen == "home":
-		game.text_at(origin + Vector2(0, 32), "山河棋路 · 三种开局 · 八步破关", 16, game.THEME.LIGHT)
 		if game.notice in ["暂无可继续的章节", "此存档不可续用，请开始新征途。"]: game.text_at(Vector2(24, game.ui_size.y - 48), game.notice, 16, game.THEME.HEADING)
 	elif game.screen == "settings":
 		game.text_at(origin + Vector2(0, 28), "点击切换声音开关", 16, game.THEME.LIGHT)
 		if game.settings.save_error != OK: game.text_at(Vector2(24, game.ui_size.y - 48), "设置已生效，本地保存暂不可用", 16, game.THEME.HEADING)
 	elif game.screen == "skill_selection":
-		game.text_at(origin + Vector2(0, 28), "各有 8 张初始牌；移动抽牌，回合保留手牌", 16, game.THEME.LIGHT)
+		game.text_at(origin + Vector2(0, 28), "各有 4 张初始牌；移动抽牌，回合保留手牌", 16, game.THEME.LIGHT)
 		game.text_at(origin + Vector2(0, 48), "消耗：每张每关使用一次，下关恢复", 16, game.THEME.LIGHT)
 	elif game.screen == "debug_profile":
 		game.text_at(origin + Vector2(0, 28), "调试可直接选择全部开局", 16, game.THEME.LIGHT)
@@ -121,7 +120,7 @@ func draw():
 		var profile_entry = game.screen in ["skill_selection", "debug_profile"] and i < 3
 		game.text_at(rect.position + Vector2(20, 26 if profile_entry else 35), entries()[i], 20, game.THEME.GRID if locked else game.THEME.INK)
 		if profile_entry:
-			var summaries = ["2 命 · 恢复与近战 · 奖励含续命、吐纳", "1 命 · 马步与进退攻击 · 击杀切入", "1 命 · 行军走 1–2 格 · 展开抽 3 张"]
+			var summaries = ["2 命 · 凯旋：胜利回1命（上限5）", "1 命 · 马步与进退攻击 · 击杀切入", "1 命 · 行军走 1–2 格 · 展开抽 3 张"]
 			game.text_at(rect.position + Vector2(20, 47), summaries[i], 14, game.THEME.GRID if locked else game.THEME.SAFE)
 	if game.screen == "home":
 		game.text_at(button_rect(4).position + Vector2(0, button_rect(4).size.y + 24), "关闭：整局悔棋3次；开启：不限次，可跳关", 14, game.THEME.LIGHT)

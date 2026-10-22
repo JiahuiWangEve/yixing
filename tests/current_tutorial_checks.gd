@@ -53,6 +53,7 @@ func run_checks():
 					"move": game.basic_move(spec.target)
 					"play": game.play_card(game.hand.find(spec.card), spec.target)
 					"discard": game.discard_hand(0)
+					"pass": game.pass_card(game.hand.find(spec.card))
 					"reward":
 						if reward_mode == "remove": game.delete_reward(0)
 						else: game.choose_reward(0 if reward_mode == "add" else -1)

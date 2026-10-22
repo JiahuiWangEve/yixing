@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.14.7"
+const BUILD_VERSION = "v0.14.8"
 const PASS_CARD_COST = 3
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
@@ -11,10 +11,11 @@ const GESTURE = preload("res://card_input.gd")
 const SKILLS = preload("res://player_skills.gd")
 const FREE_MOVE = preload("res://free_move_card.gd")
 const HISTORY = preload("res://undo_history.gd")
-const UNTARGETED = ["sweep", "life", "breath", "deploy", "pack", "tuna", "suppress", "guard", "reload", "fatigue"]
+const UNTARGETED = ["sweep", "life", "breath", "deploy", "pack", "tuna", "suppress", "guard", "reload", "fatigue", "blood_break"]
 # One use per physical copy per stage; discarded unused copies still recycle.
-const CONSUMABLES = ["life", "breath", "deploy", "tuna", "guard", "permanent_stake", "airdrop"]
+const CONSUMABLES = ["life", "breath", "deploy", "tuna", "guard", "permanent_stake", "airdrop", "blood_break"]
 const TACTICS = preload("res://tactics.gd")
+const KING_BLOOD = preload("res://king_blood.gd")
 const CAMPAIGN = preload("res://campaign.gd")
 const ENCOUNTERS = preload("res://encounters.gd")
 var encounter_state: Dictionary = {}
@@ -166,14 +167,16 @@ func undo_label() -> String:
 	return "悔棋 · 剩%d次" % normal_undos_remaining if mobile_layout else "悔棋 Ctrl+Z · 剩%d次" % normal_undos_remaining
 # Passing is not playing: central guards deliberately ignore target/stance legality.
 func can_pass_card(index: int, free: bool = false) -> bool:
-	if screen != "game" or phase != "play" or recovery_active() or tutorial.active or encounter_info_open: return false
+	if screen != "game" or phase != "play" or recovery_active() or encounter_info_open: return false
 	if presentation.active() or card_picker.active: return false
 	if input_lock > 0 or navigation_lock > 0: return false
+	if tutorial.active and not tutorial.can_pass(index, free): return false
 	if energy < PASS_CARD_COST: return false
 	if free: return free_card_available()
 	return index >= 0 and index < hand.size()
 func pass_card(index: int, free: bool = false) -> bool:
 	if not can_pass_card(index, free): return false
+	if not tutorial_allows("pass", {"index": index}): return false
 	history.record("pass");cancel_gesture()
 	energy -= PASS_CARD_COST
 	if free:
@@ -188,6 +191,7 @@ func pass_card(index: int, free: bool = false) -> bool:
 	# Remove first, then use the normal draw hook (shuffle, fatigue, hand limit).
 	# A just-discarded card can be drawn again when the draw pile is empty.
 	draw_card()
+	tutorial_after("pass")
 	queue_redraw()
 	return true
 func pass_button_rect() -> Rect2:
@@ -198,7 +202,8 @@ func pass_drop_rect() -> Rect2:
 	if mobile_layout: return Rect2(380, full_hand_area().position.y + 28, 84, 166)
 	return Rect2(1100, 350, 140, 200)
 func pass_zone_visible() -> bool:
-	if screen != "game" or phase != "play" or recovery_active() or tutorial.active: return false
+	if screen != "game" or phase != "play" or recovery_active(): return false
+	if tutorial.active and not tutorial.pass_step(): return false
 	if card_picker.active or encounter_info_open or presentation.active(): return false
 	if gesture.active:
 		return (gesture.uid == free_card_uid and free_card_available()) if gesture.free_move else hand_ids.has(gesture.uid)
@@ -245,6 +250,9 @@ const INK = THEME.INK
 const GOLD = THEME.GOLD
 const RED = THEME.DANGER
 const CARDS = {
+	"blood_edge": ["血锋", 1, "自损1命；选正交方向，连续3格敌子各2伤", "攻", "自损1命。点正交1–3格选方向，该方向3格内所有敌子各2伤，贯穿、不移动。须有敌人，不伤木桩。护盾不抵消自损；命归零直接失败。"],
+	"blood_break": ["浴血破阵", 3, "自损1命；四正交各2格敌子各3伤；消耗", "攻", "自损1命；四正交各2格敌子各3伤，不含斜角，须有敌人。不移动、不跳过回合。护盾不抵消自损；命归零直接失败。"],
+	"last_stand": ["背水斩", 1, "正交邻敌1伤；出牌时仅1命则3伤", "攻", "选正交相邻一敌造成1伤；出牌时自身恰好1命则3伤。不自损、不移动。"],
 	"airdrop": ["空投", 3, "飞至任意空格，周围3×3各3伤；命-1，下一回合停行动；消耗", "攻", "将专属。落点必须是其他空格，不能是敌子或木桩。落地周围3×3的每个敌子受3伤，自身扣1命（不被固守抵挡、不撤退）。命归零立即失败，即使同时击杀敌将。当前回合可继续；下一玩家回合不能移动或出牌，仍正常结算敌方与被动效果。消耗：本场移除，下场恢复。"],
 	"fatigue": ["疲惫", 2, "抽到时能量-1；留手每轮-1，最低0。打出弃置", "负", "负面牌。抽到时立即扣1能量，能量为0则不扣、不欠费。每个后续玩家回合开始，仍在手中时再扣1；多张分别结算。花2费打出后正常弃置，已扣能量不返还；不是消耗牌。"],
 	"sword_plus": ["短剑·淬锋", 1, "对正交相邻敌子造成2点伤害（强化）", "攻"],
@@ -270,7 +278,7 @@ const CARDS = {
 	"cannon_shot": ["炮击", 2, "直线隔恰好一子；行军2费1伤，攻击1费2伤", "攻"],
 	"advance": ["进击", 1, "正交相邻敌子1伤；击杀后进入其位置，不抽牌", "攻"],
 	"retreat_strike": ["回马枪", 1, "向目标反方向退1格再造成1伤，退路需空；不抽牌", "攻"],
-	"knight_assault": ["马踏连营", 2, "马步攻击1伤，遵守蹩腿；击杀后进入目标格，不抽牌", "攻"],
+	"knight_assault": ["马踏连营", 2, "马步攻击2伤，遵守蹩腿；击杀后进入目标格，不抽牌", "攻"],
 	"deploy": ["展开", 1, "行军→攻击；本回合首次展开抽3张；消耗", "术", "仅炮车行军姿态可用。进入攻击姿态；每回合首次进入时抽3张，超出6张需弃牌。使用后本关移除，下关恢复。"],
 	"pack": ["转进", 0, "攻击→行军；不抽牌，保留免费移动额度", "术"],
 	"tuna": ["吐纳", 3, "下回合起连续3回合能量+1；消耗", "术", "使用当回合不返还能量。接下来3个玩家回合各以4能量开始；再次使用延长3回合，不叠加增量。过关清除。消耗：使用后本关移除，下关恢复。"],
@@ -515,7 +523,8 @@ func select_card(index: int):
 	if not tutorial_allows("select", {"index": index}): return
 	free_selected = false
 	selected = index;audio_system.play_cue("select", tick);hand_drawer = false
-	notice = "点击高亮目标；右键或 Esc 取消。";tutorial_after("select", {"index": index})
+	notice = "血锋：点正交1–3格选方向，贯穿该方向敌子；自损1命。" if hand[index] == "blood_edge" else "点击高亮目标；右键或 Esc 取消。"
+	tutorial_after("select", {"index": index})
 func basic_move(target: Vector2i):
 	if screen != "game" or phase != "play" or not basic_legal(target): return
 	if not tutorial_allows("move", {"target": target}): return
@@ -626,6 +635,8 @@ func card_data(id: String) -> Array:
 	data[1] = card_cost(id)
 	if id == "airdrop" and lives <= 1:
 		data[2] = "仅剩1命：使用后直接失败；空格落地，周围3×3各3伤；消耗"
+	if id == "last_stand": data[2] = "正交邻敌：当前%d伤（仅1命时3伤）" % KING_BLOOD.amount(self, id)
+	if id in ["blood_edge", "blood_break"] and lives <= 1: data[2] = "仅剩1命：使用后直接失败。" + str(data[2])
 	if id == "cannon_shot":
 		var amount = (2 if artillery_mode == "attack" else 1) + (1 if reload_ready else 0)
 		data[2] = "%s：%d费%d伤；直线隔恰好一子%s" % ["攻击姿态" if artillery_mode == "attack" else "行军姿态", data[1], amount, "；装填击杀抽1张" if reload_ready else ""]
@@ -634,6 +645,7 @@ func card_data(id: String) -> Array:
 		data[4] = "当前%d伤（1+主动位移%d次）。周围3×3选一个敌子。免费、移动牌与攻击附带的成功位移，每次行动计1次；受击转移、失败与切姿态不计。" % [1 + active_displacements, active_displacements]
 	return data
 func target_danger(id: String, p: Vector2i) -> bool:
+	if id in KING_BLOOD.IDS: return KING_BLOOD.self_cost(id) > 0 and lives <= KING_BLOOD.self_cost(id)
 	if id == "airdrop":
 		var survivors = enemies.filter(func(enemy): return enemy.kind == "stake" or int(enemy.hp) > 3 or absi(enemy.pos.x - p.x) > 1 or absi(enemy.pos.y - p.y) > 1)
 		return lives <= 1 or R.threatened(p, survivors)
@@ -656,6 +668,7 @@ func card_legal(id: String, p: Vector2i) -> bool:
 	if recovery_active(): return false
 	id = id.trim_suffix("_plus")
 	if not R.inside(p): return false
+	if id in KING_BLOOD.IDS: return KING_BLOOD.legal(self, id, p)
 	if id in TACTICS.IDS: return TACTICS.legal(self, id, p)
 	var d = p - player
 	var dist = abs(d.x) + abs(d.y)
@@ -816,6 +829,7 @@ func play_card(i: int, p: Vector2i):
 	if not is_consumable(id): discard.append(id)
 	log_line("使用「%s」" % CARDS[id][0])
 	var idx = R.occupied(p, enemies)
+	if id in KING_BLOOD.IDS and KING_BLOOD.apply(self, id, p): return
 	if id in TACTICS.IDS: TACTICS.apply(self, id, p, idx)
 	match id:
 		"airdrop":
@@ -883,6 +897,10 @@ func settle_victory():
 	if screen != "game" or phase not in ["play", "discard"]: return
 	cancel_gesture();clear_effects();rewardui.reset();clear_battle_card_effects()
 	ENCOUNTERS.cancel_pending(self)
+	if player_skill == "king" and not tutorial.active and (not route.active() or not route.state.get("victory_recorded", false)):
+		var previous_lives = lives
+		lives = mini(5, lives + 1)
+		if lives > previous_lives: log_line("凯旋：胜利回复1命。")
 	if route.active():
 		history.clear()
 		route.battle_victory()
@@ -1144,7 +1162,11 @@ func _draw():
 	board_info.draw_player_status()
 	board_info.draw_hud()
 	var hint = context_hint()
-	if not hint.is_empty() and input_lock <= 0 and board_info.should_show_context(): text_at((Vector2(410, 142) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 67)) if mobile_layout else Vector2(24, 618), hint, 14 if mobile_layout else 16, RED if phase == "discard" or R.threatened(player, enemies) else THEME.HEADING)
+	if not hint.is_empty() and input_lock <= 0 and board_info.should_show_context():
+		var hint_pos = (Vector2(410, 142) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 67)) if mobile_layout else Vector2(24, 618)
+		var hint_color = RED if phase == "discard" or R.threatened(player, enemies) else THEME.HEADING
+		if tutorial.active: wrapped_text(hint, Rect2(hint_pos - Vector2(0, 14), Vector2(ui_size.x - hint_pos.x - 24, 64)), 14 if compact_landscape else 16, hint_color)
+		else: text_at(hint_pos, hint, 14 if mobile_layout else 16, hint_color)
 	draw_effects()
 	board_info.draw_preview(gesture.target_cell() if gesture.dragging else (board_cell(mouse_pos) if active_touch >= 0 else hover))
 	if phase == "discard": draw_rect(full_hand_area().grow(2), RED, false, 3)

@@ -3,7 +3,7 @@ extends SceneTree
 const R = preload("res://rules.gd")
 const COMMON = ["sword", "spear", "diagonal", "breath"]
 const DEDICATED = {
-	"king": ["life", "sweep", "pierce", "shock", "tuna", "suppress", "guard", "horse", "airdrop"],
+	"king": ["life", "sweep", "pierce", "shock", "tuna", "suppress", "guard", "horse", "airdrop", "blood_edge", "blood_break", "last_stand"],
 	"horse": ["straight", "pursuit", "advance", "retreat_strike", "knight_assault", "chain_assault"],
 	"artillery": ["stake", "cannon_shot", "deploy", "pack", "permanent_stake", "reload"]
 }
@@ -365,7 +365,8 @@ func check_progress_and_tutorial():
 
 func check_horse_attacks():
 	for id in ["advance", "knight_assault", "retreat_strike"]:
-		for hp in [1, 2]:
+		var damage = 2 if id == "knight_assault" else 1
+		for hp in ([1, 2, 3] if id == "knight_assault" else [1, 2]):
 			reset("horse")
 			game.player = Vector2i(4, 5)
 			var target = Vector2i(6, 4) if id == "knight_assault" else Vector2i(4, 4)
@@ -377,10 +378,11 @@ func check_horse_attacks():
 			var deck_before = game.deck.duplicate()
 			check(game.can_commit_card(0, target), id + " available after both movement quotas")
 			game.play_card(0, target)
-			var expected = Vector2i(4, 6) if id == "retreat_strike" else (target if hp == 1 else Vector2i(4, 5))
-			check(game.player == expected and game.enemies.size() == (1 if hp == 1 else 2), id + " movement follows kill or retreat rule")
+			var killed = hp <= damage
+			var expected = Vector2i(4, 6) if id == "retreat_strike" else (target if killed else Vector2i(4, 5))
+			check(game.player == expected and game.enemies.size() == (1 if killed else 2), id + " movement follows exact damage, kill or retreat rule")
 			check(game.energy == 3 - game.card_cost(id) and game.hand.is_empty() and game.deck == deck_before and game.discard == [id] and game.basic_used and game.card_move_used, id + " consumes energy without drawing or changing quotas")
-			if hp == 2: check(game.enemies.back().hp == 1, id + " deals exactly one damage")
+			if not killed: check(game.enemies.back().hp == hp - damage, id + " deals exactly " + str(damage) + " damage")
 			undo_after_effects(game)
 			check(game.player == Vector2i(4, 5) and game.hand == [id] and game.energy == 3 and game.enemies.back().hp == hp, id + " undo restores position target and hand")
 	reset("horse")

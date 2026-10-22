@@ -202,16 +202,18 @@ func check_bleed_phase_order():
 	check(game.phase == "play" and game.enemies[0].hp == 2, "bleeding general does not grant victory when card is played")
 	game.end_turn()
 	check(game.phase == "play" and game.enemies[0].hp == 1 and game.lives == 1 and game.turn == 2, "general survives first tick and attacks before second player turn")
+	var victory_lives = mini(5, 1 + 1) if game.player_skill == "king" else 1
 	game.end_turn()
-	check(game.phase == "reward" and game.lives == 1 and game.turn == 2 and game.pending_bleeds.is_empty(), "second-tick general kill settles victory before attacks or turn increment")
+	check(game.phase == "reward" and game.lives == victory_lives and game.turn == 2 and game.pending_bleeds.is_empty(), "second-tick general kill grants only king one capped life before attacks or turn increment")
 	fresh();game.player = Vector2i(4, 1);game.enemies[0].hp = 2;game.lives = 1
 	hand(["pierce"]);game.play_card(0, Vector2i(4, 0));game.end_turn()
 	check(game.phase == "dead" and game.enemies[0].hp == 1 and game.pending_bleeds.is_empty(), "lethal enemy attack after first tick cancels remaining bleed")
 	game.end_turn();check(game.phase == "dead" and game.enemies[0].hp == 1, "cancelled second tick cannot revive a dead player through victory")
 	fresh();game.player = Vector2i(4, 1);game.enemies[0].hp = 1;game.lives = 1
 	victim = enemy("p", Vector2i(0, 0), 5, 1);game.queue_bleed(0, 2);game.queue_bleed(1, 2)
+	victory_lives = mini(5, 1 + 1) if game.player_skill == "king" else 1
 	game.end_turn()
-	check(game.phase == "reward" and game.lives == 1 and game.turn == 1 and victim.hp == 5 and victim.pos == Vector2i(0, 0), "first-tick general kill stops remaining damage and entire enemy phase")
+	check(game.phase == "reward" and game.lives == victory_lives and game.turn == 1 and victim.hp == 5 and victim.pos == Vector2i(0, 0), "first-tick general kill grants only king one capped life and stops remaining damage and enemy phase")
 	fresh();game.stage = 6;game.player = Vector2i(4, 1);game.enemies[0].hp = 2
 	hand(["pierce", "guard"]);game.play_card(0, Vector2i(4, 0));game.play_card(0, game.player);game.end_turn()
 	check(game.phase == "play" and game.enemies[0].hp == 1 and game.lives == 5 and game.shield_charges == 0, "shield protects first ending while final general survives one bleed tick")

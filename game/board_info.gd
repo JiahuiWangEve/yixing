@@ -5,7 +5,7 @@ const E = preload("res://encounters.gd")
 const C2 = preload("res://chapter_two.gd")
 const R = preload("res://rules.gd")
 const T = preload("res://theme.gd")
-const ATTACKS = ["sword", "sword_plus", "spear", "spear_plus", "diagonal", "cannon", "cannon_shot", "pierce", "pursuit", "shock", "advance", "retreat_strike", "knight_assault", "chain_assault", "airdrop", "sweep"]
+const ATTACKS = ["sword", "sword_plus", "spear", "spear_plus", "diagonal", "cannon", "cannon_shot", "pierce", "pursuit", "shock", "advance", "retreat_strike", "knight_assault", "chain_assault", "airdrop", "sweep", "blood_edge", "blood_break", "last_stand"]
 const CREDIT_RULE = "每个敌方回合最多移动一次；移动或战术留守消耗1次加速，多余加速顺延。定身、堵路、攻击留位保留加速；镇四方延迟加速2轮。移动不额外攻击。"
 const REVIVAL_RULE = "击倒后在原位留下残影，不挡路、不作炮架。经过2个完整玩家回合，原位空闲时满血复归；复归当轮不行动。敌将阵亡后取消。"
 var game
@@ -93,6 +93,7 @@ func enemy_info(enemy: Dictionary) -> Dictionary:
 	return {"key": "enemy:%s" % enemy.get("uid", enemy.pos), "title": title, "lines": lines, "anchor": piece_rect(enemy.pos)}
 func player_info() -> Dictionary:
 	var lines: Array = ["生命 %d；能量 %d。" % [game.lives, game.energy], "本回合主动位移 %d次。" % game.active_displacements]
+	if game.player_skill == "king": lines.append("凯旋：战斗胜利回复1命，上限5；无奖励战斗也生效。")
 	if game.player_skill == "artillery": lines.append("攻击姿态：正交走1格，炮击1费2伤。" if game.artillery_mode == "attack" else "行军姿态：正交走1～2格，炮击2费1伤。")
 	for status in player_statuses(): lines.append(status.line)
 	return {"key": "player", "title": "我方", "lines": lines, "anchor": piece_rect(game.player)}
@@ -200,9 +201,10 @@ func preview(index: int, target: Vector2i) -> Dictionary:
 	if game.screen != "game" or game.phase != "play" or game.input_lock > 0 or game.navigation_lock > 0 or game.card_picker.active or game.presentation.active() or game.encounter_info_open: return {}
 	if index < 0 or index >= game.hand.size() or not game.can_commit_card(index, target) or not _tutorial_allows_preview(index, target): return {}
 	var id: String = game.hand[index]
+	if id in game.KING_BLOOD.IDS: return game.KING_BLOOD.preview(game, id, target)
 	if id not in ATTACKS: return {}
 	var affected: Array = [];var lines: Array = [];var amount = 1
-	if id.ends_with("_plus"): amount = 2
+	if id.ends_with("_plus") or id == "knight_assault": amount = 2
 	elif id == "cannon_shot": amount = (2 if game.artillery_mode == "attack" else 1) + (1 if game.reload_ready else 0)
 	elif id == "chain_assault": amount = 1 + int(game.active_displacements)
 	elif id == "airdrop": amount = 3

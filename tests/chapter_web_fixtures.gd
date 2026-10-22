@@ -129,7 +129,7 @@ func path_to(target: int) -> Array:
 		for next in game.route.state.nodes[path.back()].next:
 			var branch = path.duplicate();branch.append(next);paths.append(branch)
 	return []
-func prepare(chapter: int, encounter_id: String = ""):
+func prepare(chapter: int, encounter_id: String = "") -> int:
 	# Choose a generated, reachable authored encounter, rather than fabricating a
 	# route or weakening production save validation for the test.
 	var target = -1
@@ -143,11 +143,13 @@ func prepare(chapter: int, encounter_id: String = ""):
 			if node.encounter.get("id", "") == encounter_id: target = node.id;break
 		if target >= 0: break
 	check(encounter_id.is_empty() or target >= 0, "generated encounter exists: " + encounter_id)
-	if target < 0: clear_input();return
+	var expected_lives = 3
+	if target < 0: clear_input();return expected_lives
 	for id in path_to(target):
 		game.route.enter(id)
 		if id == target: break
 		if game.screen == "game":
+			expected_lives = mini(5, expected_lives + 1) if game.player_skill == "king" else expected_lives
 			game.debug_skip();game.input_lock = 0;game.navigation_lock = 0;game.choose_reward(-1)
 		else:
 			var leave = -1
@@ -155,7 +157,9 @@ func prepare(chapter: int, encounter_id: String = ""):
 				if game.route.choices[i].action == "leave": leave = i;break
 			check(leave >= 0, "transit event has leave choice")
 			if leave >= 0: game.route.resolve(leave)
+		check(game.lives == expected_lives, "fixture transit grants only king one capped life per victory and none at non-combat nodes")
 	clear_input()
+	return expected_lives
 func save_fixture(name: String, size: Vector2):
 	clear_input();game.route.save();steps = []
 	check(game.route.valid_snapshot(game.route.state, game.history.capture(), game.screen), name + " valid ordinary saved game")
@@ -169,15 +173,16 @@ func save_fixture(name: String, size: Vector2):
 func transition(size: Vector2):
 	prepare(1, "palace_final")
 	var initial_collection = game.collection.duplicate();var initial_lives = game.lives
+	var victory_lives = mini(5, initial_lives + 1) if game.player_skill == "king" else initial_lives
 	var report = save_fixture("chapter_transition", size)
 	victory("chapter-one-boss-reward")
 	check(game.phase == "reward" and not game.route.state.done, "first boss offers rewards instead of ending run")
 	reward_return()
 	check(game.route.state.chapter == 2 and game.screen == "map" and game.route.state.current == -1 and game.route.state.pending == -1, "first boss advances to fresh chapter two map")
-	check(game.collection == initial_collection and game.lives == initial_lives, "chapter transition preserves deck and current lives without healing")
+	check(game.collection == initial_collection and game.lives == victory_lives, "chapter transition preserves deck and one-time king victory healing without an extra boundary heal")
 	reload_step();enter(0);mechanism_panels()
 	check(game.encounter_state.config.id == "c2_heavy_pawns", "chapter two begins with authored heavy-pawn encounter")
-	check(game.collection == initial_collection and game.lives == initial_lives, "first battle retains chapter-transition progress")
+	check(game.collection == initial_collection and game.lives == victory_lives, "first battle retains chapter-transition progress without another triumph heal")
 	report.steps = steps.duplicate(true);reports.append(report)
 func final_boss(size: Vector2):
 	prepare(2, "c2_inner_city")
@@ -236,14 +241,14 @@ func reinforcement(size: Vector2):
 	check(not spawned.is_empty() and spawned.get("reinforcement", false) and spawned.pos == Vector2i(7, 0) and spawned.normal_moves == 0 and spawned.cd == 3, "arriving reinforcement uses marked cell and cannot act on its arrival turn")
 	report.steps = steps.duplicate(true);reports.append(report)
 func general_guard(size: Vector2):
-	prepare(2, "c2_lone_guard")
+	var initial_lives = prepare(2, "c2_lone_guard")
 	game.enemies = game.enemies.filter(func(enemy): return enemy.kind in ["g", "a"])
 	game.enemies[0].cd = 1;game.enemies[1].pos = Vector2i(4, 1);game.enemies[1].cd = 99
 	game.player = Vector2i(4, 2);game.hand = [];game.hand_ids = [];game.deck = [];game.discard = []
 	var report = save_fixture("general_guard", size)
 	end_turn("general-holds-behind-advisor")
 	check(game.enemies[0].pos == Vector2i(4, 0) and game.enemies[0].normal_moves == 0, "ready general holds behind an actual advisor spear blocker")
-	check(game.player == Vector2i(4, 2) and game.lives == 3, "defensive hold adds no illegal attack or player displacement")
+	check(game.player == Vector2i(4, 2) and game.lives == initial_lives, "defensive hold preserves prior victory health without an illegal attack or player displacement")
 	report.steps = steps.duplicate(true);reports.append(report)
 func run():
 	DirAccess.make_dir_recursive_absolute(OUT + "fixtures")
