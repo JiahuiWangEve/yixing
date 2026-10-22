@@ -1,7 +1,7 @@
 extends SceneTree
 # Test-only valid saves plus real UI replay coordinates; no production hooks.
 const OUT = "res://../verification/v0.14.1/airdrop/"
-const ROUTE_FIELDS = ["chapter", "current", "pending", "visited", "done", "prepared", "reward_debt", "reward_blocked", "pending_homework", "homework_awarded", "victory_recorded"]
+const ROUTE_FIELDS = ["chapter", "current", "pending", "visited", "done", "prepared", "reward_debt", "reward_blocked", "pending_homework", "homework_awarded", "treasure_id", "treasure_claimed", "treasure_choices", "victory_recorded"]
 const BATTLE_FIELDS = ["phase", "turn", "lives", "energy", "collection", "deck", "hand", "discard", "rewards", "player", "encounter_state", "airdrop_recovery_turn", "basic_used", "card_move_used"]
 var game
 var steps = []

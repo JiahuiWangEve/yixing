@@ -1,7 +1,7 @@
 extends SceneTree
 # Ordinary production saves and real input coordinates. No runtime QA hooks.
 const OUT = "res://../verification/v0.14.5/pass/"
-const ROUTE_FIELDS = ["chapter", "current", "pending", "visited", "done", "prepared", "reward_debt", "reward_blocked", "pending_homework", "homework_awarded", "victory_recorded"]
+const ROUTE_FIELDS = ["chapter", "current", "pending", "visited", "done", "prepared", "reward_debt", "reward_blocked", "pending_homework", "homework_awarded", "treasure_id", "treasure_claimed", "treasure_choices", "victory_recorded"]
 const BATTLE_FIELDS = ["phase", "turn", "lives", "energy", "collection", "deck", "hand", "discard", "rewards", "player", "encounter_state", "airdrop_recovery_turn", "basic_used", "card_move_used", "free_card_uid", "hand_ids", "next_card_uid", "active_displacements", "shield_charges", "pending_bleeds", "reload_ready", "artillery_mode", "deploy_draw_used", "tuna_turns", "tuna_active"]
 var game
 var checks = 0
