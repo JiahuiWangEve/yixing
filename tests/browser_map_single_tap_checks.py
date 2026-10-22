@@ -15,8 +15,8 @@ import re
 import shutil
 from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
-from playwright.async_api import async_playwright
-from browser_event_checks import KEY, boot, variant_json, await_saved_state
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from browser_event_checks import KEY, variant_json, await_saved_state
 from browser_settings import install_debug_settings
 from browser_chapter_checks import assert_rendered
 
@@ -31,9 +31,9 @@ def state(text):
             'route': variant_json(text.split('\nroute=', 1)[1].split('\nbattle=', 1)[0])}
 
 
-def difference(before, after, box):
+def difference(before, after, box, after_box=None):
     a = Image.open(io.BytesIO(before)).convert('RGB').crop(box)
-    b = Image.open(io.BytesIO(after)).convert('RGB').crop(box)
+    b = Image.open(io.BytesIO(after)).convert('RGB').crop(box if after_box is None else after_box)
     return sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / 3
 
 
@@ -73,8 +73,12 @@ async def main(full=False, validate_only=False):
                     x, y, rw, rh = rect
                     return (round(ox + (x-grow)*scale), round(oy + (y-grow)*scale), round(ox + (x+rw+grow)*scale), round(oy + (y+rh+grow)*scale))
                 async def dispatch(kind, points): await cdp.send('Input.dispatchTouchEvent', {'type': kind, 'touchPoints': points})
-                async def tap(pos, delay=120):
-                    point = xy(pos);await page.touchscreen.tap(point['x'], point['y']);await page.wait_for_timeout(delay)
+                async def painted():
+                    # Advance through actual browser paint opportunities, rather
+                    # than assuming a fixed wall-clock delay renders a frame.
+                    await asyncio.wait_for(page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))"), 8)
+                async def tap(pos):
+                    point = xy(pos);await page.touchscreen.tap(point['x'], point['y']);await painted()
                 async def snap(): return state(await page.evaluate('(key)=>localStorage.getItem(key)', KEY))
                 async def shot(label):
                     path = output / f'map-{w}-{label}.png';data = await page.screenshot(path=str(path));assert_rendered(data, [w, h]);shots.append(path.name);return data
@@ -84,51 +88,114 @@ async def main(full=False, validate_only=False):
                     await page.wait_for_timeout(1100)
                     assert await snap() == initial, (w, label, await snap(), initial)
                     checks.append(label)
+                async def wait_visual(label, predicate, clip=None):
+                    deadline = asyncio.get_running_loop().time() + 8
+                    last = None;observations = [];matched = False
+                    try:
+                        while asyncio.get_running_loop().time() < deadline:
+                            remaining = deadline - asyncio.get_running_loop().time()
+                            last = await asyncio.wait_for(page.screenshot(**({'clip': clip} if clip else {})), remaining)
+                            matched, metric = predicate(last)
+                            observations.append({'time': asyncio.get_running_loop().time(), 'difference': metric})
+                            if matched: return last
+                            await asyncio.sleep(min(.04, max(0, deadline-asyncio.get_running_loop().time())))
+                        raise AssertionError((w, label, 'Expected visual state did not arrive within eight seconds', observations))
+                    finally:
+                        if not matched:
+                            if last is not None: (output / f'map-{w}-{label}-last.png').write_bytes(last)
+                            (output / f'map-{w}-{label}-wait.json').write_text(json.dumps({'matched': matched, 'observations': observations}, indent=2))
                 async def baseline_restored(baseline, label):
-                    await page.wait_for_timeout(100)
-                    actual = await shot(label)
-                    assert difference(baseline, actual, (0, 0, w, h)) < .01, (w, label, 'Transient inspection not cleared')
+                    def matches(data):
+                        metric = difference(baseline, data, (0, 0, w, h));return metric < .01, metric
+                    actual = await wait_visual(label, matches)
+                    path = output / f'map-{w}-{label}.png';path.write_bytes(actual);shots.append(path.name)
+                    assert_rendered(actual, [w, h])
+                async def changed_from(before, label):
+                    def changed(data):
+                        metric = difference(before, data, (0, 0, w, h));return metric > 1, metric
+                    actual = await wait_visual(label, changed)
+                    path = output / f'map-{w}-{label}.png';path.write_bytes(actual);shots.append(path.name)
+                    assert_rendered(actual, [w, h]);return actual
                 async def observe_first_frame(kind):
                     # Capture compositor output as it happens. A synchronous PNG
                     # screenshot can finish after the .3/.4-second dwell and
                     # falsely label an on-time tooltip as premature under load.
                     # The first changed compositor frame must show only framing;
                     # a later compositor frame must add the explanation.
-                    frames = []
+                    frames = [];measurements = [];ready = asyncio.Event()
+                    start_index = None;first_index = None;first_time = None;tooltip_time = None;success = False
                     async def captured(event):
-                        await cdp.send('Page.screencastFrameAck', {'sessionId': event['sessionId']})
+                        # Preserve event order before awaiting the acknowledgement.
+                        # Wake the observer only after the browser can send again.
                         frames.append((event['metadata'].get('timestamp'), base64.b64decode(event['data'])))
+                        await cdp.send('Page.screencastFrameAck', {'sessionId': event['sessionId']})
+                        ready.set()
+                    async def next_capture(deadline):
+                        remaining = deadline - asyncio.get_running_loop().time()
+                        if remaining <= 0: return False
+                        try: await asyncio.wait_for(ready.wait(), remaining)
+                        except asyncio.TimeoutError: return False
+                        return True
                     cdp.on('Page.screencastFrame', captured)
                     try:
                         await cdp.send('Page.startScreencast', {'format': 'png', 'maxWidth': w, 'maxHeight': h, 'everyNthFrame': 1})
                         deadline = asyncio.get_running_loop().time() + 5
-                        while not frames and asyncio.get_running_loop().time() < deadline:
-                            await asyncio.sleep(.02)
+                        while not frames:
+                            if not await next_capture(deadline): break
+                            ready.clear()
                         assert frames, 'No baseline compositor frame received'
                         before = frames[-1][1];start_index = len(frames)
                         assert Image.open(io.BytesIO(before)).size == (w, h), 'Unexpected compositor dimensions'
                         if kind == 'mouse':
                             point = xy(node);await page.mouse.move(point['x'], point['y'])
                         else: await dispatch('touchStart', [pt(node)])
-                        await page.wait_for_timeout(650)
-                        changed = [(timestamp, data) for timestamp, data in frames[start_index:]
-                                   if difference(before, data, box(hit, 6)) > .15]
-                        assert changed, (w, kind, 'No immediate framed compositor output')
-                        first_time, first = changed[0]
-                        assert difference(before, first, box(replay[kind+'_popup'])) < .01, (w, kind, 'First framed output already had a tooltip')
-                        explained = [(timestamp, data) for timestamp, data in changed[1:]
-                                     if difference(first, data, box(replay[kind+'_popup'])) > 1]
-                        assert explained, (w, kind, 'No later tooltip compositor output')
-                        tooltip_time, tooltip = explained[0]
+                        # Completion is evidence-driven, not a fixed delay after
+                        # input. Slow CI may deliver the later compositor event
+                        # well after the production tooltip was drawn.
+                        deadline = asyncio.get_running_loop().time() + 8
+                        cursor = start_index;first = None;tooltip = None
+                        while tooltip is None:
+                            ready.clear()
+                            while cursor < len(frames):
+                                index = cursor;timestamp, data = frames[index];cursor += 1
+                                frame_delta = difference(before, data, box(hit, 6))
+                                popup_delta = difference(first if first is not None else before, data, box(replay[kind+'_popup']))
+                                measurements.append({'index': index, 'timestamp': timestamp,
+                                                     'frame_delta': frame_delta, 'popup_delta': popup_delta})
+                                if frame_delta <= .15: continue
+                                if first is None:
+                                    first_index = index;first_time = timestamp;first = data
+                                    path = output / f'map-{w}-{kind}-immediate-frame.png';path.write_bytes(first);shots.append(path.name)
+                                    assert popup_delta < .01, (w, kind, 'First framed output already had a tooltip')
+                                elif popup_delta > 1:
+                                    tooltip_time = timestamp;tooltip = data;break
+                            if tooltip is not None or not await next_capture(deadline): break
+                        assert first is not None, (w, kind, 'No immediate framed compositor output')
+                        assert tooltip is not None, (w, kind, 'No later tooltip compositor output')
                         assert tooltip_time is None or first_time is None or tooltip_time > first_time
-                        for label, data in [('immediate-frame', first), ('delayed-tooltip', tooltip)]:
-                            path = output / f'map-{w}-{kind}-{label}.png';path.write_bytes(data);shots.append(path.name)
+                        path = output / f'map-{w}-{kind}-delayed-tooltip.png';path.write_bytes(tooltip);shots.append(path.name)
                         frame_timelines.append({'input': kind, 'first_frame_timestamp': first_time,
                                                 'tooltip_timestamp': tooltip_time, 'captured_frames': len(frames)})
+                        success = True
                         return tooltip
                     finally:
                         await cdp.send('Page.stopScreencast')
                         cdp.remove_listener('Page.screencastFrame', captured)
+                        diagnostic = {'input': kind, 'passed': success, 'captured_frames': len(frames),
+                                      'input_start_index': start_index, 'first_frame_index': first_index,
+                                      'first_frame_timestamp': first_time, 'tooltip_timestamp': tooltip_time,
+                                      'frames': [{'index': i, 'timestamp': timestamp, 'bytes': len(data)}
+                                                 for i, (timestamp, data) in enumerate(frames)],
+                                      'measurements': measurements}
+                        if not success and frames:
+                            # Retain early frames plus the final frame even if a
+                            # stalled compositor never supplies the expected state.
+                            indices = sorted(set(range(min(40, len(frames)))) | {len(frames)-1})
+                            diagnostic['retained_frames'] = []
+                            for index in indices:
+                                path = output / f'map-{w}-{kind}-diagnostic-{index:03d}.png';path.write_bytes(frames[index][1])
+                                diagnostic['retained_frames'].append(path.name)
+                        (output / f'map-{w}-{kind}-compositor.json').write_text(json.dumps(diagnostic, indent=2))
                 async def blur_window():
                     # Headless tabs are separate targets, not necessarily separate
                     # focused OS windows. Prove the DOM event was delivered before
@@ -146,7 +213,9 @@ async def main(full=False, validate_only=False):
                         return document.hasFocus();
                     }""")
                     try:
-                        other = await context.new_page();await other.bring_to_front();await page.wait_for_timeout(100)
+                        other = await context.new_page();await other.bring_to_front()
+                        try: await page.wait_for_function('window.__qaMapBlurEvents.length > 0', timeout=1000)
+                        except PlaywrightTimeoutError: pass
                         await other.close();await page.bring_to_front()
                         natural = await page.evaluate('window.__qaMapBlurEvents.slice()')
                         source = 'tab-switch' if natural else 'explicit-dom-event'
@@ -154,7 +223,7 @@ async def main(full=False, validate_only=False):
                             # Exercise the same registered DOM cancellation entry
                             # point when headless bring_to_front emits no blur.
                             await page.evaluate("window.dispatchEvent(new Event('blur'))")
-                        evidence = {'source': source, 'focus_before': before_focus,
+                        evidence = {'source': source, 'coverage': 'Browser tab-switch blur' if natural else 'DOM blur-listener cancellation only', 'focus_before': before_focus,
                                     'focus_after': await page.evaluate('document.hasFocus()'),
                                     'tab_switch_events': natural,
                                     'delivered_events': await page.evaluate('window.__qaMapBlurEvents.slice()')}
@@ -167,17 +236,24 @@ async def main(full=False, validate_only=False):
                     finally:
                         await page.evaluate("window.removeEventListener('blur', window.__qaMapBlurObserver, true)")
                 async def hold():
+                    # A real held touch is released only after its actual popup
+                    # is rendered. Crop the expected panel to keep polling cheap.
+                    left, top, right, bottom = box(replay['touch_popup'])
+                    clip = {'x': left, 'y': top, 'width': right-left, 'height': bottom-top}
+                    before = await page.screenshot(clip=clip)
                     await dispatch('touchStart', [pt(node)])
-                    await page.wait_for_timeout(500)
+                    def visible(data):
+                        metric = difference(before, data, (0, 0, right-left, bottom-top));return metric > 1, metric
+                    await wait_visual('held-tooltip', visible, clip)
                 async def seed_and_resume(first=False):
                     if first:
                         await page.add_init_script('if(!sessionStorage.getItem("qa-map-once")){localStorage.setItem(%s,%s);sessionStorage.setItem("qa-map-once","1")}' % (json.dumps(KEY), json.dumps(fixture)))
                         await page.goto(URL)
                     else:
                         await page.evaluate('([key,text])=>localStorage.setItem(key,text)', [KEY, fixture]);await page.reload()
-                    await boot(page);await tap(replay['resume'], 250)
+                    await page.wait_for_function("!document.getElementById('status')", timeout=60000);await painted();await tap(replay['resume'])
                     assert await snap() == initial
-                    point = xy(blank);await page.mouse.move(point['x'], point['y']);await page.wait_for_timeout(100)
+                    point = xy(blank);await page.mouse.move(point['x'], point['y']);await painted()
                 try:
                     await seed_and_resume(first=True)
                     baseline = await shot('initial')
@@ -216,17 +292,17 @@ async def main(full=False, validate_only=False):
                     # Drag while a hold is visible cancels sticky state and its release.
                     await hold();await dispatch('touchMove', [pt([node[0]+16, node[1]])]);await dispatch('touchEnd', [])
                     await no_departure('Drag after hold does not depart');await baseline_restored(baseline, 'hold-drag-cleared')
-                    await hold();await dispatch('touchEnd', []);await tap(replay['deck'])
-                    deck = await shot('deck-from-sticky');assert difference(baseline, deck, (0, 0, w, h)) > 1
+                    await hold();await dispatch('touchEnd', []);before_deck = await page.screenshot();await tap(replay['deck'])
+                    deck = await changed_from(before_deck, 'deck-from-sticky');assert difference(baseline, deck, (0, 0, w, h)) > 1
                     await tap(replay['close_deck']);await baseline_restored(baseline, 'deck-close-no-residue')
                     await no_departure('Deck dismissal retains camera but clears inspection and capture')
-                    await hold();await dispatch('touchEnd', []);await tap(replay['home'])
-                    home = await shot('home-clears-sticky');assert difference(baseline, home, (0, 0, w, h)) > 1
-                    await tap(replay['resume'], 300);await baseline_restored(baseline, 'resume-clears-sticky')
+                    await hold();await dispatch('touchEnd', []);before_home = await page.screenshot();await tap(replay['home'])
+                    home = await changed_from(before_home, 'home-clears-sticky');assert difference(baseline, home, (0, 0, w, h)) > 1
+                    await tap(replay['resume']);await baseline_restored(baseline, 'resume-clears-sticky')
                     await no_departure('Page change and resume clear sticky inspection')
                     # Holding cannot auto-enter, but the next distinct short tap must.
                     await hold();await dispatch('touchEnd', []);await no_departure('Final hold remains inspection only')
-                    await tap(node, 80)
+                    await tap(node)
                     async def entered():
                         value = await snap();return (value['screen'], value['route']['current'], value['route']['pending'])
                     assert await await_saved_state(entered, ('game', -1, 0)) == ('game', -1, 0), 'One distinct short touch after hold did not enter'
