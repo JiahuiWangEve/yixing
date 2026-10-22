@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.14.9"
+const BUILD_VERSION = "v0.14.10"
 const PASS_CARD_COST = 3
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
@@ -522,6 +522,22 @@ func select_card(index: int):
 	selected = index;audio_system.play_cue("select", tick);hand_drawer = false
 	notice = "血锋：点正交1–3格选方向，贯穿该方向敌子；自损1命。" if hand[index] == "blood_edge" else "点击高亮目标；右键或 Esc 取消。"
 	tutorial_after("select", {"index": index})
+func desktop_hand_shortcuts() -> bool:
+	return not mobile_layout and not touch_seen
+func select_hand_shortcut(number: int) -> bool:
+	# Use the visible fan order, including the separately generated free card.
+	# Route through the same selection methods as a pointer click, never play.
+	if not desktop_hand_shortcuts() or screen != "game" or phase not in ["play", "discard"]: return false
+	if number < 1 or number > 7 or input_lock > 0 or navigation_lock > 0 or gesture.active: return false
+	if presentation.active() or card_picker.active or encounter_info_open or recovery_active(): return false
+	var entries = handui.display_entries()
+	if number > entries.size(): return false
+	var entry: Dictionary = entries[number - 1]
+	if entry.free: select_free_card()
+	else: select_card(entry.index)
+	queue_redraw()
+	return true
+
 func basic_move(target: Vector2i):
 	if screen != "game" or phase != "play" or not basic_legal(target): return
 	if not tutorial_allows("move", {"target": target}): return
@@ -796,6 +812,11 @@ func _input(event):
 		return
 	if not (event is InputEventKey) or not event.pressed or event.echo: return
 	audio_system.unlock()
+	if not event.ctrl_pressed and not event.alt_pressed and not event.meta_pressed and not event.shift_pressed:
+		var number = 0
+		if event.keycode >= KEY_1 and event.keycode <= KEY_7: number = event.keycode - KEY_1 + 1
+		elif event.keycode >= KEY_KP_1 and event.keycode <= KEY_KP_7: number = event.keycode - KEY_KP_1 + 1
+		if number > 0 and select_hand_shortcut(number): get_viewport().set_input_as_handled();return
 	if event.keycode == KEY_Z and (event.ctrl_pressed or event.meta_pressed): undo_action();get_viewport().set_input_as_handled()
 	elif event.keycode == KEY_ESCAPE: cancel_gesture();cancel_selection()
 	elif event.keycode == KEY_SPACE: request_end_turn()

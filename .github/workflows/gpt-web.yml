@@ -80,7 +80,7 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           python3 tests/browser_release_smoke.py 2>&1 | tee build/release-smoke.log
-          python3 tests/browser_board_info_checks.py 2>&1 | tee build/board-info-smoke.log
+          python3 tests/browser_hand_shortcut_checks.py 2>&1 | tee build/hand-shortcuts-smoke.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -91,7 +91,8 @@ jobs:
             build/export.log
             build/package-audit.log
             build/release-smoke.log
-            build/board-info-smoke.log
+            build/hand-shortcuts-smoke.log
+            verification/v0.14.10/
             verification/v0.14.7/
             build/debug-undo-smoke.log
             build/sound-settings-smoke.log

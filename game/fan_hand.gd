@@ -390,6 +390,19 @@ func draw():
 	game.panel(area, game.THEME.BACKGROUND, border)
 	for i in _order: _draw_visual_card(i, _visual_transform(i), 0.62 if _is_free(i) and game.phase == "discard" else 1.0)
 	game.draw_set_transform_matrix(Transform2D.IDENTITY)
+	# Paint these last so a raised/overlapping card cannot hide another key.
+	for badge in shortcut_badges():
+		game.panel(badge.rect, game.THEME.PAPER, game.THEME.BORDER)
+		game.text_at(badge.rect.position + Vector2(5, 15), str(badge.number), 15, game.INK)
+
+func shortcut_badges() -> Array:
+	var result: Array = []
+	if not game.desktop_hand_shortcuts() or game.screen != "game" or game.phase not in ["play", "discard"]: return result
+	for i in mini(7, _cards().size()):
+		var anchor = _visual_transform(i) * Vector2(10, 0)
+		result.append({"number": i + 1, "rect": Rect2(anchor + Vector2(-9, -23), Vector2(19, 20)), "index": _ordinary_index(i), "free": _is_free(i)})
+	return result
+
 
 func _tint(color: Color, alpha: float) -> Color:
 	color.a *= alpha

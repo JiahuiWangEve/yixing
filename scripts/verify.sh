@@ -45,6 +45,7 @@ run tutorial-patch --script "$root/tests/tutorial_patch_checks.gd"
 run king-blood --script "$root/tests/king_blood_checks.gd"
 
 run space-shortcut --script "$root/tests/space_shortcut_checks.gd"
+run hand-shortcuts --script "$root/tests/hand_shortcut_checks.gd"
 
 run seal-map --script "$root/tests/seal_map_checks.gd"
 
