@@ -7,6 +7,7 @@ import asyncio, io, json, os, re, shutil
 from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
 from playwright.async_api import async_playwright
+from browser_map_checks import RouteGeometry, saved_route
 from browser_event_checks import boot, parse, KEY
 from browser_settings import SETTINGS_KEY
 ROOT=Path(__file__).resolve().parents[1]
@@ -46,11 +47,10 @@ async def main():
                 await page.goto(URL);await boot(page)
                 assert not await page.evaluate('(key)=>localStorage.getItem(key)',SETTINGS_KEY)
                 await shot('home-default-off');await tap(menu(0));await tap(menu(0))
-                mw=min(uw-28,1000);mx,my,mh=(uw-mw)/2,112,uh-126
-                ch,margin=(1240,42) if desktop else (mh*2.4,28)
-                nx=mx+margin+.46*(mw-margin*2);ny=my+32+.94*(ch-80)
-                scroll=max(0,min(ch-mh,ny-my-mh*.73))
-                await tap((nx,ny-scroll-15));await tap((nx,ny-scroll-15))
+                route=saved_route(await save());geometry=RouteGeometry(route,w,h)
+                assert route['current']==-1 and route['pending']==-1 and route['nodes'][0]['kind']=='battle'
+                assert geometry.visible(0), 'Generated entrance must be visible'
+                await tap(geometry.node(0));await tap(geometry.node(0))
                 await wait_turn(1);assert await budget()==3
                 off=await shot('battle-off-no-skip');await tap(skip);await page.wait_for_timeout(1100)
                 assert (await state())['phase']=='play';assert await budget()==3

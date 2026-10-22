@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 var game
 var checks = 0
 var failures = 0
@@ -13,8 +14,8 @@ func run():
 	for chapter in [1,2]:
 		for kind in ["battle","boss"]:
 			game.new_expedition();game.route.generate(4242,chapter)
-			if kind == "boss": game.route.state.current = 14;game.route.state.visited = [0,3,5,6,9,11,14]
-			var target = 15 if kind == "boss" else 0
+			var target = T.kind_id(game.route, "boss") if kind == "boss" else 0
+			if kind == "boss": T.before(game.route, target)
 			game.route.enter(target);game.debug_skip()
 			var expected = game.collection.duplicate();var reward = game.rewards.duplicate()
 			check(game.presentation.kind == "victory", "all battle tiers show victory seal")
@@ -30,7 +31,7 @@ func run():
 	var before = game.collection.duplicate();check(game.route.resume(), "settled victory saved before animation")
 	check(not game.presentation.active() and game.collection == before and game.route.rewards_blocked(), "reload skips animation without duplicating homework")
 	fresh();game.debug_skip();game.choose_reward(-1);game.presentation.clear()
-	game.route.state.nodes[1].event_id = "manual";game.route.enter(1);game.collection = ["sword", "sword", "spear"]
+	T.enter_next(game, "event", "manual");game.collection = ["sword", "sword", "spear"]
 	game.route.refresh_choices();var index = game.route.random_upgrade_index();var old = game.collection[index]
 	for i in game.route.choices.size():
 		if game.route.choices[i].action == "random_upgrade": game.route.resolve(i);break

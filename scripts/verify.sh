@@ -29,6 +29,9 @@ run regression --script "$root/tests/recovered_checks.gd"
 
 run starts --script "$root/tests/start_profile_checks.gd"
 
+run route-generator --script "$root/tests/route_generator_checks.gd"
+run elite-rewards --script "$root/tests/elite_reward_checks.gd"
+run random-map-ui --script "$root/tests/random_map_ui_checks.gd"
 run routes --script "$root/tests/route_checks.gd"
 
 run map-interaction --script "$root/tests/map_interaction_checks.gd"

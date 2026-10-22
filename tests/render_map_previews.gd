@@ -1,4 +1,5 @@
 extends Node
+const T = preload("res://../tests/route_test_helpers.gd")
 # Run this scene with a real rendering driver (not --headless).
 # Copy this script and the companion scene into game as _map_visual_qa.*,
 # open _map_visual_qa.tscn, and run the current scene. Remove the two copies after.
@@ -53,13 +54,13 @@ func run():
 		game.debug_skip();game.choose_reward(-1);route.tick(0)
 		assert(game.screen == "map" and route.state.current == 0)
 		await capture(viewport, game, "native-returned" + suffix)
-		var next = route.position(route.state.nodes[1]);route.click(next);route.click(next);route.tick(0.4)
+		var event_id = T.next_node(game, "event");var next = route.position(route.state.nodes[event_id]);route.click(next);route.click(next);route.tick(0.4)
 		await capture(viewport, game, "native-march" + suffix)
 		route.tick(0.5)
-		assert(game.screen == "route_choice" and route.state.pending == 1)
+		assert(game.screen == "route_choice" and route.state.pending == event_id)
 		await capture(viewport, game, "native-event" + suffix)
 		route.resolve(route.choices.size() - 1);route.tick(0)
-		route.scroll_y = 0;route.selected_node = 15
+		route.scroll_y = 0;route.selected_node = T.kind_id(route, "boss")
 		await capture(viewport, game, "native-summit" + suffix)
 		route.selected_node = -1;route.click(route.deck_rect().get_center())
 		await capture(viewport, game, "native-deck" + suffix)

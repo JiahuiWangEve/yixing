@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.14.8"
+const BUILD_VERSION = "v0.14.9"
 const PASS_CARD_COST = 3
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
@@ -215,10 +215,7 @@ func confirm_card():
 func _notification(what):
 	if what in [NOTIFICATION_WM_WINDOW_FOCUS_OUT, NOTIFICATION_WM_MOUSE_EXIT]: cancel_gesture()
 
-func reward_rect(i: int) -> Rect2:
-	if not mobile_layout: return Rect2(220 + i * 285, 310, 260, 190)
-	if compact_landscape: return Rect2(24 + i * 312, 150, 288, 180)
-	return Rect2(24, (95 + i * 130) if ui_size.y < 700 else (105 + i * 150), 432, 122 if ui_size.y < 700 else 138)
+func reward_rect(i: int) -> Rect2: return rewardui.add_rect(i)
 func skip_reward_rect() -> Rect2:
 	if not mobile_layout: return Rect2(530, 530, 220, 50)
 	if compact_landscape: return Rect2(370, 370, 220, 58)

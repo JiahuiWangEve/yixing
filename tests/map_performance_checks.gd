@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 var game
 var checks = 0
 var failures = 0
@@ -17,12 +18,12 @@ func run():
 		var original_scroll = route.scroll_y
 		for frame in 120:
 			route.scroll_y = route.scroll_limit() * frame / 119.0
-			route.selected_node = frame % 16
+			route.selected_node = frame % route.state.nodes.size()
 			route.ensure_road_cache()
 		check(route.road_cache_builds == builds, "scroll and selection do not rebuild road geometry")
 		check(route.road_segment_tests == work, "scroll and selection do zero repeated obstacle tests")
 		route.scroll_y = original_scroll;route.selected_node = -1
-		for visited in [[], [0], [0, 1, 4, 6, 7, 10, 12, 15]]:
+		for visited in [[], [0], T.path_to(route, T.kind_id(route, "boss"))]:
 			route.state.visited = visited
 			route.ensure_road_cache()
 			var rects: Array[Rect2] = []
@@ -69,9 +70,10 @@ func run():
 		game.ui_size += Vector2(1,0);route.ensure_road_cache()
 		check(route.road_cache_builds == builds + 1, "resize invalidates cached roads")
 		game.ui_size -= Vector2(1,0);route.ensure_road_cache();builds = route.road_cache_builds
-		route.state.nodes[0].next = [2];route.ensure_road_cache()
+		var removed = route.state.nodes[0].next[0];var retained = route.state.nodes[0].next[1]
+		route.state.nodes[0].next = [retained];route.ensure_road_cache()
 		check(route.road_cache_builds == builds + 1, "topology change invalidates cached roads")
-		check(route.road_cache.has(Vector2i(0,2)) and not route.road_cache.has(Vector2i(0,1)), "changed topology uses only current edges")
+		check(route.road_cache.has(Vector2i(0,retained)) and not route.road_cache.has(Vector2i(0,removed)), "changed topology uses only current edges")
 		builds = route.road_cache_builds
 		route.generate(int(route.state.seed) + 1);route.ensure_road_cache()
 		check(route.road_cache_builds == builds + 1, "new campaign seed invalidates geometry")

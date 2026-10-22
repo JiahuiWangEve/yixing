@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 var game
 var checks = 0
 var failures = 0
@@ -32,19 +33,19 @@ func run():
 		game.route.generate(seed_number)
 		check(saved == game.route.state, "seed deterministic")
 		var nodes = saved.nodes
-		check(nodes.size() == 16, "16 nodes")
+		check(nodes.size() >= 9, "at least nine nodes")
 		var seen = []
 		for path in paths(0, [], nodes):
-			check(path.size() == 8 and nodes[path.back()].kind == "boss", "eight steps terminate at boss")
+			check(path.size() == 9 and nodes[path.back()].kind == "boss", "nine steps terminate at boss")
 			var workshops = 0;var branches = 0
 			for i in path.size():
 				var n = nodes[path[i]]
 				if n.id not in seen: seen.append(n.id)
-				if n.kind == "workshop": workshops += 1
+				if n.kind in ["workshop", "camp"]: workshops += 1
 				if n.next.size() > 1: branches += 1
 				if i > 0: check(not (n.kind == "elite" and nodes[path[i-1]].kind == "elite"), "no consecutive elites")
-			check(workshops > 0 and branches >= 3, "workshop and three branch decisions on every route")
-		check(seen.size() == 16, "every node reachable")
+			check(workshops > 0 and branches >= 3, "preparation and three branch decisions on every route")
+		check(seen.size() == nodes.size(), "every node reachable")
 	for identity in ["king", "horse", "artillery"]:
 		game.player_skill = identity;game.new_expedition()
 		check(game.screen == "map" and game.lives == game.PROFILES.DATA[identity].lives, "identity and health preserved")
@@ -58,16 +59,16 @@ func run():
 		game.choose_reward(0);var count = game.collection.size();game.choose_reward(0)
 		check(game.collection.size() == count and game.screen == "map" and game.route.state.visited == [0], "reward resolves once")
 		check(game.hand.is_empty() and game.enemies.is_empty() and game.energy == 0 and game.tuna_turns == 0, "map clears battle state")
-		game.route.enter(3)
+		T.enter_next(game, "camp")
 		act("prepare");act("confirm")
 		check(game.route.state.prepared, "rest prepares next battle")
-		game.route.enter(5)
-		check(game.screen == "game" and game.encounter_state.config.tier == "battle", "former weakening gate now ordinary battle")
+		T.enter_next(game, "battle")
+		check(game.screen == "game" and game.encounter_state.config.tier == "battle", "explicit ordinary battle fixture retains baseline tier")
 		check(game.hand.size() == 2 and not game.route.state.prepared, "prepared two draws consumed once")
-		skip_reward();game.route.enter(6)
+		skip_reward();T.enter_next(game, "workshop")
 		act("upgrade", 0);act("confirm")
 		check("sword_plus" in game.collection, "workshop upgrades single instance")
-		game.route.enter(7)
+		T.enter_next(game, "battle")
 		check("sword_plus" in game.deck + game.hand and not game.history.can_undo(), "upgrade crosses battle; map cannot undo")
 		if identity == "artillery": check("deploy" in game.deck + game.hand, "consumable restored")
 		game.player = Vector2i(4, 9);game.enemies = [];game.add_enemy("g", Vector2i(4, 8), 3)
@@ -75,20 +76,20 @@ func run():
 		check(game.enemies[0].hp == 1 and game.discard == ["sword_plus"], "upgraded damage and discard")
 		undo_after_effects(game);check(game.hand == ["sword_plus"] and game.enemies[0].hp == 3, "upgraded undo")
 		game.route.save();game.show_home();check(game.route.resume() and game.hand == ["sword_plus"], "battle reload")
-		skip_reward();game.route.enter(10);leave();game.route.enter(12);leave()
-		game.route.enter(15);game.debug_skip();game.debug_skip()
+		skip_reward();T.walk_before(game, T.kind_id(game.route, "boss"))
+		game.route.enter(T.kind_id(game.route, "boss"));game.debug_skip();game.debug_skip()
 		check(game.phase == "reward" and not game.route.state.done and game.skill_system.horse_unlocked, "first boss rewards and unlock before chapter transition")
 		game.choose_reward(-1)
 		check(game.screen == "map" and game.route.chapter() == 2 and game.route.state.visited.is_empty(), "first boss starts fresh chapter two")
 		check(game.route.resume(), "second chapter can resume")
-	game.new_expedition();game.route.enter(0);skip_reward();game.route.enter(3)
+	game.new_expedition();game.route.enter(0);skip_reward();T.enter_next(game, "camp")
 	game.collection = [];game.route.choices = game.route.options();leave()
 	check(game.screen == "map" and game.collection.is_empty(), "empty rest can leave")
-	game.route.enter(5);skip_reward();game.route.enter(6);leave();game.route.enter(8)
+	T.enter_next(game, "battle");skip_reward();T.enter_next(game, "workshop");leave();T.enter_next(game, "camp")
 	game.collection = ["sword_plus", "sword"];game.route.choices = game.route.options()
 	act("select_remove");act("remove", 0);act("confirm")
 	check(game.collection == ["sword"], "rest removes only selected upgraded instance once")
-	game.route.enter(10);leave();game.route.enter(12);leave();game.route.enter(15)
+	T.walk_before(game, T.kind_id(game.route, "boss"));game.route.enter(T.kind_id(game.route, "boss"))
 	check(game.enemies[0].hp == 9, "boss baseline remains nine without removed weakening event")
 	game.new_expedition();check(game.route.state.visited.is_empty() and "weakened" not in game.route.state and "sword_plus" not in game.collection, "new run resets chapter")
 	game.start_debug_stage(6)

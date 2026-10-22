@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # v0.8.0 behavior, persistence, save-isolation and card-layout regressions.
 # Always run with disposable user:// storage; scripts/verify.sh supplies it.
 const R = preload("res://rules.gd")
@@ -81,8 +82,9 @@ func check_profiles():
 				unique[card] = true
 				if card in own: dedicated += 1
 				if card in common: shared += 1
-			if node.loot.size() != 3 or unique.size() != 3 or dedicated != 2 or shared != 1 or not no_retired(node.loot): bad = true
-		check(not bad, identity + " route loot has two distinct identity cards and one common without retired cards")
+			var exclusive = 3 if node.kind == "elite" else 2
+			if node.loot.size() != exclusive + 1 or unique.size() != exclusive + 1 or dedicated != exclusive or shared != 1 or not no_retired(node.loot): bad = true
+		check(not bad, identity + " route loot has tier-specific distinct identity cards and one common without retired cards")
 		var state = game.route.state.duplicate(true)
 		game.route.generate(game.seed_value)
 		check(game.route.state == state, identity + " weighted route generation stays seeded and deterministic")
@@ -401,8 +403,17 @@ func check_save_isolation():
 	fresh("horse", true)
 	game.route.save()
 	var current = ConfigFile.new()
-	check(current.load(game.route.SAVE) == OK and current.get_value("run", "version") == 5, "current saves use version five")
-	check(game.route.SAVE == "user://route_run_v0100.cfg" and game.route.WEB_SAVE_KEY == "yixing.route_run.v0100", "native and Web save namespaces isolate this demo revision")
+	check(current.load(game.route.SAVE) == OK and current.get_value("run", "version") == 6, "current saves use version six")
+	check(game.route.SAVE == "user://route_run_v0149.cfg" and game.route.WEB_SAVE_KEY == "yixing.route_run.v0149", "native and Web save namespaces isolate this demo revision")
+	# The immediately preceding release uses a different run namespace. Keep its
+	# bytes intact while new runs preserve the independent settings/unlock files.
+	var previous_release = ConfigFile.new();previous_release.parse(current.encode_to_text())
+	previous_release.set_value("run", "version", 5)
+	check(previous_release.save("user://route_run_v0100.cfg") == OK, "previous release run remains in its own namespace")
+	var previous_text = FileAccess.get_file_as_string("user://route_run_v0100.cfg")
+	game.settings.save_settings();game.skill_system.unlock_horse()
+	var settings_text = FileAccess.get_file_as_string(game.settings.SAVE)
+	var unlock_text = FileAccess.get_file_as_string(game.skill_system.SAVE_PATH)
 	var legacy = ConfigFile.new();legacy.parse(current.encode_to_text())
 	legacy.set_value("run", "version", 1)
 	var old_battle: Dictionary = legacy.get_value("run", "battle")
@@ -414,12 +425,15 @@ func check_save_isolation():
 	var legacy_text = FileAccess.get_file_as_string("user://route_run.cfg")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.route.SAVE))
 	var before = game.history.capture();var before_route = game.route.state.duplicate(true)
-	check(not game.route.resume(), "old v1 file is never loaded when current-format file is absent")
+	check(not game.route.resume(), "neither legacy v1 nor previous-release v5 namespaces are loaded when current save is absent")
 	check(game.history.capture() == before and game.route.state == before_route, "ignored old save does not mutate current run")
 	check(FileAccess.get_file_as_string("user://route_run.cfg") == legacy_text, "ignored old save is not rewritten or migrated")
 	game.route.save();game.show_home()
 	check(game.route.resume() and game.history.capture() == before, "new-format save still resumes normally alongside an old file")
 	check(FileAccess.get_file_as_string("user://route_run.cfg") == legacy_text, "normal new saving leaves retired namespace untouched")
+	check(FileAccess.get_file_as_string("user://route_run_v0100.cfg") == previous_text, "new save/resume never rewrites the previous release run")
+	check(FileAccess.get_file_as_string(game.settings.SAVE) == settings_text and FileAccess.get_file_as_string(game.skill_system.SAVE_PATH) == unlock_text, "run namespace isolation preserves exact settings and character unlock bytes")
+	check(game.skill_system.horse_unlocked, "run save isolation never relocks the unlocked character")
 
 func check_invalid_new_saves():
 	fresh("king", true);enemy("e", Vector2i(4, 4));game.queue_bleed(1, 2)
@@ -474,7 +488,7 @@ func check_stage_cleanup_and_camp():
 	game.active_displacements = 2;game.shield_charges = 1;game.reload_ready = true;game.queue_bleed(0, 2)
 	game.debug_skip();game.choose_reward(-1)
 	check(game.screen == "map" and game.active_displacements == 0 and game.shield_charges == 0 and not game.reload_ready and game.pending_bleeds.is_empty(), "map return clears every battle-only buff and delayed effect")
-	game.route.enter(3);game.route.resolve(game.route.choices.size() - 1);game.route.enter(5);game.debug_skip();game.choose_reward(-1);game.route.enter(6)
+	T.enter_next(game, "camp");game.route.resolve(game.route.choices.size() - 1);T.enter_next(game, "battle");game.debug_skip();game.choose_reward(-1);T.enter_next(game, "workshop")
 	game.collection = ["sword", "spear", "pierce", "sweep", "guard", "permanent_stake", "reload", "chain_assault"]
 	game.route.choice_mode = "upgrade"
 	var options = game.route.options();var upgraded = []

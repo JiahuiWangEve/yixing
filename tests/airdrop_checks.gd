@@ -126,8 +126,17 @@ func check_persistence_and_reset():
 	game.play_card(0,Vector2i(0,8));next_turn();game.route.save()
 	check(game.route.resume() and game.recovery_active() and not game.free_card_available(), "save and resume retains recovery lock")
 	var cfg = ConfigFile.new();cfg.load(game.route.SAVE)
-	var snapshot = cfg.get_value("run","battle");snapshot.erase("airdrop_recovery_turn");cfg.set_value("run","battle",snapshot);cfg.save(game.route.SAVE)
-	check(game.route.resume() and game.airdrop_recovery_turn == 0, "pre-card version-five saves default to no recovery")
+	check(cfg.get_value("run", "version") == 6, "recovery persists in the current version-six schema")
+	var valid_text = cfg.encode_to_text()
+	var before_battle = game.history.capture();var before_route = game.route.state.duplicate(true)
+	var before_screen = game.screen;var before_undos = game.normal_undos_remaining
+	var snapshot = cfg.get_value("run","battle");snapshot.erase("airdrop_recovery_turn");cfg.set_value("run","battle",snapshot)
+	for version in [5, 6]:
+		cfg.set_value("run", "version", version);cfg.save(game.route.SAVE)
+		check(not game.route.resume(), "version-five legacy and incomplete version-six recovery saves are rejected: " + str(version))
+		check(game.history.capture() == before_battle and game.route.state == before_route and game.screen == before_screen and game.normal_undos_remaining == before_undos, "invalid recovery save cannot mutate battle, route, screen or undo budget: " + str(version))
+	cfg.parse(valid_text);cfg.save(game.route.SAVE)
+	check(game.route.resume() and game.history.capture() == before_battle and game.route.state == before_route and game.recovery_active() and not game.free_card_available(), "valid version-six recovery resumes exactly after rejected legacy and malformed saves")
 	fresh();game.hand = ["airdrop","airdrop"];game.energy = 6
 	game.play_card(0,Vector2i(0,8));game.play_card(0,Vector2i(8,8))
 	check(game.hand.is_empty() and game.discard.is_empty() and game.lives == 2 and game.airdrop_recovery_turn == 2, "multiple copies exhaust independently and same next turn only")

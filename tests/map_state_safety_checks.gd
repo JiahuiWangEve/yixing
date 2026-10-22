@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # Non-visual event/state regression. Run with a disposable XDG_DATA_HOME so that
 # intentionally incomplete save fixtures cannot replace a player's real run.
 var game
@@ -174,7 +175,8 @@ func check_information_gestures(size: Vector2):
 	check(route.travel_target == 0 and route.state == initial, "next ordinary tap after hold and hover departs exactly once")
 	# A future event's identity is not disclosed by its route-nature tooltip.
 	fresh(size);route.scroll_y = 0
-	var node = route.state.nodes[10]
+	var future_id = T.configure_node(game, route.state.nodes[0].next[0], "event")
+	var node = route.state.nodes[future_id]
 	# Choose a generic event regardless of chapter seed and keep it in view.
 	for candidate in route.state.nodes:
 		if candidate.kind == "event": node = candidate;break
@@ -283,8 +285,7 @@ func check_reward_return():
 
 func check_choice_resume():
 	fresh();route.enter(0);game.debug_skip();game.choose_reward(-1)
-	route.state.nodes[1].event_id = "herbalist"
-	route.enter(1)
+	var event_id = T.enter_next(game, "event", "herbalist")
 	var original_choices = route.choices.duplicate(true)
 	var cards = game.collection.duplicate()
 	check(game.screen == "route_choice" and route.resume() and route.choices == original_choices, "choice screen and deterministic options survive resume")
@@ -292,14 +293,14 @@ func check_choice_resume():
 	touch(choice_pos, true);drag(choice_pos + Vector2(20, 0));drag(choice_pos);touch(choice_pos, false)
 	check(game.screen == "route_choice" and game.collection == cards, "drag across choice cannot activate it")
 	touch(choice_pos, true);touch(choice_pos, false, 0, true)
-	check(game.screen == "route_choice" and route.state.pending == 1, "canceled choice touch cannot resolve node")
+	check(game.screen == "route_choice" and route.state.pending == event_id, "canceled choice touch cannot resolve node")
 	tap(choice_pos)
 	check(game.screen == "route_choice" and game.collection == cards, "choice release previews without mutation")
 	tap(route.row_rect(0).get_center());cards.append("breath")
-	check(game.screen == "map" and route.state.current == 1 and game.collection == cards, "choice resolves on release exactly once")
+	check(game.screen == "map" and route.state.current == event_id and game.collection == cards, "choice resolves on release exactly once")
 	touch(choice_pos, false)
-	check(game.collection == cards and route.state.visited == [0, 1], "late duplicate choice release cannot grant another card")
-	check(route.resume() and route.state.current == 1 and game.collection == cards, "resolved event persists without replay")
+	check(game.collection == cards and route.state.visited == [0, event_id], "late duplicate choice release cannot grant another card")
+	check(route.resume() and route.state.current == event_id and game.collection == cards, "resolved event persists without replay")
 
 func check_invalid_save_rejection():
 	fresh()

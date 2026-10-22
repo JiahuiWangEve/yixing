@@ -1,7 +1,7 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # Full expedition boundaries, deterministic maps, receipts, and save migration.
 # Run with the disposable XDG directories used by scripts/verify.sh.
-const FIRST_PATH = [0, 3, 5, 6, 8, 11, 14]
 var game
 var route
 var checks = 0
@@ -39,7 +39,9 @@ func finish_combat(reward_index: int = -1):
 
 func march_to_boss() -> int:
 	var expected_lives = game.lives
-	for id in FIRST_PATH:
+	var boss = T.kind_id(route, "boss")
+	var path = T.path_to(route, boss);path.pop_back()
+	for id in path:
 		check(id in route.legal(), "path advances legally to node " + str(id))
 		route.enter(id)
 		if game.screen == "game":
@@ -47,7 +49,7 @@ func march_to_boss() -> int:
 			finish_combat()
 		else: leave_node()
 		check(game.lives == expected_lives, "each victory grants only king one capped life; non-combat nodes do not heal")
-	check(route.legal() == [15], "all eight-step routes lead to the boss")
+	check(route.legal() == [boss], "all nine-step routes lead to the boss")
 	return expected_lives
 
 func check_generation():
@@ -62,18 +64,18 @@ func check_generation():
 			check(saved.chapter == chapter_number and saved.run_seed == seed_number, "map keeps chapter and expedition seed")
 			check(saved.seed not in map_seeds, "chapters have different deterministic map identities")
 			map_seeds.append(saved.seed)
-			check(saved.nodes.size() == 16 and saved.visited.is_empty() and route.legal() == [0], "fresh map has sixteen unvisited nodes and one entrance")
+			check(saved.nodes.size() >= 9 and saved.visited.is_empty() and route.legal() == [0], "fresh map has at least nine unvisited nodes and one entrance")
 			var seen = []
 			for path in paths(0, [], saved.nodes):
-				check(path.size() == 8 and saved.nodes[path.back()].kind == "boss", "each chapter has eight-step routes ending at its boss")
+				check(path.size() == 9 and saved.nodes[path.back()].kind == "boss", "each chapter has nine-step routes ending at its boss")
 				var workshops = 0
 				for i in path.size():
 					var node = saved.nodes[path[i]]
 					if node.id not in seen: seen.append(node.id)
-					if node.kind == "workshop": workshops += 1
+					if node.kind in ["workshop", "camp"]: workshops += 1
 					if i > 0: check(node.kind != "elite" or saved.nodes[path[i - 1]].kind != "elite", "no forced back-to-back elites")
-				check(workshops > 0, "every route offers a workshop")
-			check(seen.size() == 16, "every generated node remains reachable")
+				check(workshops > 0, "every route offers a camp or workshop")
+			check(seen.size() == saved.nodes.size(), "every generated node remains reachable")
 			for node in saved.nodes:
 				if node.kind in ["battle", "elite", "boss"]:
 					check(game.ENCOUNTERS.valid_config(node.encounter), "generated encounter is valid")
@@ -82,20 +84,21 @@ func check_generation():
 				check(saved.nodes[0].encounter.id == "c2_heavy_pawns", "second chapter always introduces heavy pawns first")
 				check(game.ENCOUNTERS.title(saved.nodes[0].encounter) == "坚卒拦路", "second entrance uses the new battle title")
 				check("坚城" in route.chapter_title(), "second map identifies the chapter")
-			route.scroll_y = clampf(route.content_point(saved.nodes[2]).y - route.map_rect().get_center().y, 0, route.scroll_limit())
-			var information = route.inspect_at(route.position(saved.nodes[2]))
+			var elite = T.kind_id(route, "elite")
+			route.scroll_y = clampf(route.content_point(saved.nodes[elite]).y - route.map_rect().get_center().y, 0, route.scroll_limit())
+			var information = route.inspect_at(route.position(saved.nodes[elite]))
 			check(not information.is_empty() and information.title == "关隘", "elite map information describes its route nature")
 			var visible_text = "\n".join(information.get("lines", []))
-			check("血" not in visible_text and game.ENCOUNTERS.title(saved.nodes[2].encounter) not in visible_text, "elite map information does not reveal HP or hidden encounter identity")
+			check("血" not in visible_text and game.ENCOUNTERS.title(saved.nodes[elite].encounter) not in visible_text, "elite map information does not reveal HP or hidden encounter identity")
 
 func check_elite_health():
 	# Moving details out of map previews must not change combat difficulty.
 	for seed_number in [-4, 0, 17, 63]:
 		for chapter_number in [1, 2]:
 			fresh("king", seed_number);route.generate(seed_number, chapter_number)
-			route.state.current = 0;route.state.visited = [0]
-			route.enter(2)
-			check(game.screen == "game" and route.state.pending == 2, "elite fixture enters actual battle")
+			var elite = T.kind_id(route, "elite");T.before(route, elite)
+			route.enter(elite)
+			check(game.screen == "game" and route.state.pending == elite, "elite fixture enters actual battle")
 			var generals = game.enemies.filter(func(enemy): return enemy.kind == "g")
 			check(generals.size() == 1, "elite encounter has exactly one general")
 			if generals.size() == 1:
@@ -114,7 +117,7 @@ func check_transition():
 		var run_seed = route.state.run_seed
 		route.state.pending_homework = ["spear_plus"]
 		route.state.reward_debt = 1
-		route.enter(15)
+		route.enter(T.kind_id(route, "boss"))
 		check(game.lives == entering_lives and game.player_skill == identity, "entering first boss preserves accumulated victory health and identity")
 		game.debug_skip();deck.append("spear_plus")
 		check(game.phase == "reward" and not route.state.done and route.chapter() == 1, "first boss waits for reward resolution instead of ending the run")
@@ -147,7 +150,7 @@ func check_transition():
 
 func check_pending_carry():
 	fresh()
-	march_to_boss();route.enter(15);game.debug_skip()
+	march_to_boss();route.enter(T.kind_id(route, "boss"));game.debug_skip()
 	# Model a still-unconsumed future effect at the reward boundary. No transition
 	# is allowed to reinterpret or discard it just because the map is replaced.
 	route.state.prepared = true;route.state.reward_debt = 1;route.state.pending_homework = ["spear_plus"]
@@ -172,7 +175,7 @@ func check_final_boss():
 	var victory_lives = mini(5, entering_lives + 1) if game.player_skill == "king" else entering_lives
 	route.state.pending_homework = ["sword_plus"];route.state.reward_debt = 1
 	var deck = game.collection.duplicate()
-	route.enter(15)
+	route.enter(T.kind_id(route, "boss"))
 	check(game.encounter_state.config.id == "c2_inner_city", "second map ends at the inner-city encounter")
 	game.debug_skip();deck.append("sword_plus")
 	check(game.phase == "win" and route.state.done and route.chapter() == 2, "second boss reaches the final ending")
@@ -183,18 +186,19 @@ func check_final_boss():
 
 func check_saves():
 	fresh()
-	var legacy = route.state.duplicate(true)
-	legacy.erase("chapter");legacy.erase("run_seed")
+	var current = route.state.duplicate(true)
 	var snapshot = game.history.capture()
-	check(route.valid_snapshot(legacy, snapshot, "map"), "unmarked v0.13 map is a valid chapter-one save")
-	var config = ConfigFile.new()
-	config.set_value("run", "version", 5);config.set_value("run", "route", legacy)
-	config.set_value("run", "battle", snapshot);config.set_value("run", "screen", "map")
-	check(config.save(route.SAVE) == OK and route.resume(), "legacy version-five map resumes")
-	check(route.chapter() == 1 and route.state.run_seed == legacy.seed, "legacy map receives chapter-one metadata without reseeding")
-	route.enter(0)
-	legacy = route.state.duplicate(true);legacy.erase("chapter");legacy.erase("run_seed")
-	check(route.valid_snapshot(legacy, game.history.capture(), "game"), "unmarked v0.13 encounter remains resumable")
+	var config = ConfigFile.new();check(config.load(route.SAVE) == OK, "new-schema save exists")
+	check(config.get_value("run", "version") == 6, "random-map runs use version six")
+	var current_text = config.encode_to_text()
+	config.set_value("run", "version", 5)
+	check(config.save(route.SAVE) == OK and not route.resume(), "legacy fixed-map version five is rejected")
+	check(route.state == current and game.history.capture() == snapshot, "legacy rejection preserves live route and battle atomically")
+	config.parse(current_text);config.save(route.SAVE)
+	check(route.resume() and route.state == current, "new-schema save resumes after rejected legacy load")
+	var legacy = current.duplicate(true)
+	legacy.erase("generator_version");legacy.erase("path_length");legacy.erase("boss_id")
+	check(not route.valid_snapshot(legacy, snapshot, "map"), "missing generated-map metadata cannot masquerade as current schema")
 	fresh();route.generate(game.seed_value, 2)
 	var saved = route.state.duplicate(true);snapshot = game.history.capture()
 	check(route.valid_snapshot(saved, snapshot, "map"), "fresh second-chapter snapshot validates")
@@ -264,7 +268,7 @@ func check_map_cache():
 		builds = route.road_cache_builds
 		var work = route.road_segment_tests
 		for frame in 30:
-			route.scroll_y = route.scroll_limit() * frame / 29.0;route.selected_node = frame % 16;route.ensure_road_cache()
+			route.scroll_y = route.scroll_limit() * frame / 29.0;route.selected_node = frame % route.state.nodes.size();route.ensure_road_cache()
 		check(route.road_cache_builds == builds and route.road_segment_tests == work, "second chapter retains cached scrolling and selection")
 		route.redraw_key = 0;check(route.needs_redraw() and not route.needs_redraw(), "second map settles to an idle frame")
 		for node in route.state.nodes:

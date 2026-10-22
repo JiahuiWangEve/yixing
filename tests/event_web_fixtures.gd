@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # Offline QA driver: emits validated ordinary save files and real UI replay steps.
 const OUT = "res://../verification/v0.13.0/events/"
 var game
@@ -58,19 +59,25 @@ func setup(name: String, size: Vector2):
 	game.route.enter(0);game.route.complete()
 	game.collection=["sword_plus","sword","spear","life","sword_plus"];game.lives=4
 	if name=="workshop":
-		game.route.state.visited=[0,1,4];game.route.state.current=4;game.route.enter(6)
-	elif name.begins_with("camp"): game.route.enter(3)
+		T.enter_next(game, "workshop")
+	elif name.begins_with("camp"): T.enter_next(game, "camp")
 	else:
 		var event_id="herbalist" if name.begins_with("herb") else ("merchant" if name=="merchant" else "manual")
-		game.route.state.nodes[1].event_id=event_id
+		var target = T.next_node(game, "event", event_id)
 		if name=="herb_full": game.lives=5
 
 		if name=="manual_ineligible": game.collection=["sword_plus","life"]
-		game.route.enter(1)
+		game.route.enter(target)
 	if name.begins_with("fatigue"):
 		game.new_expedition();game.route.enter(0)
 		game.collection=["sword","fatigue","fatigue"];game.deck=["sword","fatigue","fatigue"];game.hand=[];game.hand_ids=[];game.discard=[]
 		game.energy=0 if name=="fatigue_zero" else 1
+	if name in ["manual_focus", "manual_homework", "camp_prepare"]:
+		var cursor = game.route.state.pending
+		var kinds = ["battle", "workshop", "battle"] if name.begins_with("manual") else ["battle"]
+		for kind in kinds:
+			cursor = game.route.state.nodes[cursor].next[0]
+			T.configure_node(game, cursor, kind)
 	game.route.save();steps=[]
 func run():
 	DirAccess.make_dir_recursive_absolute(OUT+"fixtures")
@@ -91,10 +98,10 @@ func run():
 				"manual_focus","manual_homework":
 					var mode="focus" if name=="manual_focus" else "homework"
 					choose("select_"+mode);choose(mode,0);choose("back");reload_step();choose("select_"+mode);choose(mode,0);choose("confirm");reload_step()
-					enter(4);victory();reload_step();reward_return();enter(6);choose("leave");enter(7);victory();reward_return()
+					enter(game.route.legal()[0]);victory();reload_step();reward_return();enter(game.route.legal()[0]);choose("leave");enter(game.route.legal()[0]);victory();reward_return()
 				"manual_mnemonic": choose("random_upgrade");choose("back");reload_step();choose("random_upgrade");choose("confirm")
 				"manual_ineligible": choose("disabled");choose("leave")
-				"camp_prepare": choose("prepare");choose("back");choose("prepare");choose("confirm");reload_step();enter(5)
+				"camp_prepare": choose("prepare");choose("back");choose("prepare");choose("confirm");reload_step();enter(game.route.legal()[0])
 				"camp_remove": choose("select_remove");choose("remove",0);choose("back");choose("select_remove");choose("remove",0);choose("confirm")
 				"fatigue_zero","fatigue_one":
 					for target in [Vector2i(4,8),Vector2i(4,7)]:

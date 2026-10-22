@@ -22,7 +22,7 @@ from playwright.async_api import async_playwright
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'verification/v0.14.0/chapter'
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
-KEY = 'yixing.route_run.v0100'
+KEY = 'yixing.route_run.v0149'
 ROUTE_FIELDS = ['chapter', 'current', 'pending', 'visited', 'done', 'prepared',
                 'reward_debt', 'reward_blocked', 'pending_homework', 'homework_awarded']
 BATTLE_FIELDS = ['phase', 'turn', 'lives', 'energy', 'collection', 'deck', 'hand',

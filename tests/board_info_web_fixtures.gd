@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # Valid production saves and coordinates only; no runtime QA interface is exported.
 const OUT = "res://../verification/v0.14.7/board-info/"
 var game
@@ -21,9 +22,10 @@ func path_to(target: int) -> Array:
 func prepare():
 	game.player_skill = "king";game.seed_value = 14747;game.new_expedition();game.route.generate(game.seed_value, 2)
 	game.collection = ["sword_plus", "pierce", "sword"];game.lives = 3;game.screen = "map"
-	for id in path_to(15):
+	var boss = T.kind_id(game.route, "boss")
+	for id in path_to(boss):
 		game.route.enter(id)
-		if id == 15: break
+		if id == boss: break
 		if game.screen == "game":
 			game.debug_skip();game.input_lock = 0;game.navigation_lock = 0;game.choose_reward(-1)
 		else:

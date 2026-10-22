@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'verification/v0.11.0/cannon/browser'
 FIXTURES = OUT.parent / 'fixtures'
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
-KEY = 'yixing.route_run.v0100'
+KEY = 'yixing.route_run.v0149'
 NAMES = ['support_first', 'cannon_first', 'held_support', 'obsolete_line',
          'boss_credit_cap', 'stress_four_cannons']
 
@@ -82,7 +82,7 @@ async def instrument(page):
         if(trace.last !== null && trace.inputAt !== null) trace.frames.push(now - trace.last);
         trace.last = now;
         if(trace.inputAt === null && ++trace.baselineFrames >= 2) resolve();
-        const save = localStorage.getItem('yixing.route_run.v0100') || '';
+        const save = localStorage.getItem('yixing.route_run.v0149') || '';
         if(trace.inputAt !== null && trace.firstSaveAt === null && /"turn": 2[,\\n]/.test(save)) trace.firstSaveAt=now;
         requestAnimationFrame(frame);
       }
@@ -171,7 +171,7 @@ async def main():
                 await instrument(page)
                 if w==1280: await page.keyboard.press('Space')
                 else: await page.touchscreen.tap(*geometry['end'])
-                await page.wait_for_function("/\"turn\": 2[,\\n]/.test(localStorage.getItem('yixing.route_run.v0100')||'')",timeout=20000)
+                await page.wait_for_function("/\"turn\": 2[,\\n]/.test(localStorage.getItem('yixing.route_run.v0149')||'')",timeout=20000)
                 await page.wait_for_timeout(200)
                 after=summary(parse_save(await snapshot(page)))
                 performance=await trace_result(page)

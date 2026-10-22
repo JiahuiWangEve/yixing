@@ -73,7 +73,7 @@ async def snapshot(page):
 
 async def await_saved_turn(page):
     await page.wait_for_function(
-        r'''/"turn": 2[,\n]/.test(localStorage.getItem('yixing.route_run.v0100')||'')''',
+        r'''/"turn": 2[,\n]/.test(localStorage.getItem('yixing.route_run.v0149')||'')''',
         timeout=20000)
 
 
@@ -89,7 +89,7 @@ async def instrument(page):
         if(trace.last !== null && trace.inputAt !== null) trace.frames.push(now - trace.last);
         trace.last = now;
         if(trace.inputAt === null && ++trace.baselineFrames >= 2) resolve();
-        const save = localStorage.getItem('yixing.route_run.v0100') || '';
+        const save = localStorage.getItem('yixing.route_run.v0149') || '';
         if(trace.inputAt !== null && trace.firstSaveAt === null && /"turn": 2[,\n]/.test(save)) trace.firstSaveAt=now;
         requestAnimationFrame(frame);
       }

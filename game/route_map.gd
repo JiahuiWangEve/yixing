@@ -68,8 +68,9 @@ func ensure_road_cache():
 					solid.append(p);solid.append(q)
 					if step % 6 < 4: dashed.append(p);dashed.append(q)
 			road_cache[Vector2i(node.id, next)] = {"solid": solid, "dashed": dashed, "from": from, "to": to, "bounds": Rect2(from, Vector2.ZERO).expand(to).grow(8)}
-const SAVE = "user://route_run_v0100.cfg"
-const WEB_SAVE_KEY = "yixing.route_run.v0100"
+const GENERATOR = preload("res://route_generator.gd")
+const SAVE = "user://route_run_v0149.cfg"
+const WEB_SAVE_KEY = "yixing.route_run.v0149"
 const LAST_CHAPTER = 2
 const CHAPTER_SEED_SALT = 0x5bd1e995
 const UPGRADES = preload("res://card_upgrades.gd")
@@ -97,8 +98,10 @@ var pointer_last = Vector2.ZERO
 var pointer_dragged = false
 var pointer_scroll = false
 var layout_size = Vector2.ZERO
+var layout_content_height = 0.0
+var layout_view_height = 0.0
 const TITLES = {"battle": "军旗阵地", "elite": "关隘", "camp": "休整", "workshop": "工坊", "event": "奇遇", "boss": "终点城寨"}
-const DETAILS = {"battle": "战胜守军后选择战利品。", "elite": "关隘精英守军；敌将5血，战胜后选择战利品。", "camp": "轻装上阵：删一张牌；养精蓄锐：下一战初始多抽2张。", "workshop": "强化一张可强化的永久牌。", "event": "药庐、行商、兵书各有三分之一概率，生成后固定。", "boss": "敌将9血；击败敌将即完成本章。"}
+const DETAILS = {"battle": "战胜守军后选择战利品。", "elite": "精英战斗；战胜后4张候选选1。", "camp": "轻装上阵：删一张牌；养精蓄锐：下一战初始多抽2张。", "workshop": "强化一张可强化的永久牌。", "event": "药庐、行商、兵书各有三分之一概率，生成后固定。", "boss": "敌将9血；击败敌将即完成本章。"}
 
 func reset_view():
 	selected_node = -1;travel_target = -1;travel_elapsed = 0.0
@@ -110,17 +113,15 @@ func map_rect() -> Rect2:
 	var top = 90.0 if game.compact_landscape else 112.0
 	return Rect2((game.ui_size.x - width) * 0.5, top, width, game.ui_size.y - top - 14)
 func content_height() -> float:
-	# Three to four chapter layers in portrait; desktop keeps generous art spacing.
-	if not game.mobile_layout: return 1240.0
-	if game.compact_landscape: return 1160.0
-	return map_rect().size.y * 2.4
+	# Nine layers retain legible seals and room for the selected-node cue.
+	if not game.mobile_layout: return 1520.0
+	if game.compact_landscape: return 1440.0
+	return maxf(1440.0, map_rect().size.y * 2.4)
 func scroll_limit() -> float: return maxf(0, content_height() - map_rect().size.y)
 func content_point(node: Dictionary) -> Vector2:
-	# Uneven terrain, not a centered ladder. Topology is unchanged in generate().
-	var xs = [0.46, 0.15, 0.50, 0.85, 0.22, 0.76, 0.53, 0.13, 0.48, 0.86, 0.24, 0.73, 0.15, 0.49, 0.84, 0.79]
-	var ys = [0.94, 0.82, 0.79, 0.83, 0.69, 0.66, 0.56, 0.45, 0.43, 0.46, 0.33, 0.33, 0.20, 0.18, 0.21, 0.075]
+	# Generated coordinates are saved. Resizing only projects them onto the paper.
 	var margin = 28.0 if game.mobile_layout else 42.0
-	return Vector2(map_rect().position.x + margin + xs[node.id] * (map_rect().size.x - margin * 2), map_rect().position.y + 32 + ys[node.id] * (content_height() - 80))
+	return Vector2(map_rect().position.x + margin + float(node.x) * (map_rect().size.x - margin * 2), map_rect().position.y + 160 + float(node.y) * (content_height() - 220))
 func focus_current():
 	if not active(): return
 	var node = state.nodes[maxi(0, state.current)]
@@ -140,7 +141,10 @@ func tick(delta: float):
 	if game.screen != "map": return
 	stamp_elapsed = minf(STAMP_SECONDS, stamp_elapsed + delta)
 	if layout_size != game.ui_size:
-		layout_size = game.ui_size;focus_needed = true;pointer_id = -2
+		if not focus_needed and layout_content_height > 0:
+			var center_fraction = (scroll_y + layout_view_height * 0.5) / layout_content_height
+			scroll_y = clampf(center_fraction * content_height() - map_rect().size.y * 0.5, 0, scroll_limit())
+		layout_size = game.ui_size;layout_content_height = content_height();layout_view_height = map_rect().size.y;pointer_id = -2
 	if focus_needed: focus_current()
 	if travel_target >= 0:
 		travel_elapsed += delta
@@ -196,26 +200,8 @@ func chapter_seed(run_seed: int, chapter_number: int) -> int:
 	# XOR retains the whole run seed and guarantees a different map identity.
 	return run_seed ^ (CHAPTER_SEED_SALT * (chapter_number - 1))
 func generate(seed_number: int, chapter_number: int = 1):
-	chapter_number = clampi(chapter_number, 1, LAST_CHAPTER)
-	var map_seed = chapter_seed(seed_number, chapter_number)
-	var random = RandomNumberGenerator.new()
-	random.seed = map_seed
-	state = {"chapter": chapter_number, "run_seed": seed_number, "seed": map_seed, "nodes": [], "current": -1, "visited": [], "pending": -1, "prepared": false, "reward_debt": 0, "pending_homework": [], "homework_awarded": [], "reward_blocked": false, "victory_recorded": false, "last_result": "", "done": false}
-	var rows = [[1], [0, 1, 2], [0, 2], [1], [0, 1, 2], [0, 2], [0, 1, 2], [1]]
-	var types = [["battle"], ["event", "elite", "camp"], ["battle", "battle"], ["workshop"], ["battle", "camp", "elite"], ["event", "battle"], ["workshop", "battle", "camp"], ["boss"]]
-	for row in rows.size():
-		for col in rows[row].size():
-			var loot = game.PROFILES.draw_rewards(game.player_skill, random)
-			state.nodes.append({"id": state.nodes.size(), "row": row, "lane": rows[row][col], "kind": types[row][col], "next": [], "loot": loot, "layout": clampi(row + random.randi_range(0, 1), 1, 5)})
-	for node in state.nodes:
-		node.encounter = game.ENCOUNTERS.node_config(node.kind, node.row, random, chapter_number)
-		if node.kind == "event":
-			node.event_id = EVENT_IDS[random.randi_range(0, EVENT_IDS.size() - 1)]
-			node.offers = game.PROFILES.draw_rewards(game.player_skill, random)
-			node.upgrade_seed = random.randi()
-	for node in state.nodes:
-		for target in state.nodes:
-			if target.row == node.row + 1 and (abs(target.lane - node.lane) <= 1 or rows[node.row].size() == 1 or rows[target.row].size() == 1): node.next.append(target.id)
+	state = GENERATOR.generate(seed_number, clampi(chapter_number, 1, LAST_CHAPTER), game.player_skill)
+	state.merge({"current": -1, "visited": [], "pending": -1, "prepared": false, "reward_debt": 0, "pending_homework": [], "homework_awarded": [], "reward_blocked": false, "victory_recorded": false, "last_result": "", "done": false})
 	choices = [];deck_view = false;choice_mode = "root";pending_choice = {};merchant_offer = -1;page = 0;reset_view()
 	# Chapter geometry and scenery must never reuse the previous map's cache.
 	road_cache_key = 0;road_cache.clear();decoration_key = "";decoration_cache.clear();redraw_key = 0
@@ -401,7 +387,7 @@ func complete():
 func save():
 	if not active(): return
 	var config = ConfigFile.new()
-	config.set_value("run", "version", 5)
+	config.set_value("run", "version", 6)
 	config.set_value("run", "normal_undos_remaining", game.normal_undos_remaining)
 	config.set_value("run", "route", state)
 	config.set_value("run", "battle", game.history.capture())
@@ -420,12 +406,10 @@ func resume() -> bool:
 		var snapshot = JavaScriptBridge.eval("(function(){try{return localStorage.getItem('" + WEB_SAVE_KEY + "')||'';}catch(e){return '';}})()")
 		if snapshot is String and not snapshot.is_empty(): loaded = config.parse(snapshot) == OK
 	if not loaded: loaded = config.load(SAVE) == OK
-	if not loaded or config.get_value("run", "version", 0) != 5: return false
+	if not loaded or config.get_value("run", "version", 0) != 6: return false
 	var saved = config.get_value("run", "route", {})
 	var battle = config.get_value("run", "battle", {})
 	var saved_screen = config.get_value("run", "screen", "map")
-	# Older v5 runs predate the optional air-drop recovery counter.
-	if battle is Dictionary and not battle.has("airdrop_recovery_turn"): battle.airdrop_recovery_turn = 0
 	if not valid_snapshot(saved, battle, saved_screen): return false
 	var remaining = config.get_value("run", "normal_undos_remaining", game.NORMAL_UNDO_LIMIT)
 	if not remaining is int or remaining < 0 or remaining > game.NORMAL_UNDO_LIMIT: return false
@@ -433,9 +417,6 @@ func resume() -> bool:
 	game.card_picker.close();game.presentation.clear()
 	game.tutorial.stop();game.history.clear();game.cancel_gesture();game.clear_effects()
 	state = saved.duplicate(true)
-	# v0.13 / version-5 saves had a single chapter and used seed directly.
-	state.chapter = state.get("chapter", 1)
-	state.run_seed = state.get("run_seed", state.seed)
 	for key in game.HISTORY.FIELDS: game.set(key, battle[key])
 	game.rng.state = battle.rng_state
 	game.screen = config.get_value("run", "screen", "map")
@@ -450,9 +431,9 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 	if saved_screen not in ["map", "game", "route_choice"]: return false
 	for key in ["seed", "nodes", "current", "visited", "pending", "prepared", "reward_debt", "pending_homework", "homework_awarded", "reward_blocked", "victory_recorded", "last_result", "done"]:
 		if not saved.has(key): return false
-	if not saved.nodes is Array or saved.nodes.size() != 16 or not saved.visited is Array: return false
+	if not saved.nodes is Array or saved.nodes.size() < 9 or saved.nodes.size() > 40 or not saved.visited is Array: return false
 	if not saved.current is int or not saved.pending is int or not saved.seed is int: return false
-	if saved.current < -1 or saved.current >= 16 or saved.pending < -1 or saved.pending >= 16: return false
+	if saved.current < -1 or saved.current >= saved.nodes.size() or saved.pending < -1 or saved.pending >= saved.nodes.size(): return false
 	var saved_chapter = saved.get("chapter", 1)
 	if not saved_chapter is int or saved_chapter not in [1, 2]: return false
 	if saved_chapter > 1 and not saved.has("run_seed"): return false
@@ -466,16 +447,8 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 		for card in saved[key]:
 			if card not in game.CARDS: return false
 	if saved.done: return false
-	var kinds = ["battle", "event", "elite", "camp", "battle", "battle", "workshop", "battle", "camp", "elite", "event", "battle", "workshop", "battle", "camp", "boss"]
-	var rows = [0, 1, 1, 1, 2, 2, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7]
-	var lanes = [1, 0, 1, 2, 0, 2, 1, 0, 1, 2, 0, 2, 0, 1, 2, 1]
-	for id in 16:
-		var node = saved.nodes[id]
-		if not node is Dictionary: return false
-		for key in ["id", "row", "lane", "kind", "next", "loot", "layout", "encounter"]:
-			if not node.has(key): return false
-		if node.id != id or node.row != rows[id] or node.lane != lanes[id] or node.kind != kinds[id]: return false
-		if not node.next is Array or not node.loot is Array or not node.layout is int or node.layout < 1 or node.layout > 5: return false
+	if not GENERATOR.validate_structure(saved): return false
+	for node in saved.nodes:
 		if node.kind in ["battle", "elite", "boss"]:
 			if not game.ENCOUNTERS.valid_config(node.encounter) or node.encounter.tier != node.kind: return false
 			if node.encounter.get("chapter", 1) != saved_chapter: return false
@@ -487,15 +460,11 @@ func valid_snapshot(saved, battle, saved_screen) -> bool:
 			for offer in node.offers:
 				if offer not in game.CARDS or unique.has(offer): return false
 				unique[offer] = true
-		var expected = []
-		for target in 16:
-			if rows[target] == rows[id] + 1 and (abs(lanes[target] - lanes[id]) <= 1 or rows[id] in [0, 3, 7] or rows[target] in [0, 3, 7]): expected.append(target)
-		if node.next != expected: return false
 		for card in node.loot:
 			if card not in game.CARDS: return false
 	var previous = -1
 	for id in saved.visited:
-		if not id is int or id < 0 or id >= 16: return false
+		if not id is int or id < 0 or id >= saved.nodes.size(): return false
 		if (previous < 0 and id != 0) or (previous >= 0 and id not in saved.nodes[previous].next): return false
 		previous = id
 	if previous != saved.current: return false
@@ -606,7 +575,8 @@ func hit_rect(node: Dictionary) -> Rect2:
 func stamp_rect(node: Dictionary) -> Rect2:
 	var rect = art_rect(node)
 	var side = landmark_width() * 0.50
-	return Rect2(Vector2(rect.end.x - side * 0.25, rect.position.y + 3), Vector2(side, side))
+	var stamp_x = clampf(rect.end.x - side * 0.25, map_rect().position.x + 4, map_rect().end.x - side - 4)
+	return Rect2(Vector2(stamp_x, rect.position.y + 3), Vector2(side, side))
 func centered_text(point: Vector2, value: String, font_size: int, color: Color):
 	var width = game.FONT.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 	game.text_at(point - Vector2(width * 0.5, 0), value, font_size, color)
@@ -622,11 +592,11 @@ func decoration_clear(rect: Rect2) -> bool:
 		if corridor.has_point(point): return false
 	return true
 func decoration_layout() -> Array:
-	var key = str([state.get("seed", 0), game.ui_size, game.mobile_layout, game.compact_landscape, state.get("nodes", []).hash()].hash())
+	var key = str([state.get("decor_seed", 0), game.ui_size, game.mobile_layout, game.compact_landscape, state.get("nodes", []).hash()].hash())
 	if key == decoration_key: return decoration_cache
 	decoration_key = key;decoration_cache = []
 	if not active(): return decoration_cache
-	var random = RandomNumberGenerator.new();random.seed = int(state.seed) + 1409
+	var random = RandomNumberGenerator.new();random.seed = int(state.decor_seed)
 	for attempt in 160:
 		var size = Vector2(random.randf_range(52, 92), random.randf_range(25, 40))
 		var rect = Rect2(map_rect().position + Vector2(random.randf_range(18, map_rect().size.x - size.x - 18), random.randf_range(25, content_height() - size.y - 25)), size)
@@ -758,14 +728,14 @@ func draw_header():
 	game.text_at(Vector2(title_x, 47), subtitle if game.mobile_layout and not game.compact_landscape else "弈 行", 20 if game.mobile_layout and not game.compact_landscape else 33, INK)
 	if game.compact_landscape:
 		game.text_at(Vector2(265, 45), subtitle, 21, INK)
-		game.text_at(Vector2(16, 78), "已行 %d / 8  ·  生命%d  ·  永久牌%d张" % [state.visited.size(), game.lives, game.collection.size()], 16, MUTED)
+		game.text_at(Vector2(16, 78), "已行 %d / %d  ·  生命%d  ·  永久牌%d张" % [state.visited.size(), state.path_length, game.lives, game.collection.size()], 16, MUTED)
 	else:
 		if game.mobile_layout:
-			game.text_at(Vector2(26, 76), "已行%d/8 · 生命%d · 永久牌%d张" % [state.visited.size(), game.lives, game.collection.size()], 16, INK)
+			game.text_at(Vector2(26, 76), "已行%d/%d · 生命%d · 永久牌%d张" % [state.visited.size(), state.path_length, game.lives, game.collection.size()], 16, INK)
 			game.text_at(Vector2(26, 99), "备战%s · 无收益剩%d场" % ["+2" if state.prepared else "无", state.reward_debt], 14, MUTED)
 		else:
 			game.text_at(Vector2(26, 92), subtitle, 23, INK)
-			game.text_at(Vector2(game.ui_size.x - 370, 91), "已行 %d / 8 · 生命%d · 永久牌%d张" % [state.visited.size(), game.lives, game.collection.size()], 16, MUTED)
+			game.text_at(Vector2(game.ui_size.x - 370, 91), "已行 %d / %d · 生命%d · 永久牌%d张" % [state.visited.size(), state.path_length, game.lives, game.collection.size()], 16, MUTED)
 	if not game.mobile_layout:
 		game.text_at(Vector2(290, 45), "一子入山河，百战成归途", 18, MUTED)
 		game.text_at(Vector2(850, 45), game.BUILD_VERSION + " · 朱印军符", 16, MUTED)
@@ -774,7 +744,7 @@ func inspect_at(pos: Vector2) -> Dictionary:
 	for node in state.nodes:
 		if not hit_rect(node).has_point(pos): continue
 		var names = {"battle": "战斗", "elite": "关隘", "camp": "休整", "workshop": "工坊", "event": "奇遇", "boss": "决战"}
-		var nature = {"battle": "普通战斗，检验当前构筑。", "elite": "较高难度战斗，挑战精英守军。", "camp": "休整节点，可选择轻装或备战。", "workshop": "强化节点，打磨可升级的卡牌。", "event": "未知遭遇，抵达后揭晓选项与代价。", "boss": "本章最终战斗，击败守将前进。"}
+		var nature = {"battle": "普通战斗，检验当前构筑。", "elite": "精英战斗，奖励选择更多。", "camp": "休整节点，可选择轻装或备战。", "workshop": "强化节点，打磨可升级的卡牌。", "event": "未知遭遇，抵达后揭晓选项与代价。", "boss": "本章最终战斗，击败守将前进。"}
 		var status = "可前往 · 再点选中的地标出发" if node.id in legal() else ("已行经" if node.id in state.visited else "当前不可达 · 沿相连道路前进")
 		return {"key": "node-%d" % node.id, "title": names[node.kind], "lines": [nature[node.kind], status], "anchor": hit_rect(node)}
 	return {}

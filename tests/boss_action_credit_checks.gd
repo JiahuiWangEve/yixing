@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # Boss acceleration is banked across phases, never a second movement in one phase.
 const E = preload("res://encounters.gd")
 var game
@@ -110,9 +111,8 @@ func check_undo_and_reload():
 	turn();check(game.history.capture() == after, "replay spends same one credit and reaches same position")
 	check(actor(uid).action_credits == 1, "replayed actor retains remaining credit")
 	game.new_expedition()
-	game.route.state.visited = [0, 2, 4, 6, 7, 10, 13]
-	game.route.state.current = 13
-	game.route.enter(15)
+	var boss = T.kind_id(game.route, "boss");T.before(game.route, boss)
+	game.route.enter(boss)
 	check(game.screen == "game" and E.uses_action_credits(game), "real route enters accelerated boss")
 	guard_for_save(3, false)
 	var saved = game.history.capture();var saved_route = game.route.state.duplicate(true)
@@ -121,7 +121,7 @@ func check_undo_and_reload():
 	var saved_guard = actor(E.selected_guard(game));var guard_uid = saved_guard.uid
 	saved_guard.erase("action_credits");saved_guard.bonus_pending = true
 	game.route.save();game.show_home()
-	check(game.route.resume(), "legacy v0100 boss save missing credit field remains readable")
+	check(game.route.resume(), "current boss save missing optional credit field remains readable")
 	turn()
 	check(movement_count(guard_uid) == 1 and actor(guard_uid).get("action_credits", 0) == 1 and not actor(guard_uid).bonus_pending, "resumed legacy retaliation and rotation combine into preserved overflow")
 func guard_for_save(credits: int, pending: bool):

@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 var game
 var picker
 var failures = 0
@@ -12,7 +13,7 @@ func selected(index: int): confirmed_indices.append(index)
 func fresh(size: Vector2):
 	if picker.active: picker.close()
 	game.new_expedition();game.configure_layout(size)
-	game.route.enter(0);game.route.complete();game.route.enter(3)
+	game.route.enter(0);game.route.complete();T.enter_next(game, "camp")
 	game.collection = []
 	for i in 24: game.collection.append(["sword", "sword_plus", "spear", "fatigue", "airdrop", "cannon_shot"][i % 6])
 	game.route.refresh_choices()
@@ -59,13 +60,13 @@ func run():
 		check(game.collection == before and game.screen == "map", "rest deletion commits only upgraded second instance")
 	# Book immediate and homework use same selection and preserve upgraded identity.
 	for mode in ["focus", "homework"]:
-		fresh(Vector2(390,844));picker.close();game.route.state.nodes[3].kind = "event";game.route.state.nodes[3].event_id = "manual";game.route.state.nodes[3].upgrade_seed = 42
+		fresh(Vector2(390,844));picker.close();T.configure_node(game, game.route.state.pending, "event", "manual");game.route.state.nodes[game.route.state.pending].upgrade_seed = 42
 		game.collection = ["sword", "sword_plus", "fatigue"];game.route.choice_mode = "root";game.route.refresh_choices();action("select_" + mode)
 		check(picker.active and picker.indices == [0,1,2], "book includes upgraded and fatigue")
 		picker.selected = 1;picker.confirm()
 		if mode == "focus": check(game.collection == ["sword", "sword_plus", "fatigue", "sword_plus", "fatigue"], "copy exact upgrade plus fatigue")
 		else: check(game.collection == ["sword", "sword_plus", "fatigue"] and game.route.state.pending_homework == ["sword_plus"], "homework exact upgraded copy delayed")
-	fresh(Vector2(390,844));game.route.state.nodes[3].kind = "workshop";game.collection = ["sword", "sword", "sword_plus"]
+	fresh(Vector2(390,844));T.configure_node(game, game.route.state.pending, "workshop");game.collection = ["sword", "sword", "sword_plus"]
 	game.route.choice_mode = "root";game.route.refresh_choices();action("select_upgrade")
 	check(picker.indices == [0,1], "workshop entry filters only eligible physical cards")
 	picker.selected = 1;check(picker.description().contains("淬锋"), "upgrade result preview")

@@ -1,4 +1,5 @@
 extends Node
+const T = preload("res://../tests/route_test_helpers.gd")
 # Copy this script and its scene into game as _seal_visual_qa.gd/.tscn.
 # Run the scene with a real rendering driver; --headless cannot validate visuals.
 const OUT = "res://../verification/v0.9.2/native/"
@@ -43,12 +44,12 @@ func run():
 		route.tick(route.STAMP_SECONDS + 0.1)
 		await capture(viewport, game, "stamp-static" + suffix)
 		route.save();check(route.resume());check(route.stamp_node == -1)
-		route.tick(0);var next = route.position(route.state.nodes[1]);route.click(next);route.click(next);route.tick(0.4)
+		route.tick(0);var event_id = T.next_node(game, "event");var next = route.position(route.state.nodes[event_id]);route.click(next);route.click(next);route.tick(0.4)
 		await capture(viewport, game, "march" + suffix)
-		route.tick(0.5);check(game.screen == "route_choice" and route.state.pending == 1)
+		route.tick(0.5);check(game.screen == "route_choice" and route.state.pending == event_id)
 		await capture(viewport, game, "event" + suffix)
 		route.resolve(route.choices.size() - 1);route.tick(1)
-		route.scroll_y = 0;route.selected_node = 15
+		route.scroll_y = 0;route.selected_node = T.kind_id(route, "boss")
 		await capture(viewport, game, "summit" + suffix)
 		route.selected_node = -1;route.click(route.deck_rect().get_center())
 		await capture(viewport, game, "deck" + suffix)

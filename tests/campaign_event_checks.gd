@@ -1,10 +1,12 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # Current-version transaction regression, using disposable save storage via verify.sh.
 const U = preload("res://card_upgrades.gd")
 var game
 var route
 var checks = 0
 var failures = 0
+var fixture_node = -1
 func check(ok: bool, label: String):
 	checks += 1
 	if not ok: failures += 1;push_error("CAMPAIGN EVENT: " + label)
@@ -27,12 +29,12 @@ func win_and_return():
 	game.input_lock = 0;game.navigation_lock = 0;game.debug_skip();game.choose_reward(-1)
 func event_fixture(id: String, identity: String = "king"):
 	fresh(identity);route.enter(0);win_and_return()
-	# Fixed valid node identity, independent from probability tests below.
-	route.state.nodes[1].event_id = id;route.enter(1)
+	# A real reachable node with an explicit transaction payload isolates RNG.
+	fixture_node = T.enter_next(game, "event", id)
 func camp_fixture():
-	fresh();route.enter(0);win_and_return();route.enter(3)
+	fresh();route.enter(0);win_and_return();fixture_node = T.enter_next(game, "camp")
 func workshop_fixture():
-	camp_fixture();act("leave");route.enter(5);win_and_return();route.enter(6)
+	fresh();route.enter(0);win_and_return();fixture_node = T.enter_next(game, "workshop")
 func deck_counts(cards: Array) -> Dictionary:
 	var result = {}
 	for card in cards: result[card] = result.get(card, 0) + 1
@@ -46,19 +48,23 @@ func check_generation():
 		if seed_number < 100:
 			route.generate(seed_number)
 			check(route.state == before, "seed reproduces topology, identity, offers and upgrade seed")
-		var elites = 0
+		var elites = 0;var event_types = []
 		for node in route.state.nodes:
 			if node.kind == "elite": elites += 1
 			check(node.kind != "outpost", "no retired weakening event category")
 			if node.kind != "event": continue
 			check(node.event_id in counts, "only three approved event identities")
 			counts[node.event_id] += 1
+			event_types.append(node.event_id)
 			check(node.offers.size() == 3 and node.offers[0] != node.offers[1] and node.offers[0] != node.offers[2] and node.offers[1] != node.offers[2], "stored merchant offers have three distinct card types")
 			check(node.offers[0] in game.PROFILES.DATA[game.player_skill].rewards and node.offers[1] in game.PROFILES.DATA[game.player_skill].rewards and node.offers[2] in game.PROFILES.COMMON, "offers remain two exclusive plus one common")
-		check(elites == 2 and route.state.nodes[5].kind == "battle", "removed outpost does not inflate elite density")
-		check(route.state.nodes[3].kind == "camp" and route.state.nodes[6].kind == "workshop", "old functionality positions retain their new names")
-		if route.state.nodes[1].event_id == route.state.nodes[10].event_id: repeated = true
-	for id in counts: check(abs(counts[id] - 2000) < 180, "independent equal thirds distribution: " + id + "=" + str(counts[id]))
+		check(elites == 1, "first chapter has one optional elite")
+		check(T.kind_id(route, "camp") >= 0 and T.kind_id(route, "workshop") >= 0, "final preparation offers both camp and workshop")
+		for id in event_types:
+			if event_types.count(id) > 1: repeated = true
+	var expected = (counts.herbalist + counts.merchant + counts.manual) / 3.0
+	check(expected > 0, "generated sample contains events")
+	for id in counts: check(abs(counts[id] - expected) < maxf(40, expected * 0.09), "independent equal thirds distribution: " + id + "=" + str(counts[id]))
 	check(repeated, "independent sampling permits repeated event types")
 	check(route.SYMBOLS.elite.resource_path.ends_with("outpost.svg") and route.TITLES.elite == "关隘", "elite uses gate image and label")
 	check(route.SYMBOLS.battle.resource_path.ends_with("battle.svg"), "ordinary battle icon unchanged")
@@ -90,18 +96,18 @@ func check_herbalist():
 	confirmed("breath");before.append("breath")
 	check(game.collection == before and game.lives == 5, "herbalist supplies one breath without heal")
 	event_fixture("herbalist");var life = game.lives;before = game.collection.duplicate();act("leave")
-	check(game.collection == before and game.lives == life and route.state.current == 1, "leave gives no benefit and completes node")
+	check(game.collection == before and game.lives == life and route.state.current == fixture_node, "leave gives no benefit and completes node")
 func check_merchant():
 	for identity in ["king", "horse", "artillery"]:
 		event_fixture("merchant", identity)
-		var before = game.collection.duplicate();var offers = route.state.nodes[1].offers.duplicate()
+		var before = game.collection.duplicate();var offers = route.state.nodes[fixture_node].offers.duplicate()
 		check(route.choices.size() == 4, "all three merchant offers visible before selection")
 		act("select_exchange", -1, 1)
 		check(game.collection == before, "selecting offer costs nothing")
 		act("exchange", 0);check(game.collection == before, "choosing surrendered card remains preview")
-		act("back");check(game.collection == before and route.state.nodes[1].offers == offers, "merchant cancel preserves deck and fixed offers")
+		act("back");check(game.collection == before and route.state.nodes[fixture_node].offers == offers, "merchant cancel preserves deck and fixed offers")
 		act("select_exchange", -1, 2);act("exchange", 1);route.save()
-		check(route.resume() and game.collection == before and route.state.nodes[1].offers == offers and route.choice_mode == "root", "reload cancels unconfirmed trade without reroll")
+		check(route.resume() and game.collection == before and route.state.nodes[fixture_node].offers == offers and route.choice_mode == "root", "reload cancels unconfirmed trade without reroll")
 		act("select_exchange", -1, 2);act("exchange", 1);act("confirm")
 		before[1] = offers[2]
 		check(game.collection == before and game.collection.size() == 4, "confirmed trade replaces one card without changing count")
@@ -138,7 +144,7 @@ func check_manual_random():
 	event_fixture("manual");game.collection = ["sword", "sword", "spear", "life"];route.refresh_choices()
 	var counts = [0,0,0]
 	for seed_number in 3000:
-		route.state.nodes[1].upgrade_seed = seed_number
+		route.state.nodes[fixture_node].upgrade_seed = seed_number
 		var index = route.random_upgrade_index()
 		check(index >= 0 and index < 3, "random upgrade never selects unsupported card")
 		counts[index] += 1
@@ -161,7 +167,7 @@ func check_rest():
 	check(game.collection == before and not route.state.prepared, "lighten load deletes just one permanent card")
 	camp_fixture();confirmed("prepare")
 	check(route.state.prepared and route.resume() and route.state.prepared, "preparation survives map resume")
-	route.enter(5)
+	T.enter_next(game, "battle")
 	check(game.hand.size() == 2 and not route.state.prepared, "rest gives exactly two opening cards in next battle")
 	var hand = game.hand.duplicate();route.save();check(route.resume() and game.hand == hand and not route.state.prepared, "battle reload cannot consume preparation twice")
 	undo_after_effects(game);check(game.hand == hand and not route.state.prepared, "opening prep cannot be undone into extra draws")
@@ -173,7 +179,7 @@ func check_rest():
 func check_reward_debt():
 	event_fixture("manual");game.collection = ["sword_plus", "spear"];route.refresh_choices();act("select_homework");confirmed("homework", 0)
 	var deck = game.collection.duplicate()
-	route.enter(4);check(route.state.reward_debt == 1 and route.state.pending_homework == ["sword_plus"] and game.collection == deck, "homework copy is unavailable in next battle")
+	var battle_node = T.enter_next(game, "battle");check(route.state.reward_debt == 1 and route.state.pending_homework == ["sword_plus"] and game.collection == deck, "homework copy is unavailable in next battle")
 	route.save();check(route.resume() and route.state.reward_debt == 1 and game.collection == deck, "battle reload preserves pending homework")
 	game.player = Vector2i(4, 9);game.enemies = [];game.add_enemy("g", Vector2i(4, 8), 3);game.enemies[0].hp = 1
 	game.hand = ["sword"];game.hand_ids = [];game.energy = 3;game.input_lock = 0;game.play_card(0, Vector2i(4, 8));deck.append("sword_plus")
@@ -184,19 +190,15 @@ func check_reward_debt():
 	check(game.collection == deck and game.screen == "game", "homework victory cannot add normal rewards or remove cards")
 	game.debug_skip();route.battle_victory();check(game.collection == deck and route.state.reward_debt == 0, "repeated victory does not deliver copy twice")
 	check(route.resume() and route.rewards_blocked() and game.collection == deck and route.state.homework_awarded == ["sword_plus"], "victory reload keeps delivery receipt without duplicate")
-	game.choose_reward(-1);check(game.screen == "map" and route.state.current == 4 and game.collection == deck, "homework victory still advances route")
-	route.enter(6);act("leave");route.enter(9);game.debug_skip()
-	check(not route.rewards_blocked() and game.rewards.size() == 3, "immediately following second battle restores rewards")
+	game.choose_reward(-1);check(game.screen == "map" and route.state.current == battle_node and game.collection == deck, "homework victory still advances route")
+	T.enter_next(game, "workshop");act("leave");T.enter_next(game, "elite");game.debug_skip()
+	check(not route.rewards_blocked() and game.rewards.size() == 4, "immediately following second battle restores rewards")
 	var reward = game.rewards[0];game.choose_reward(0);deck.append(reward)
 	check(game.collection == deck, "restored elite reward is granted normally")
 	# Explicitly exercise queued delivery with each tier and debug victory.
 	for tier in ["battle", "elite", "boss"]:
 		fresh();route.state.pending_homework = ["spear_plus", "deploy"];route.state.reward_debt = 1
-		if tier == "battle": route.enter(0)
-		elif tier == "elite":
-			route.state.current = 0;route.state.visited = [0];route.enter(2)
-		else:
-			route.state.current = 13;route.state.visited = [0,1,4,6,7,10,13];route.enter(15)
+		var target = T.kind_id(route, tier);T.before(route, target);route.enter(target)
 		deck = game.collection.duplicate();game.debug_skip();deck.append_array(["spear_plus", "deploy"])
 		check(game.collection == deck and route.state.reward_debt == 0 and route.state.pending_homework.is_empty() and route.rewards_blocked(), "debug homework delivers each queued copy once in " + tier)
 		game.debug_skip();check(game.collection == deck, "duplicate debug cannot deliver again in " + tier)
@@ -242,13 +244,13 @@ func check_fatigue():
 	check(game.energy == 2 and "fatigue" not in game.hand and game.discard == ["fatigue"], "forced discard removes fatigue without refund or extra cost")
 func check_save_validation():
 	fresh();var good = ConfigFile.new();check(good.load(route.SAVE) == OK, "current schema snapshot written")
-	check(good.get_value("run", "version") == 5, "event state uses explicit version five envelope")
+	check(good.get_value("run", "version") == 6, "event state uses explicit version six envelope")
 	var original_route = route.state.duplicate(true);var original_battle = game.history.capture()
 	for key in ["reward_debt", "reward_blocked", "victory_recorded", "pending_homework", "homework_awarded"]:
 		var changed = original_route.duplicate(true);changed.erase(key)
 		var bad = ConfigFile.new();bad.parse(good.encode_to_text());bad.set_value("run", "route", changed);bad.save(route.SAVE)
 		check(not route.resume() and route.state == original_route and game.history.capture() == original_battle, "missing event accounting field rejected atomically: " + key)
-	var legacy = ConfigFile.new();legacy.parse(good.encode_to_text());legacy.set_value("run", "version", 4);legacy.save(route.SAVE)
+	var legacy = ConfigFile.new();legacy.parse(good.encode_to_text());legacy.set_value("run", "version", 5);legacy.save(route.SAVE)
 	check(not route.resume() and route.state == original_route, "old demo map schema is rejected without modifying live state")
 	good.save(route.SAVE);check(route.resume(), "valid save survives rejection tests")
 func run():

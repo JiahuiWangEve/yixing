@@ -1,7 +1,8 @@
 """Small real-Web release gate; full semantic/UI regression runs after publication.
 
 Uses only normal UI and persisted saves. Desktop and touch portrait exercise new
-run -> map -> battle -> victory -> map -> reload -> Continue. No fixture injection.
+run -> map -> battle -> victory -> map -> reload -> Continue -> legal next node.
+No fixture injection.
 """
 import asyncio
 import json
@@ -10,11 +11,12 @@ import re
 import shutil
 from pathlib import Path
 from playwright.async_api import async_playwright
+from browser_map_checks import RouteGeometry, saved_route
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'verification/release-smoke'
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
-KEY = 'yixing.route_run.v0100'
+KEY = 'yixing.route_run.v0149'
 
 async def main():
     OUT.mkdir(parents=True, exist_ok=True)
@@ -58,13 +60,11 @@ async def main():
                     await tap(*menu)
                     await tap(*menu)
                     await state('map', -1, -1)
-                    mw = min(uw-28, 1000)
-                    mx, my, mh = (uw-mw)/2, 112, uh-126
-                    ch, margin = (1240, 42) if desktop else (mh*2.4, 28)
-                    nx = mx+margin+.46*(mw-margin*2)
-                    ny = my+32+.94*(ch-80)
-                    scroll = max(0, min(ch-mh, ny-my-mh*.73))
-                    await tap(nx, ny-scroll-15)
+                    route = saved_route(await page.evaluate('(key)=>localStorage.getItem(key)', KEY))
+                    geometry = RouteGeometry(route, w, h)
+                    assert route['nodes'][0]['kind'] == 'battle'
+                    assert geometry.visible(0), 'Generated entrance must be visible'
+                    await tap(*geometry.node(0))
                     # The independent header entry remains usable with a selected node.
                     saved_before = await page.evaluate('(key)=>localStorage.getItem(key)', KEY)
                     selected_map = await page.screenshot(path=str(OUT / f'map-selected-deck-entry-{w}.png'))
@@ -80,10 +80,10 @@ async def main():
                     # A second click on the same node proves closing retained selection.
                     # This is deliberately later than a conventional double-click.
                     await page.wait_for_timeout(1200)
-                    await tap(nx, ny-scroll-15)
+                    await tap(*geometry.node(0))
                     await state('game', -1, 0)
                     await tap(*( (1098,102) if desktop else (410,84) ))
-                    await page.wait_for_function("/\"phase\": \"reward\"/.test(localStorage.getItem('yixing.route_run.v0100')||'')", timeout=12000)
+                    await page.wait_for_function("/\"phase\": \"reward\"/.test(localStorage.getItem('yixing.route_run.v0149')||'')", timeout=12000)
                     await page.wait_for_timeout(1150) # Victory seal is shown before reward input.
                     await tap(*( (920,405) if desktop else (240,442) ))
                     await state('map', 0, -1)
@@ -92,13 +92,24 @@ async def main():
                     await tap(*( (640,425) if desktop else (240,max(150,uh*.25)+252) ))
                     await state('map', 0, -1)
                     # The saved snapshot survives reload even if Continue is broken.
-                    # Prove the restored UI is live by entering the next event.
-                    await tap(mx+margin+.15*(mw-margin*2), my+32+.82*(ch-80)-scroll-15)
-                    await tap(mx+margin+.15*(mw-margin*2), my+32+.82*(ch-80)-scroll-15)
-                    await state('route_choice', 0, 1)
+                    # Prove the restored UI is live by entering an actual legal next
+                    # node; generated first branches are not necessarily events.
+                    restored = saved_route(await page.evaluate('(key)=>localStorage.getItem(key)', KEY))
+                    assert restored['nodes'] == route['nodes'], 'Reload changed generated route'
+                    assert restored['nodes'][0]['next'], 'Entrance has no legal continuation'
+                    target = restored['nodes'][0]['next'][0]
+                    geometry = RouteGeometry(restored, w, h)
+                    assert geometry.visible(target), 'Next generated node must be visible'
+                    await tap(*geometry.node(target))
+                    await tap(*geometry.node(target))
+                    kind = restored['nodes'][target]['kind']
+                    next_screen = 'game' if kind in ['battle', 'elite', 'boss'] else 'route_choice'
+                    await state(next_screen, 0, target)
                     assert not errors, errors
-                    await page.screenshot(path=str(OUT / f'event-after-resume-{w}.png'))
-                    reports.append({'viewport':[w,h], 'errors':errors, 'passed':True})
+                    await page.screenshot(path=str(OUT / f'next-node-after-resume-{w}.png'))
+                    reports.append({'viewport':[w,h], 'errors':errors, 'passed':True,
+                                    'resumed_next_node':target, 'resumed_next_kind':kind,
+                                    'resumed_next_screen':next_screen})
                     print('PASS release smoke', w, h, flush=True)
                 except Exception:
                     await page.screenshot(path=str(OUT / f'failure-{w}.png'))

@@ -14,6 +14,7 @@ import shutil
 from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
 from playwright.async_api import async_playwright
+from browser_map_checks import RouteGeometry, saved_route
 from browser_event_checks import boot, KEY
 from browser_settings import SETTINGS_KEY
 
@@ -167,13 +168,12 @@ async def main(smoke=False):
                         await page.keyboard.press('Escape')
                         await tap(menu(3))
                         await wait_state('map')
-                        mw = min(uw-28, 1000)
-                        mx, my, mh = (uw-mw)/2, 112, uh-126
-                        ch, margin = (1240, 42) if desktop else (mh*2.4, 28)
-                        nx, ny = mx+margin+.46*(mw-margin*2), my+32+.94*(ch-80)
-                        scroll = max(0, min(ch-mh, ny-my-mh*.73))
-                        await tap((nx, ny-scroll-15))
-                        await tap((nx, ny-scroll-15))
+                        route = saved_route(await saved())
+                        geometry = RouteGeometry(route, w, h)
+                        assert route['current'] == -1 and route['pending'] == -1 and route['nodes'][0]['kind'] == 'battle'
+                        assert geometry.visible(0), 'Generated entrance must be visible'
+                        await tap(geometry.node(0))
+                        await tap(geometry.node(0))
                         await wait_state('game', 'play')
                         await page.wait_for_timeout(800)
                         await no_old_button('battle')

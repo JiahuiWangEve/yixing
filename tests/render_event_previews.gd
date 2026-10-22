@@ -1,4 +1,5 @@
 extends Node
+const T = preload("res://../tests/route_test_helpers.gd")
 # Copy this script and scene into a disposable game copy as _event_visual_qa.*.
 # Open _event_visual_qa.tscn and Run Current Scene with a real rendering driver.
 # Do not export this scene. The disposable project must be under the workspace.
@@ -22,8 +23,7 @@ func root_fixture(game, event_id: String):
 	game.route.enter(0);game.route.complete()
 	game.collection = ["sword_plus", "sword", "spear", "life", "sword_plus"]
 	game.lives = 4;game.rewards = [];game.navigation_lock = 0;game.input_lock = 0
-	game.route.state.nodes[1].event_id = event_id
-	game.route.enter(1)
+	T.enter_next(game, "event", event_id)
 	check(game.screen == "route_choice")
 func choose(game, action: String, index: int = -1):
 	for i in game.route.choices.size():
@@ -65,14 +65,14 @@ func run():
 		choose(game, "confirm");game.route.tick(1)
 		check(game.collection.count("sword_plus") == 2 and game.route.state.pending_homework == ["sword_plus"])
 		await capture(viewport, game, "homework-result-map" + suffix)
-		game.route.enter(4);game.debug_skip()
+		T.enter_next(game, "battle");game.debug_skip()
 		check(game.phase == "reward" and game.route.rewards_blocked() and game.route.state.reward_debt == 0 and game.collection.count("sword_plus") == 3)
 		await capture(viewport, game, "reward-homework-delivered" + suffix)
-		game.choose_reward(-1);game.route.enter(6)
-		check(game.route.state.nodes[6].kind == "workshop")
+		game.choose_reward(-1);T.enter_next(game, "workshop")
+		check(game.route.state.nodes[game.route.state.pending].kind == "workshop")
 		await capture(viewport, game, "workshop" + suffix)
-		game.new_expedition();game.route.enter(0);game.route.complete();game.route.enter(3)
-		check(game.route.state.nodes[3].kind == "camp")
+		game.new_expedition();game.route.enter(0);game.route.complete();T.enter_next(game, "camp")
+		check(game.route.state.nodes[game.route.state.pending].kind == "camp")
 		await capture(viewport, game, "rest" + suffix)
 		reports.append({"viewport": [size.x, size.y], "logical_size": [game.ui_size.x, game.ui_size.y], "assertions": assertions - before, "screenshots": 12})
 		game.free();viewport.free()

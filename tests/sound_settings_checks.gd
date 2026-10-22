@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # Native preferences and input-routing checks. No physical-audio claim.
 const SETTINGS = preload("res://game_settings.gd")
 var game
@@ -79,7 +80,7 @@ func run():
 			game.phase = phase;no_old_toggle("battle " + phase + " " + str(size))
 		game.start_tutorial(0);game.clear_effects();no_old_toggle("tutorial " + str(size))
 		game.new_expedition();no_old_toggle("map " + str(size))
-		game.route.state.current = 0;game.route.state.visited = [0];game.route.enter(1);no_old_toggle("route choice " + str(size))
+		game.route.state.current = 0;game.route.state.visited = [0];T.enter_next(game, "event");no_old_toggle("route choice " + str(size))
 		game.show_home();game.open_settings();tap(game.frontend.button_rect(1).get_center())
 		check(game.screen == "home", "touch return button " + str(size))
 	# Preferences do not live in expedition snapshots; new runs and Continue keep them.

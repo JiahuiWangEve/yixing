@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # Visual state and geometry regression for the black-ink / red-seal campaign map.
 # Run with the disposable save directory supplied by scripts/verify.sh.
 var game
@@ -35,7 +36,7 @@ func run():
 		blocked.position.y += route.scroll_y
 		check(not route.decoration_clear(blocked), "scenery cannot occupy a node")
 		var a = route.content_point(route.state.nodes[0])
-		var b = route.content_point(route.state.nodes[1])
+		var b = route.content_point(route.state.nodes[route.state.nodes[0].next[0]])
 		var middle = route.edge_point(a, b, 0.5)
 		check(not route.decoration_clear(Rect2(middle - Vector2(8,8), Vector2(16,16))), "scenery cannot occupy a road")
 		# Selection, blank-clear, and travelling must not create a completion seal.
@@ -63,13 +64,14 @@ func run():
 		check(route.state.visited == [0] and route.state.current == 0, "resume preserves static completed seal")
 		route.tick(0)
 		# An event can be completed too, including the no-upgrade 'leave' choice.
-		var next = route.position(route.state.nodes[1]);route.click(next);route.click(next);route.tick(0.86)
-		check(game.screen == "route_choice" and route.state.pending == 1, "event arrival remains a choice, not automatic completion")
+		var event_id = T.next_node(game, "event")
+		var next = route.position(route.state.nodes[event_id]);route.click(next);route.click(next);route.tick(0.86)
+		check(game.screen == "route_choice" and route.state.pending == event_id, "event arrival remains a choice, not automatic completion")
 		check(route.stamp_node == -1 and route.state.visited == [0], "event preview has no premature seal")
 		route.resolve(route.choices.size() - 1)
-		check(route.stamp_node == 1 and route.state.visited == [0,1], "resolved event receives its own completion seal")
+		check(route.stamp_node == event_id and route.state.visited == [0,event_id], "resolved event receives its own completion seal")
 		route.reset_view()
-		check(route.stamp_node == -1 and route.state.visited == [0,1], "reset view clears animation only")
+		check(route.stamp_node == -1 and route.state.visited == [0,event_id], "reset view clears animation only")
 		game.new_expedition();route.tick(0)
 		check(route.stamp_node == -1 and route.state.visited.is_empty(), "new run never leaks previous seals")
 	print("SEAL MAP RESULT ", checks, " checks, ", failures, " failures")

@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 const OUT = "res://../verification/v0.14.3/presentation/"
 var game
 func _initialize(): call_deferred("run")
@@ -17,7 +18,7 @@ func run():
 		var report={"name":name,"viewport":point(size),"logical_size":point(game.ui_size),"skip":point(game.debug_skip_rect().get_center())}
 		game.screen="home";report.resume=point(game.frontend.button_rect(3).get_center());game.screen="game"
 		game.debug_skip();game.choose_reward(-1);game.presentation.clear()
-		game.route.state.nodes[1].event_id="manual";game.route.enter(1);game.collection=["sword","spear","sword_plus"];game.route.refresh_choices()
+		T.enter_next(game, "event", "manual");game.collection=["sword","spear","sword_plus"];game.route.refresh_choices()
 		save_fixture(name+"-upgrade");report.before=game.collection.duplicate()
 		report.choose=point(game.route.row_rect(2).get_center());report.confirm=point(game.route.row_rect(0).get_center())
 		game.route.resolve(2);game.route.resolve(0);report.after=game.collection.duplicate();report.view=point(game.route.deck_rect().get_center())

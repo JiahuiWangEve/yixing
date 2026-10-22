@@ -3,11 +3,13 @@ extends RefCounted
 
 
 var game
+var face
 var mode = "choice"
 var selected = -1
 var page = 0
 
-func _init(owner): game = owner
+func _init(owner):
+	game = owner;face = preload("res://card_face.gd").new(owner)
 
 func reset():
 	mode = "choice";selected = -1;page = 0
@@ -26,12 +28,24 @@ func choice_rect(i: int) -> Rect2:
 	if game.compact_landscape: return Rect2(24 + i * 312, 170, 288, 174)
 	return Rect2(24, 150 + i * 120, 432, 104)
 func add_rect(i: int) -> Rect2:
-	if game.mobile_layout and not game.compact_landscape:
-		var step = 130 if game.ui_size.y < 700 else 150
-		return Rect2(24, 142 + i * step, 432, 122 if game.ui_size.y < 700 else 138)
-	return game.reward_rect(i)
+	if game.rewards.size() > 3:
+		if not game.mobile_layout: return Rect2(90 + i * 280, 310, 264, 300)
+		if game.compact_landscape: return Rect2(24 + i * 232, 150, 216, 250)
+		# All four remain visible. The same card-face renderer keeps readable
+		# type without forcing a fourth card behind the fixed return button.
+		var height = minf(280, (back_rect().position.y - 170) * 0.5)
+		return Rect2(24 + (i % 2) * 224, 138 + (i / 2) * (height + 16), 208, height)
+	# Preserve the existing three-candidate geometry, including tutorial taps.
+	if not game.mobile_layout: return Rect2(220 + i * 285, 310, 260, 190)
+	if game.compact_landscape: return Rect2(24 + i * 312, 150, 288, 180)
+	var step = 130 if game.ui_size.y < 700 else 150
+	return Rect2(24, 142 + i * step, 432, 122 if game.ui_size.y < 700 else 138)
 func back_rect() -> Rect2:
-	if mode == "add": return game.skip_reward_rect()
+	if mode == "add":
+		if game.rewards.size() <= 3: return game.skip_reward_rect()
+		if not game.mobile_layout: return Rect2(530, 660, 220, 50)
+		if game.compact_landscape: return Rect2(370, 446, 220, 58)
+		return Rect2(120, game.ui_size.y - 70, 240, 54)
 	if not game.mobile_layout: return Rect2(320, 700, 210, 54)
 	if game.compact_landscape: return Rect2(600, 446, 156, 58)
 	return Rect2(24, game.ui_size.y - 70, 166, 54)
@@ -139,7 +153,7 @@ func _draw_choice():
 	var intro = "本轮三选一；查看加牌或删牌后可返回"
 	game.text_at(title_position() + Vector2(0, 28 if game.mobile_layout else 32), intro, 16, game.THEME.LIGHT)
 	var labels = ["加牌", "删牌", "跳过"]
-	var subtitles = ["从 3 张奖励牌中选 1 张", "从整副牌组中永久删 1 张", "保持牌组，继续下一关"]
+	var subtitles = ["从 %d 张奖励牌中选 1 张" % game.rewards.size(), "从整副牌组中永久删 1 张", "保持牌组，继续下一关"]
 	if game.route.active(): subtitles[2] = "保持牌组，进军第二章" if advances_chapter() else "保持牌组，返回山河图"
 	if game.debug_remaining > 0: subtitles[2] = "保持牌组，继续预选流程"
 	if game.collection.is_empty(): subtitles[1] = "牌组为空，暂无可删牌"
@@ -163,6 +177,10 @@ func _draw_add():
 		var id: String = game.rewards[i]
 		var rect = add_rect(i)
 		var pos = rect.position
+		if game.rewards.size() > 3:
+			var transform = Transform2D(Vector2(rect.size.x / 156, 0), Vector2(0, rect.size.y / 156), pos)
+			face.draw_data(game, game.CARDS[id], game.is_consumable(id), transform)
+			continue
 		game.panel(rect, game.THEME.PAPER, game.GOLD)
 		game.text_at(pos + Vector2(20, 36 if game.mobile_layout else 45), game.CARDS[id][0], 26 if game.mobile_layout else 30, game.GOLD)
 		game.text_at(pos + Vector2(20, 65 if game.mobile_layout else 80), "费用 %d" % game.CARDS[id][1], 19)

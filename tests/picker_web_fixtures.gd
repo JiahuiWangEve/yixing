@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 const OUT = "res://../verification/v0.14.3/picker/"
 var game
 var reports = []
@@ -12,10 +13,7 @@ func run():
 			if game.card_picker.active: game.card_picker.close()
 			game.configure_layout(size);game.player_skill = "king";game.seed_value = 14343;game.new_expedition()
 			game.route.enter(0);game.route.complete()
-			var node = 3 if action == "remove" else (6 if action == "upgrade" else 1)
-			if action == "upgrade": game.route.state.visited = [0,1,4];game.route.state.current = 4
-			if action in ["focus", "homework"]: game.route.state.nodes[1].event_id = "manual"
-			game.route.enter(node);game.collection = []
+			T.enter_next(game, "camp" if action == "remove" else ("workshop" if action == "upgrade" else "event"), "manual");game.collection = []
 			for i in 24: game.collection.append("sword" if action == "upgrade" else (["sword", "sword_plus", "fatigue", "airdrop"][i % 4]))
 			game.route.refresh_choices();game.route.save()
 			assert(game.route.valid_snapshot(game.route.state, game.history.capture(), "route_choice"))

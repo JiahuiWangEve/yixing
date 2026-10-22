@@ -5,14 +5,98 @@ Run a server over build/web on 8765 (or set YIXING_TEST_URL).
 import asyncio, json, os, re, shutil
 from pathlib import Path
 from playwright.async_api import async_playwright
-from browser_event_checks import await_saved_state
+from browser_event_checks import await_saved_state, variant_json
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'verification/v0.13.0/browser'
-OUT.mkdir(parents=True, exist_ok=True)
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
-XS = [.46,.15,.50,.85,.22,.76,.53,.13,.48,.86,.24,.73,.15,.49,.84,.79]
-YS = [.94,.82,.79,.83,.69,.66,.56,.45,.43,.46,.33,.33,.20,.18,.21,.075]
+def saved_route(text):
+ """Decode only the ordinary production save, never a runtime/debug hook."""
+ assert text, 'No synchronous Web snapshot'
+ route = variant_json(text.split('\nroute=', 1)[1].split('\nbattle=', 1)[0])
+ assert route['nodes'] and all(node['id'] == i for i, node in enumerate(route['nodes']))
+ for node in route['nodes']:
+  assert all(isinstance(node[key], (int, float)) and not isinstance(node[key], bool)
+             and 0 <= node[key] <= 1 for key in ('x', 'y')), node
+ return route
+
+class RouteGeometry:
+ """Public map projection from route_map.gd, using persisted node coordinates.
+
+ This intentionally models production map_rect/content_height/content_point and
+ focus_current instead of assuming any seed's node count, kind, or lane position.
+ Every browser entry below still clicks the normal exported canvas UI.
+ """
+ def __init__(self, route, width, height):
+  self.route = route
+  self.desktop = width == 1280
+  self.landscape = width > height and not self.desktop
+  self.uw, self.uh = ((1280, 940) if self.desktop else
+                     ((960, 540) if self.landscape else (480, max(660, 480*height/width))))
+  self.mw = min(self.uw - 28, 1000)
+  self.mx = (self.uw - self.mw)/2
+  self.my = 90 if self.landscape else 112
+  self.mh = self.uh - self.my - 14
+  self.ch = 1520 if self.desktop else (1440 if self.landscape else max(1440, self.mh*2.4))
+  self.margin = 42 if self.desktop else 28
+
+ def content(self, node_id):
+  node = self.route['nodes'][node_id]
+  return (self.mx + self.margin + node['x']*(self.mw - self.margin*2),
+          self.my + 160 + node['y']*(self.ch - 220))
+
+ def focus(self, current=None):
+  if current is None: current = self.route['current']
+  return max(0, min(self.ch - self.mh, self.content(max(0, current))[1] - self.my - self.mh*.73))
+
+ def node(self, node_id, current=None):
+  x, y = self.content(node_id)
+  return x, y - self.focus(current) - 15
+
+ def visible(self, node_id, current=None):
+  x, y = self.node(node_id, current)
+  return self.mx + 6 < x < self.mx + self.mw - 6 and self.my + 8 < y < self.my + self.mh - 8
+
+ def blank(self, current=None):
+  # Generated lanes can reach either map edge. Find a point outside every real
+  # landmark hitbox rather than assuming a fixed empty strip exists on the left.
+  width = 102 if self.desktop else (92 if self.landscape else 88)
+  for xf in (.01, .99, .5, .25, .75):
+   for yf in (.85, .65, .45, .25):
+    point = self.mx + self.mw*xf, self.my + self.mh*yf
+    hit = False
+    for node in self.route['nodes']:
+     x, y = self.content(node['id']); y -= self.focus(current)
+     size = width*(1.2 if node['kind'] == 'boss' else 1)
+     if x - size/2 - 6 <= point[0] <= x + size/2 + 6 and y - size + 7 <= point[1] <= y + 43:
+      hit = True; break
+    if not hit: return point
+  raise AssertionError('No blank map point outside generated landmark hitboxes')
+
+
+def event_path(route, start):
+ """Find a real forward route to an event; don't assume node 1 is an event."""
+ queue = [(start, [])]
+ seen = {start}
+ while queue:
+  current, path = queue.pop(0)
+  for target in route['nodes'][current]['next']:
+   if target in seen: continue
+   seen.add(target)
+   next_path = path + [target]
+   if route['nodes'][target]['kind'] == 'event': return next_path
+   queue.append((target, next_path))
+ raise AssertionError(('No reachable event in generated chapter', route['seed'], start))
+
+
+def leave_index(node):
+ if node['kind'] == 'workshop': return 1
+ if node['kind'] == 'camp' or node['event_id'] == 'herbalist': return 2
+ if node['event_id'] == 'merchant': return len(node['offers'])
+ assert node['event_id'] == 'manual', node
+ return 3
+
 async def main():
+ OUT.mkdir(parents=True, exist_ok=True)
  reports=[]
  async with async_playwright() as p:
   executable = os.environ.get('CHROMIUM_PATH') or shutil.which('chromium')
@@ -28,18 +112,13 @@ async def main():
    scale=min(w/uw,h/uh); ox=(w-uw*scale)/2; oy=(h-uh*scale)/2
    side=w==1280 or w>h
    mw=min(uw-28,1000); mx=(uw-mw)/2; my=90 if side and w!=1280 else 112; mh=uh-my-14
-   ch,margin=(1240,42) if w==1280 else ((1160,28) if side else (mh*2.4,28))
-   def content(i):return (mx+margin+XS[i]*(mw-margin*2),my+32+YS[i]*(ch-80))
-   def focus(i):return max(0,min(ch-mh,content(i)[1]-my-mh*.73))
-   def node(i,current=0):x,y=content(i);return (x,y-focus(current)-15)
-   blank=(mx+8,my+mh*.85) # Inside the map, left of every landmark hitbox.
    async def tap(x,y,delay=180):
     await page.touchscreen.tap(ox+x*scale,oy+y*scale); await page.wait_for_timeout(delay)
    async def state(screen,current,pending):
     saved=None
     async def current_state():
      nonlocal saved
-     saved=await page.evaluate("localStorage.getItem('yixing.route_run.v0100')")
+     saved=await page.evaluate("localStorage.getItem('yixing.route_run.v0149')")
      if not saved: return None
      return (re.search(r'^screen="(\w+)"',saved,re.M).group(1),int(re.search(r'"current": (-?\d+)',saved).group(1)),int(re.search(r'"pending": (-?\d+)',saved).group(1)))
     # Keep all original settle times and assert the same exact state tuple.
@@ -72,7 +151,26 @@ async def main():
     await page.wait_for_timeout(100)
    menu=(640,209) if w==1280 else ((265,169) if side else (240,max(150,uh*.25)+30))
    await tap(*menu); await tap(*menu,500)
-   await state('map',-1,-1);await shot('map')
+   await state('map',-1,-1)
+   # An event is not compulsory in every valid random chapter. Choose a run
+   # containing one through New Run UI, never by rewriting/injecting a fixture.
+   # Event round-trip coverage remains mandatory, not a conditional skip.
+   skipped_seeds=[]
+   for attempt in range(16):
+    route=saved_route(await page.evaluate("localStorage.getItem('yixing.route_run.v0149')"))
+    if any(n['kind']=='event' for n in route['nodes']): break
+    skipped_seeds.append(route['seed'])
+    if attempt<15:
+     await tap(74,34);await tap(*menu);await tap(*menu,500)
+     await state('map',-1,-1)
+   path=event_path(route,0)
+   await shot('map')
+   geometry=RouteGeometry(route,w,h)
+   node=geometry.node;blank=geometry.blank()
+   assert route['nodes'][0]['kind']=='battle', 'Generated entrance must remain a battle'
+   assert geometry.visible(0), 'Entrance must be visible after production auto-focus'
+   unreachable=next((n['id'] for n in route['nodes'] if n['id']!=0 and geometry.visible(n['id'])),None)
+   assert unreachable is not None, 'Need a visible unreachable landmark for strict selection checks'
    if w==1280:
     # Real mouse hover opens information, but must not implicitly select.
     plain=await page.screenshot();nx,ny=node(0)
@@ -86,7 +184,7 @@ async def main():
    map_assertions.append('First click selects; blank map clears selection and Enter cannot depart')
    # Selecting another node replaces the old selection; unreachable nodes are
    # still inspectable but even repeated clicks must never start a journey.
-   await tap(*node(1));await tap(*node(1));await remains_map()
+   await tap(*node(unreachable));await tap(*node(unreachable));await remains_map()
    await tap(*node(0));await remains_map()
    map_assertions.append('Different node replaces selection; unreachable repeat cannot depart')
    for gesture in ['hold','cancel','multitouch-hold']:
@@ -116,7 +214,7 @@ async def main():
    map_assertions.append('Same selected node departs after a long delay; duplicate travel input suppressed')
    if w == 1280:
     async def saved_turn():
-     saved=await page.evaluate("localStorage.getItem('yixing.route_run.v0100')")
+     saved=await page.evaluate("localStorage.getItem('yixing.route_run.v0149')")
      return int(re.search(r'"turn": (\d+)',saved).group(1))
     before=await saved_turn()
     await page.keyboard.press('Enter'); await page.wait_for_timeout(1200)
@@ -152,20 +250,43 @@ async def main():
    map_assertions.append('Drag scroll changes map and equal opposite drag restores it without selecting')
    frame_deltas=await page.evaluate("""() => new Promise(resolve => {let last=null, values=[]; function tick(now) {if(last!==null) values.push(now-last);last=now;if(values.length<60) requestAnimationFrame(tick);else resolve(values);}requestAnimationFrame(tick);})""")
    await cdp.detach()
-   await tap(*node(1)); await tap(*node(1),350); await shot('march')
-   await page.wait_for_timeout(700); await state('route_choice',0,1); await shot('event')
+   # Reach a genuinely generated event through legal edges and normal UI. A
+   # random first branch may contain battles, camps, or workshops on the way.
+   current=0
+   for target in path:
+    assert target in route['nodes'][current]['next'], (current,target)
+    assert geometry.visible(target,current), ('Next route node is not visible',current,target)
+    await tap(*node(target,current));await tap(*node(target,current),350)
+    await shot('march' if target==path[-1] else 'march-'+str(target))
+    await page.wait_for_timeout(700)
+    kind=route['nodes'][target]['kind']
+    expected='game' if kind in ['battle','elite','boss'] else 'route_choice'
+    await state(expected,current,target)
+    if target==path[-1]: break
+    if expected=='game':
+     await tap(*skip,1200)
+     await page.wait_for_function('/"phase": "reward"/.test(localStorage.getItem("yixing.route_run.v0149")||"")',timeout=12000)
+     await page.wait_for_timeout(1150)
+     await tap(*skip_reward,500)
+    else:
+     await tap(uw/2,199+leave_index(route['nodes'][target])*54,500)
+    await state('map',target,-1);current=target
+    await page.wait_for_timeout(450) # Completed-node seal settles before more input.
+   event_id=path[-1]
+   assert route['nodes'][event_id]['kind']=='event'
+   await shot('event')
    await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
-   await state('route_choice',0,1)
-   saved=await page.evaluate("localStorage.getItem('yixing.route_run.v0100')")
-   route=json.loads(saved.split('\nroute=',1)[1].split('\nbattle=',1)[0].replace('&\"','\"'))
-   leave_index=3 if route['nodes'][1]['event_id']in ['merchant','manual'] else 2
-   await tap(uw/2,199+leave_index*54,500); await state('map',1,-1)
+   await state('route_choice',current,event_id)
+   restored=saved_route(await page.evaluate("localStorage.getItem('yixing.route_run.v0149')"))
+   assert restored['nodes']==route['nodes'], 'Reload changed generated graph or coordinates'
+   await tap(uw/2,199+leave_index(restored['nodes'][event_id])*54,500)
+   await state('map',event_id,-1)
    await shot('event-return'); await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
-   await state('map',1,-1); await shot('map-resume')
+   await state('map',event_id,-1); await shot('map-resume')
    assert not errors,(w,errors)
-   reports.append({'viewport':[w,h],'errors':errors,'state_assertions':assertions,'keyboard_assertions':keyboard_assertions,'map_assertions':map_assertions,'map_performance':{'touch_scroll_checks':3,'idle_browser_raf_ms':frame_deltas},'note':'Actual Web export: centered map, first-click selection, delayed same-node departure, blank clearing, unreachable nodes, mouse hover and touch hold/cancel/multitouch safety, duplicate suppression, drag round-trip, battle reload, debug reward return, curved march, event reload/resolve, map refresh.'})
+   reports.append({'viewport':[w,h],'errors':errors,'state_assertions':assertions,'keyboard_assertions':keyboard_assertions,'map_assertions':map_assertions,'event_path':path,'skipped_eventless_seeds':skipped_seeds,'map_performance':{'touch_scroll_checks':3,'idle_browser_raf_ms':frame_deltas},'note':'Actual Web export: centered map, first-click selection, delayed same-node departure, blank clearing, unreachable nodes, mouse hover and touch hold/cancel/multitouch safety, duplicate suppression, drag round-trip, battle reload, debug reward return, curved march, event reload/resolve, map refresh.'})
    await context.close()
   await browser.close()
  (OUT/'browser-flow.json').write_text(json.dumps(reports,indent=2))
  print(json.dumps(reports))
-asyncio.run(main())
+if __name__=='__main__':asyncio.run(main())

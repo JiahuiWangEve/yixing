@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 var game
 var checks = 0
 var failures = 0
@@ -6,6 +7,31 @@ func check(ok: bool, label: String):
 	checks += 1
 	if not ok: failures += 1;push_error(label)
 func _initialize(): call_deferred("run")
+func check_generated_geometry():
+	var route = game.route
+	for seed_number in range(-8, 16):
+		game.seed_value = seed_number;game.new_expedition()
+		var generated = route.state.duplicate(true)
+		for size in [Vector2(1280,940), Vector2(390,844), Vector2(844,390), Vector2(360,640)]:
+			game.configure_layout(size);route.tick(0)
+			check(route.state == generated, "resizing never mutates seeded topology, coordinates, rewards or encounter payloads")
+			var map = route.map_rect()
+			for node in route.state.nodes:
+				var hit = route.hit_rect(node)
+				check(hit.size.x >= 44 and hit.size.y >= 44, "every seeded node retains accessible touch target")
+				check(hit.position.x >= map.position.x and hit.end.x <= map.end.x, "every seeded landmark fits horizontally")
+				for other in route.state.nodes:
+					if other.id > node.id: check(not hit.intersects(route.hit_rect(other)), "seeded node hitboxes do not overlap in any viewport")
+			route.scroll_y = 0
+			var boss = route.state.nodes[T.kind_id(route, "boss")]
+			check(map.encloses(route.hit_rect(boss)), "full terminal boss hitbox is visible at the summit")
+			route.focus_current()
+			check(map.encloses(route.hit_rect(route.state.nodes[0])), "full entrance hitbox is visible at initial focus")
+			route.selected_node = 0
+			var before = route.state.duplicate(true)
+			game.configure_layout(Vector2(390,844) if size.x > 800 else Vector2(844,390));route.tick(0)
+			check(route.selected_node == 0 and route.state == before, "rotation preserves selected node and exact generated graph")
+
 func run():
 	game = load("res://main.tscn").instantiate();root.add_child(game);game.settings.set_debug_mode(true)
 	game.set_process(false)
@@ -58,13 +84,16 @@ func run():
 		route.tick(2);check(route.state.pending == 0, "extra frames do not enter twice")
 		game.debug_skip();game.choose_reward(-1);route.tick(0)
 		check(route.state.current == 0 and route.map_rect().has_point(route.position(route.state.nodes[0])), "reward returns to current node")
-		var next_a = route.position(route.state.nodes[1]);var next_b = route.position(route.state.nodes[2])
+		var alternatives = route.legal()
+		check(alternatives.size() >= 2, "opening fork has alternative reachable nodes")
+		var next_a = route.position(route.state.nodes[alternatives[0]]);var next_b = route.position(route.state.nodes[alternatives[1]])
 		route.click(next_a);route.click(next_b)
-		check(route.selected_node == 2 and route.travel_target == -1, "clicking a different reachable node changes selection without departing")
+		check(route.selected_node == alternatives[1] and route.travel_target == -1, "clicking a different reachable node changes selection without departing")
 		route.scroll_y = 0
-		var unreachable = route.position(route.state.nodes[15])
+		var boss = T.kind_id(route, "boss")
+		var unreachable = route.position(route.state.nodes[boss])
 		route.click(unreachable);route.click(unreachable)
-		check(route.selected_node == 15 and route.travel_target == -1 and route.state.pending == -1, "repeated unreachable-node clicks never travel")
+		check(route.selected_node == boss and route.travel_target == -1 and route.state.pending == -1, "repeated unreachable-node clicks never travel")
 		route.focus_current();route.click(map.position + Vector2(4, 4))
 		for target in route.legal():
 			var target_pos = route.position(route.state.nodes[target]);route.click(target_pos);route.click(target_pos)
@@ -92,5 +121,6 @@ func run():
 	var mouse = InputEventMouseButton.new();mouse.device = -1;mouse.button_index = MOUSE_BUTTON_LEFT;mouse.position = p;mouse.pressed = true
 	game._gui_input(mouse);mouse.pressed = false;game._gui_input(mouse)
 	check(route.travel_target == -1, "synthetic mouse cannot turn first touch selection into departure")
+	check_generated_geometry()
 	print("MAP INTERACTION RESULT ", checks, " checks, ", failures, " failures")
 	game.free();quit(1 if failures else 0)

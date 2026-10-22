@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # Test-only driver: ordinary, validated production saves, never a runtime API.
 # Headless runs assert behavior. A rendering display additionally produces PNGs.
 const OUT = "res://../verification/v0.12.0/rook/"
@@ -27,7 +28,7 @@ func setup(game, name: String):
 	game.player_skill="artillery" if name=="general_evades_cannon" else "king";game.new_expedition();game.tutorial.stop();game.enemies=[];game.next_enemy_uid=1
 	game.route.state.pending=0;game.route.state.nodes[0].encounter={"id":"pawn_cannon","tier":"battle","rules":[]}
 	if name in ["boss_hold_credit","mixed_stress"]:
-		game.route.state.visited=[0,1,4,6,7,10,13];game.route.state.current=13;game.route.state.pending=15
+		var boss = T.kind_id(game.route, "boss");T.before(game.route, boss);game.route.state.pending = boss
 	var config=game.route.state.nodes[game.route.state.pending].encounter
 	game.encounter_state={"config":config.duplicate(true),"phases":0,"retaliated":false,"river_triggered":false,"signal_uid":-1,"cannon_uid":-1,"guard_uids":[],"spawn_cell":Vector2i(-1,-1)}
 	var specs=[]
@@ -65,7 +66,7 @@ func setup(game, name: String):
 func save_fixture(game, name: String):
 	var battle=game.history.capture()
 	check(game.route.valid_snapshot(game.route.state,battle,"game"),name+" valid ordinary snapshot")
-	var config=ConfigFile.new();config.set_value("run","version",5);config.set_value("run","route",game.route.state);config.set_value("run","battle",battle);config.set_value("run","screen","game")
+	var config=ConfigFile.new();config.set_value("run","version",6);config.set_value("run","route",game.route.state);config.set_value("run","battle",battle);config.set_value("run","screen","game")
 	check(config.save(OUT+"fixtures/"+name+".cfg")==OK,name+" fixture saved")
 func screenshot(viewport, name: String):
 	for frame in 3: await RenderingServer.frame_post_draw

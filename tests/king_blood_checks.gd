@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # Run with disposable user:// storage; exercises normal play/preview/pass/undo.
 const KB = preload("res://king_blood.gd")
 const R = preload("res://rules.gd")
@@ -267,8 +268,8 @@ func check_triumph():
 	# Both chapter bosses use the same victory entry point.
 	for chapter in [1,2]:
 		game.player_skill = "king";game.new_expedition();game.route.generate(game.seed_value,chapter)
-		game.route.state.visited = [0,3,5,6,8,11,14];game.route.state.current = 14
-		game.route.enter(15);settle();game.lives = 1;game.debug_skip()
+		var boss = T.kind_id(game.route, "boss");T.before(game.route, boss)
+		game.route.enter(boss);settle();game.lives = 1;game.debug_skip()
 		check(game.lives == 2 and game.phase == ("reward" if chapter == 1 else "win"), "chapter boss heals one life " + str(chapter))
 		game.settle_victory();game.debug_skip()
 		check(game.lives == 2, "chapter boss repeated settlement does not heal " + str(chapter))

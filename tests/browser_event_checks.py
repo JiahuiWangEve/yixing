@@ -11,7 +11,7 @@ from playwright.async_api import async_playwright
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'verification/v0.13.0/events'
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
-KEY = 'yixing.route_run.v0100'
+KEY = 'yixing.route_run.v0149'
 
 def variant_json(text):
     return json.loads(re.sub(r'\bVector2i?\(([^()]*)\)', r'[\1]', text).replace('&"', '"'))

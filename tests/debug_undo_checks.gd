@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 var game
 var checks = 0
 var failures = 0
@@ -64,7 +65,7 @@ func run():
 	game.route.save();game.show_home();check(game.route.resume() and game.normal_undos_remaining == 0, "resume retains exhausted allowance")
 	game.settings.set_debug_mode(true);ready_action();game.debug_skip()
 	check(game.phase == "reward" and game.presentation.active(), "debug skip uses ordinary victory presentation")
-	game.presentation.clear();game.choose_reward(-1);game.route.enter(2)
+	game.presentation.clear();game.choose_reward(-1);T.before(game.route, T.kind_id(game.route, "elite"));game.route.enter(T.kind_id(game.route, "elite"))
 	check(game.normal_undos_remaining == 0, "next battle does not replenish")
 	while game.route.chapter() == 1:
 		if game.screen == "game":
@@ -75,7 +76,7 @@ func run():
 	game.route.save()
 	check(game.route.resume() and game.normal_undos_remaining == 0, "chapter save retains shared budget")
 	config.load(game.route.SAVE);config.erase_section_key("run","normal_undos_remaining");config.save(game.route.SAVE)
-	check(game.route.resume() and game.normal_undos_remaining == 3, "legacy v5 saves default to three")
+	check(game.route.resume() and game.normal_undos_remaining == 3, "current saves without optional undo allowance default to three")
 	config.load(game.route.SAVE);config.set_value("run","normal_undos_remaining", -1);config.save(game.route.SAVE)
 	check(not game.route.resume() and game.normal_undos_remaining == 3, "malformed budget rejected without live mutation")
 	game.normal_undos_remaining = 1;game.new_expedition()

@@ -1,4 +1,5 @@
 extends SceneTree
+const T = preload("res://../tests/route_test_helpers.gd")
 # Enemy mechanics and route integration. Run only against the final v0.10 source.
 const R = preload("res://rules.gd")
 const E = preload("res://encounters.gd")
@@ -112,7 +113,7 @@ func check_templates():
 				check(game.enemies == before, "AI scoring is read-only")
 			check(general == 1 and not R.threatened(Vector2i(4, 9), game.enemies), id + " safe opening and one general")
 	var a = RandomNumberGenerator.new();var b = RandomNumberGenerator.new();a.seed = 9381;b.seed = 9381
-	for row in 8:
+	for row in 9:
 		for tier in ["battle", "elite", "boss", "camp"]:
 			var left = E.node_config(tier, row, a);var right = E.node_config(tier, row, b)
 			check(left == right, "node config fixed by independent map seed")
@@ -217,11 +218,11 @@ func check_round_trips():
 	var before = game.history.capture();game.end_turn();var after = game.history.capture()
 	check(undo_after_effects(game) and game.history.capture() == before, "undo restores modifier counters positions and RNG")
 	game.end_turn();check(game.history.capture() == after, "replay produces same modifier result and RNG")
-	game.new_expedition();game.route.enter(0);game.debug_skip();game.input_lock = 0;game.choose_reward(-1);game.route.enter(2)
+	game.new_expedition();game.route.enter(0);game.debug_skip();game.input_lock = 0;game.choose_reward(-1);T.before(game.route, T.kind_id(game.route, "elite"));game.route.enter(T.kind_id(game.route, "elite"))
 	var saved = game.history.capture();var saved_route = game.route.state.duplicate(true)
 	game.route.save();game.show_home()
 	check(game.route.resume() and game.history.capture() == saved and game.route.state == saved_route, "elite encounter and fixed node config survive save/resume")
-	check(game.route.WEB_SAVE_KEY == "yixing.route_run.v0100", "new encounter schema isolated from old demo runs")
+	check(game.route.WEB_SAVE_KEY == "yixing.route_run.v0149", "new encounter schema isolated from old demo runs")
 	game.debug_skip();game.input_lock = 0;game.choose_reward(-1)
 	check(game.encounter_state.is_empty(), "map completion clears battle-only encounter state")
 
