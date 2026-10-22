@@ -88,6 +88,11 @@ def event_path(route, start):
  raise AssertionError(('No reachable event in generated chapter', route['seed'], start))
 
 
+def leave_point(node, width, height):
+ # Merchant offers now have a fixed bottom leave button, not a text-option row.
+ if node.get("event_id") == "merchant": return (width / 2, height - 40)
+ return (width / 2, 199 + leave_index(node) * 54)
+
 def leave_index(node):
  if node['kind'] == 'workshop': return 1
  if node['kind'] == 'camp' or node['event_id'] == 'herbalist': return 2
@@ -263,7 +268,7 @@ async def main():
      await page.wait_for_timeout(1150)
      await tap(*skip_reward,500)
     else:
-     await tap(uw/2,199+leave_index(route['nodes'][target])*54,500)
+     await tap(*leave_point(route['nodes'][target],uw,uh),500)
     await state('map',target,-1);current=target
     await page.wait_for_timeout(450) # Completed-node seal settles before more input.
    event_id=path[-1]
@@ -273,7 +278,7 @@ async def main():
    await state('route_choice',current,event_id)
    restored=saved_route(await page.evaluate("localStorage.getItem('yixing.route_run.v0149')"))
    assert restored['nodes']==route['nodes'], 'Reload changed generated graph or coordinates'
-   await tap(uw/2,199+leave_index(restored['nodes'][event_id])*54,500)
+   await tap(*leave_point(restored['nodes'][event_id],uw,uh),500)
    await state('map',event_id,-1)
    await shot('event-return'); await page.reload(); await page.wait_for_timeout(4500); await tap(*resume,500)
    await state('map',event_id,-1); await shot('map-resume')

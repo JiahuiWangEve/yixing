@@ -271,16 +271,21 @@ async def main(full=False, validate_only=False):
                     await tap(blank);await baseline_restored(baseline, 'blank-clears-sticky')
                     checks.append('Touch immediate frame, delayed tooltip, release sticky, blank clears')
                     # Every independent unsafe gesture must survive past arrival time.
+                    # Use 20 logical pixels to cross the 12-pixel deadzone clearly:
+                    # fractional Web viewport scaling can quantize an exact 12-pixel
+                    # request below threshold. Native tests retain exact-12 coverage.
+                    # Hitbox exit uses 4 pixels inside to 4 outside (8 total), safely
+                    # below the deadzone even after CSS/device coordinate rounding.
                     for gesture in ['cancel', 'drag-threshold', 'drag-return', 'outside-hitbox', 'second-finger', 'blur']:
-                        start = [hit[0] + hit[2] - 2, node[1]] if gesture == 'outside-hitbox' else node
+                        start = [hit[0] + hit[2] - 4, node[1]] if gesture == 'outside-hitbox' else node
                         await dispatch('touchStart', [pt(start)])
                         if gesture == 'cancel': await dispatch('touchCancel', [])
                         elif gesture == 'drag-threshold':
-                            await dispatch('touchMove', [pt([node[0]+12, node[1]])]);await dispatch('touchEnd', [])
+                            await dispatch('touchMove', [pt([node[0]+20, node[1]])]);await dispatch('touchEnd', [])
                         elif gesture == 'drag-return':
                             await dispatch('touchMove', [pt([node[0]+28, node[1]])]);await dispatch('touchMove', [pt(node)]);await dispatch('touchEnd', [])
                         elif gesture == 'outside-hitbox':
-                            await dispatch('touchMove', [pt([start[0]+4, start[1]])]);await dispatch('touchEnd', [])
+                            await dispatch('touchMove', [pt([start[0]+8, start[1]])]);await dispatch('touchEnd', [])
                         elif gesture == 'second-finger':
                             await dispatch('touchStart', [pt(node), pt(blank, 1)]);await dispatch('touchEnd', [])
                         else:
@@ -290,7 +295,7 @@ async def main(full=False, validate_only=False):
                     await tap(replay['unavailable']);await no_departure('Single nonlegal tap does not depart')
                     await tap(blank);await baseline_restored(baseline, 'nonlegal-cleared')
                     # Drag while a hold is visible cancels sticky state and its release.
-                    await hold();await dispatch('touchMove', [pt([node[0]+16, node[1]])]);await dispatch('touchEnd', [])
+                    await hold();await dispatch('touchMove', [pt([node[0]+20, node[1]])]);await dispatch('touchEnd', [])
                     await no_departure('Drag after hold does not depart');await baseline_restored(baseline, 'hold-drag-cleared')
                     await hold();await dispatch('touchEnd', []);before_deck = await page.screenshot();await tap(replay['deck'])
                     deck = await changed_from(before_deck, 'deck-from-sticky');assert difference(baseline, deck, (0, 0, w, h)) > 1
