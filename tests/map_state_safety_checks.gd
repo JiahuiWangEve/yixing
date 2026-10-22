@@ -175,6 +175,20 @@ func check_information_gestures(size: Vector2):
 				game.card_picker.cancel();touch(p, false)
 			elif dismissal == "page": game.show_home();game.information.tick(0)
 		check(not game.information.visible and route.selected_node == -1 and route.travel_target == -1, dismissal + " clears sticky tooltip and frame without departure")
+	# A consumed hold must hand vertical scrolling to the route for the whole
+	# gesture, even when an information tick runs between successive motions.
+	fresh(size);p = route.position(route.state.nodes[0])
+	var held_scroll = route.scroll_y
+	var held_state = route.state.duplicate(true)
+	touch(p, true);game.information.tick(0.41)
+	check(game.information.visible and game.information.consumed_hold, "vertical drag begins with a consumed map hold")
+	drag(p + Vector2(0, 24));game.information.tick(0.016)
+	check(is_equal_approx(route.scroll_y, held_scroll - 24) and route.pointer_id == 0, "first vertical hold-drag step scrolls 24 and retains route capture")
+	drag(p + Vector2(0, 48));game.information.tick(0.016)
+	check(is_equal_approx(route.scroll_y, held_scroll - 48), "second vertical hold-drag step scrolls the full 48 across information ticks")
+	print("MAP HOLD DRAG ", size, " expected delta -48, actual ", route.scroll_y - held_scroll)
+	touch(p + Vector2(0, 48), false)
+	check(route.pointer_id == -2 and route.travel_target == -1 and route.state == held_state and route.selected_node == -1 and not game.information.visible and game.information.data.is_empty(), "vertical hold-drag release clears inspection without departure or state mutation")
 	# Moving before the delay, even back to the start, cannot promote a drag to a tap.
 	fresh(size);p = route.position(route.state.nodes[0])
 	touch(p, true);game.information.tick(0.2);drag(p + Vector2(16, 0));game.information.tick(0.4);drag(p);touch(p, false)

@@ -297,6 +297,21 @@ async def main(full=False, validate_only=False):
                     # Drag while a hold is visible cancels sticky state and its release.
                     await hold();await dispatch('touchMove', [pt([node[0]+20, node[1]])]);await dispatch('touchEnd', [])
                     await no_departure('Drag after hold does not depart');await baseline_restored(baseline, 'hold-drag-cleared')
+                    # A visible node hold must hand off to a continuous vertical
+                    # scroll, not cancel after its first changed camera position.
+                    await hold()
+                    await dispatch('touchMove', [pt([node[0], node[1]+24])]);await painted()
+                    first_scroll = await shot('hold-vertical-first-step')
+                    await dispatch('touchMove', [pt([node[0], node[1]+48])])
+                    await changed_from(first_scroll, 'hold-vertical-second-step')
+                    await dispatch('touchEnd', []);await no_departure('Vertical hold-drag continues across frames without departure')
+                    # Restore through the actual opposite gesture; retain strict
+                    # image equality and unchanged ordinary save as separate checks.
+                    await dispatch('touchStart', [pt([node[0], node[1]+48])])
+                    await dispatch('touchMove', [pt([node[0], node[1]+24])]);await painted()
+                    await dispatch('touchMove', [pt(node)]);await painted()
+                    await dispatch('touchEnd', []);await no_departure('Opposite vertical drag cannot select or depart')
+                    await baseline_restored(baseline, 'hold-vertical-round-trip')
                     await hold();await dispatch('touchEnd', []);before_deck = await page.screenshot();await tap(replay['deck'])
                     deck = await changed_from(before_deck, 'deck-from-sticky');assert difference(baseline, deck, (0, 0, w, h)) > 1
                     await tap(replay['close_deck']);await baseline_restored(baseline, 'deck-close-no-residue')

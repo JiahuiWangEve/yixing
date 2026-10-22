@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.15.1"
+const BUILD_VERSION = "v0.15.2"
 const PASS_CARD_COST = 3
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)

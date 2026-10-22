@@ -44,12 +44,11 @@ func clear():
 	if was_visible or had_map_frame: game.queue_redraw()
 func dismiss_map_drag():
 	if not data.has("node_id"): return
-	if consumed_hold:
-		# Keep capture even after the visible hold is dismissed, including an
-		# excursion out of the hit rectangle smaller than the drag threshold.
-		visible = false;sticky = false;touch_moved = true
-		game.touch_dragged = true;game.route.pointer_dragged = true;game.route.selected_node = -1;game.queue_redraw()
-	else: clear()
+	# clear() preserves a consumed hold's no-tap flag on the route. Transfer
+	# capture to that tracker instead of retaining inspection data whose scroll
+	# context would cancel the route on the next tick after a vertical motion.
+	# This also protects sub-threshold hitbox exits and their returning release.
+	clear()
 func candidate(pos: Vector2, kind: String, id: int = -2):
 	var found = lookup(pos)
 	if found.is_empty(): clear();return
