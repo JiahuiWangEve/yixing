@@ -6,6 +6,7 @@ Default is a desktop/phone gate; --full includes small phone and landscape.
 """
 import argparse
 import asyncio
+import copy
 import hashlib
 import json
 import os
@@ -15,11 +16,69 @@ import time
 
 from playwright.async_api import async_playwright
 from browser_chapter_checks import assert_rendered, image_difference
+from browser_event_checks import variant_json
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'verification/v0.14.13/catalog'
 URL = os.environ.get('YIXING_TEST_URL', 'http://127.0.0.1:8765')
 KEY = 'yixing.route_run.v0149'
+
+
+def complete_save(text):
+    """Decode both complete dictionaries; retain the rest of the envelope exactly."""
+    prefix, rest = text.split('\nroute=', 1)
+    route, rest = rest.split('\nbattle=', 1)
+    battle, suffix = rest.rsplit('\nscreen=', 1)
+    return {'prefix': prefix, 'route': variant_json(route),
+            'battle': variant_json(battle), 'suffix': suffix}
+
+
+def resumed_save_state(text):
+    result = complete_save(text)
+    # Proven by native resume + _process(1.1): an ordinary resumed battle
+    # autosaves the decreasing intro highlight and resized sprite coordinates.
+    # No gameplay field, route field, save metadata, or RNG value is excluded.
+    result['battle'].pop('initial_threat')
+    for enemy in result['battle']['enemies']:
+        enemy.pop('visual')
+    return result
+
+
+def resumed_storage_state(storage):
+    result = dict(storage)
+    result[KEY] = resumed_save_state(result[KEY])
+    return result
+
+
+def differences(before, after, path='$'):
+    """Record exact changed paths instead of losing useful failure evidence."""
+    result = []
+    if isinstance(before, dict) and isinstance(after, dict):
+        for key in sorted(before.keys() | after.keys()):
+            if key not in before or key not in after:
+                result.append({'path': path + '.' + key, 'before': before.get(key), 'after': after.get(key)})
+            else:
+                result.extend(differences(before[key], after[key], path + '.' + key))
+    elif isinstance(before, list) and isinstance(after, list):
+        if len(before) != len(after):
+            result.append({'path': path + '.length', 'before': len(before), 'after': len(after)})
+        for i, (old, new) in enumerate(zip(before, after)):
+            result.extend(differences(old, new, path + f'[{i}]'))
+    elif before != after:
+        result.append({'path': path, 'before': before, 'after': after})
+    return result
+
+
+def storage_evidence(before, after, label):
+    result = {'stage': label, 'before': before, 'after': after,
+              'changed_storage': differences(before, after)}
+    if KEY in before and KEY in after:
+        try:
+            result['changed_save_fields'] = differences(complete_save(before[KEY]), complete_save(after[KEY]))
+            result['changed_gameplay_or_settings'] = differences(resumed_storage_state(before), resumed_storage_state(after))
+        except (ValueError, KeyError, TypeError) as error:
+            result['save_parse_error'] = str(error)
+    return result
 
 
 def validate_manifest(manifest):
@@ -37,6 +96,15 @@ def validate_manifest(manifest):
             assert all(c['name'] and 0 <= c['scroll'] <= group['scroll_limit'] for c in group['cards'])
         fixture = (OUT / 'fixtures' / replay['fixture']).read_text()
         assert '\nroute=' in fixture and '\nbattle=' in fixture
+        # The post-resume guard must retain every gameplay category, not a
+        # selected-field whitelist that could silently overlook corruption.
+        original = resumed_save_state(fixture)
+        for category, field in [('battle', 'rng_state'), ('battle', 'lives'),
+                                ('battle', 'deck'), ('route', 'pending')]:
+            assert field in original[category], ('Semantic guard omitted gameplay', category, field)
+            changed = copy.deepcopy(original)
+            changed[category][field] = '<deliberately changed>'
+            assert differences(original, changed), ('Semantic guard lost field', category, field)
     return replays
 
 
@@ -61,6 +129,7 @@ async def main(full=False, validate_only=False):
             page = await context.new_page()
             cdp = await context.new_cdp_session(page)
             errors, screenshots, visited = [], [], []
+            initial = {}
             page.on('pageerror', lambda e: errors.append(str(e)))
             page.on('console', lambda m: errors.append(m.text) if m.type == 'error' and any(s in m.text for s in ['SCRIPT ERROR', 'Parse Error']) else None)
             fixture = (OUT / 'fixtures' / replay['fixture']).read_text()
@@ -194,15 +263,23 @@ async def main(full=False, validate_only=False):
                 role = await stable(grid, changed=True, label='repeat Escape')
                 assert await storage() == initial, 'Repeated/rotated viewing changed save/settings'
                 home = await tap(alternate['role_back'], role, label='return home')
+                assert await storage() == initial, 'Leaving catalog/home changed the existing expedition before resume'
                 resumed = await tap(alternate['resume'], home, label='resume existing expedition')
                 await shot('resumed-existing-expedition', resumed)
-                assert await storage() == initial, 'Catalog replaced or rewrote existing expedition'
+                resumed_storage = await storage()
+                evidence = storage_evidence(initial, resumed_storage, 'ordinary-resume')
+                (output / f"{replay['name']}-resume-storage.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2))
+                assert resumed_storage_state(resumed_storage) == resumed_storage_state(initial), ('Resume changed gameplay or preferences', evidence['changed_gameplay_or_settings'])
                 assert not errors, errors
                 reports.append({'name': replay['name'], 'viewport': replay['viewport'], 'visited': visited, 'expected_catalog_identities': manifest['catalog_count'],
-                                'screenshots': screenshots, 'saved_state_unchanged': True, 'errors': errors})
+                                'screenshots': screenshots, 'catalog_storage_byte_exact': True,
+                                'resumed_gameplay_unchanged': True, 'resume_presentation_changes': evidence.get('changed_save_fields', []), 'errors': errors})
                 print('PASS CATALOG WEB', replay['name'], len(visited), 'identities', flush=True)
             except Exception:
                 await page.screenshot(path=str(output / f"{replay['name']}-failure.png"))
+                current = await storage()
+                evidence = storage_evidence(initial, current, 'failure')
+                (output / f"{replay['name']}-failure-storage.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2))
                 raise
             finally:
                 await cdp.detach()
