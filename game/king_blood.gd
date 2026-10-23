@@ -38,7 +38,7 @@ static func _targets_in_cells(game, area: Array) -> Array:
 	for enemy in game.enemies:
 		# Like sweep, stakes neither enable the attack nor take damage. They
 		# also do not block these attacks: every occupied range cell is pierced.
-		if enemy.kind != "stake" and enemy.pos in area: result.append(enemy)
+		if enemy.kind not in ["stake", "decoy"] and enemy.pos in area: result.append(enemy)
 	return result
 
 static func targets(game, id: String, target: Vector2i) -> Array:

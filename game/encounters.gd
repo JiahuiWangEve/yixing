@@ -117,6 +117,7 @@ static func on_general_damage(game, enemy: Dictionary):
 # Credits are per-enemy snapshot data. Successful movement spends exactly one;
 # reset of the normal cooldown never discards the remaining credits.
 static func uses_action_credits(game) -> bool:
+	if game.training.is_playing(): return true
 	return active(game) and not is_chapter_two(game) and game.encounter_state.config.get("tier", "") in ["elite", "boss"]
 
 static func available_action_credits(game, enemy: Dictionary, include_rotation: bool = false) -> int:
@@ -171,6 +172,9 @@ static func after_normal_move(game, enemy: Dictionary, from: Vector2i, spent_cre
 
 static func finish_phase(game, timeline: float):
 	if not active(game): return
+	if game.training.is_playing():
+		game.encounter_state.phases += 1
+		CHAPTER_TWO.finish_revivals(game, timeline);return
 	if is_chapter_two(game):
 		CHAPTER_TWO.finish_phase(game, timeline);return
 	game.encounter_state.phases += 1

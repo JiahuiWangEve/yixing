@@ -385,7 +385,7 @@ func _presentation_finished() -> bool:
 func _result_hint() -> String:
 	if lesson_index == 0 and step_index == 1: return "移动已恢复，手牌仍一张；没有自动抽牌。"
 	if lesson_index == 1 and step_index in [3, 7]: return "能量恢复三气；没有打出的踏马仍在手里。"
-	if lesson_index == 2 and step_index == 3: return "基础移动与移动牌次数都恢复了。"
+	if lesson_index == 2 and step_index == 3: return "新回合恢复免费移动；移动牌有牌和费用即可使用。"
 	if lesson_index == 2 and step_index == 4: return "已抽到第七张；必须弃一张才能继续。"
 	if lesson_index == 4 and step_index == 4: return "完成：3费弃置抽1张；不触发效果，不永久删牌。"
 	if lesson_index == 1 and step_index == 4: return "象受伤但未死；还剩两血。"

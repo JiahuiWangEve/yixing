@@ -107,7 +107,7 @@ static func on_enemy_defeated(game, enemy: Dictionary, before_player_input: bool
 	# A removed unit must never carry delayed damage into its next incarnation.
 	for index in range(game.pending_bleeds.size() - 1, -1, -1):
 		if game.pending_bleeds[index].enemy_uid == enemy.uid: game.pending_bleeds.remove_at(index)
-	if enemy.kind == "g" or not game.general_alive():
+	if (enemy.kind == "g" or not game.general_alive()) and not (game.training.is_playing() and game.training.finish_condition != "general"):
 		cancel_pending(game);return
 	if game.encounter_state.cancelled or not enemy.get("unyielding", false): return
 	for ghost in game.encounter_state.ghosts:
@@ -119,6 +119,7 @@ static func on_enemy_defeated(game, enemy: Dictionary, before_player_input: bool
 	var revival = {"uid": enemy.uid, "kind": enemy.kind, "pos": enemy.original_spawn, "original_spawn": enemy.original_spawn,
 		"hp": 0, "max_hp": enemy.max_hp, "heavy": enemy.get("heavy", false), "unyielding": true,
 		"cd": 3, "period": 3, "stun": 0, "normal_moves": 0, "bonus_pending": false}
+	if enemy.kind == "h" and not str(enemy.get("ai_role", "")).is_empty(): revival.ai_role = enemy.ai_role
 	game.encounter_state.ghosts.append({"enemy": revival, "defeat_phase": completed, "before_player_input": before_player_input,
 		"ready_phase": completed + (2 if before_player_input else 3), "status": "waiting"})
 	game.log_line("不屈残影留在原位，经过2个完整玩家回合后复归。")
@@ -149,7 +150,7 @@ static func finish_revivals(game, timeline: float):
 
 static func finish_waves(game, timeline: float):
 	var completed = int(game.encounter_state.phases)
-	var definitions: Array = TEMPLATES[game.encounter_state.config.id].waves
+	var definitions: Array = TEMPLATES.get(game.encounter_state.config.id, {}).get("waves", [])
 	var spawned = false
 	for wave in game.encounter_state.waves:
 		if wave.status in ["arrived", "cancelled"]: continue
@@ -193,7 +194,7 @@ static func markers(game) -> Array:
 		result.append({"pos": ghost.enemy.original_spawn, "label": "归阻" if ghost.status == "blocked" else "归%d" % maxi(0, ghost.ready_phase - int(game.encounter_state.phases)),
 			"kind": "revival", "status": ghost.status, "uid": ghost.enemy.uid,
 			"remaining_phases": maxi(0, ghost.ready_phase - int(game.encounter_state.phases))})
-	var definitions: Array = TEMPLATES[game.encounter_state.config.id].waves
+	var definitions: Array = TEMPLATES.get(game.encounter_state.config.id, {}).get("waves", [])
 	for wave in game.encounter_state.waves:
 		if wave.status in ["announced", "blocked"]:
 			result.append({"pos": position(definitions[wave.index][1]), "label": "援阻" if wave.status == "blocked" else "增援",

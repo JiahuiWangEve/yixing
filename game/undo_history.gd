@@ -37,7 +37,7 @@ func undo() -> bool:
 	game.active_touch = -1;game.touch_dragged = true
 	game.clear_effects()
 	game.handui.reset()
-	if not game.settings.debug_mode: game.normal_undos_remaining -= 1
+	if not game.settings.debug_mode and not game.training.is_playing(): game.normal_undos_remaining -= 1
 	game.route.save()
 	game.queue_redraw()
 	return true

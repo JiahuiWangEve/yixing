@@ -3,7 +3,7 @@ const R = preload("res://rules.gd")
 const IDS = ["stake", "permanent_stake", "pierce", "pursuit", "shock", "breath", "advance", "retreat_strike", "knight_assault", "chain_assault"]
 static func enemy_target(game, p: Vector2i) -> bool:
 	var i = R.occupied(p, game.enemies)
-	return i >= 0 and game.enemies[i].kind != "stake"
+	return i >= 0 and game.enemies[i].kind not in ["stake", "decoy"]
 static func legal(game, id: String, p: Vector2i) -> bool:
 	if not R.inside(p): return false
 	var distance = absi(p.x - game.player.x) + absi(p.y - game.player.y)

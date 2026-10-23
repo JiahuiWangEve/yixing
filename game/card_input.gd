@@ -9,6 +9,7 @@ var free_move = false
 var source = ""
 var source_card = ""
 var source_turn = -1
+var source_grapple_anchor_uid = -1
 var pass_armed = false
 var pass_pressed = false
 var pass_click_moved = false
@@ -20,6 +21,7 @@ func _init(owner): game = owner
 func cancel():
 	active = false;dragging = false;free_move = false;uid = -1;source = "";pass_armed = false;pass_pressed = false;pass_click_moved = false
 	source_card = "";source_turn = -1
+	source_grapple_anchor_uid = -1
 func press(position: Vector2, kind: String = "mouse") -> bool:
 	if active: return true
 	# The shared overlay owns pointer-down before any overlapping hand card.
@@ -38,6 +40,7 @@ func press(position: Vector2, kind: String = "mouse") -> bool:
 
 
 		if not game.free_card_available() or game.input_lock > 0 or game.navigation_lock > 0: return true
+		game.grapple_targets.cancel()
 		uid = game.free_card_uid;free_move = true;down = position;pointer = position;active = true;dragging = false;source = kind;pass_armed = position.x < game.pass_drop_rect().position.x - 12
 		source_card = "";source_turn = game.turn
 		return true
@@ -45,8 +48,10 @@ func press(position: Vector2, kind: String = "mouse") -> bool:
 	if index < 0: return false
 	if game.input_lock > 0 or game.navigation_lock > 0: return true
 	game.sync_hand_ids()
+	if game.grapple_targets.active and game.hand_ids[index] != game.grapple_targets.card_uid: game.grapple_targets.cancel()
 	uid = game.hand_ids[index];free_move = false;down = position;pointer = position;active = true;dragging = false;source = kind;pass_armed = position.x < game.pass_drop_rect().position.x - 12
 	source_card = game.hand[index];source_turn = game.turn
+	if source_card == "grappling_hook" and game.grapple_targets.active: source_grapple_anchor_uid = game.grapple_targets.anchor_uid
 	return true
 func motion(position: Vector2):
 	if not active: return
@@ -64,12 +69,14 @@ func release(position: Vector2, canceled: bool = false):
 	var chosen_free = free_move
 	var chosen_card = source_card
 	var chosen_turn = source_turn
+	var chosen_grapple_anchor_uid = source_grapple_anchor_uid
 	var origin = down
 	var clicked_pass = pass_pressed
 	var was_dragging = dragging or pass_click_moved or position.distance_to(down) >= DRAG_THRESHOLD
 	var over_pass = was_dragging and game.pass_drop_rect().has_point(position)
 	var deliberate_pass = pass_armed or position.x - down.x >= 28
 	cancel()
+	if canceled: game.grapple_targets.cancel()
 	if canceled or game.screen != "game" or game.input_lock > 0 or game.navigation_lock > 0: return
 	if game.card_picker.active or game.encounter_info_open or game.presentation.active(): return
 	if game.turn != chosen_turn: return
@@ -103,6 +110,12 @@ func release(position: Vector2, canceled: bool = false):
 	if game.attack_targets.is_attack(chosen_card):
 		var attack_target = _attack_release_target(index, position, origin)
 		if attack_target != INVALID_TARGET and game.can_commit_card(index, attack_target): game.play_card(index, attack_target)
+		return
+	if chosen_card == "grappling_hook":
+		# Hooks never use the generic upward attack gesture. A real occupied
+		# board anchor is mandatory, followed by an explicit diagonal landing.
+		if chosen_grapple_anchor_uid >= 0 and (not game.grapple_targets.active or game.grapple_targets.anchor_uid != chosen_grapple_anchor_uid): return
+		if game.phase == "play" and game.BOARD_RECT.has_point(position): game.grapple_targets.choose(index, game.board_cell(position))
 		return
 	if game.phase != "play" or not game.BOARD_RECT.has_point(position): return
 	var card: String = game.hand[index]
@@ -141,6 +154,7 @@ func preview_target() -> Vector2i:
 	if index < 0 or index >= game.hand.size() or game.hand[index] != source_card: return INVALID_TARGET
 	var card: String = game.hand[index]
 	if game.attack_targets.is_attack(card): return _attack_release_target(index, pointer, down)
+	if card == "grappling_hook" and source_grapple_anchor_uid >= 0 and (not game.grapple_targets.active or game.grapple_targets.anchor_uid != source_grapple_anchor_uid): return INVALID_TARGET
 	if not game.BOARD_RECT.has_point(pointer): return INVALID_TARGET
 	var target: Vector2i = game.player if card in game.UNTARGETED else target_cell()
 	return target if game.can_commit_card(index, target) else INVALID_TARGET

@@ -25,7 +25,7 @@ func _mode(id: String) -> String:
 	return "single"
 
 func _append_enemy(result: Dictionary, enemy: Dictionary):
-	if enemy.kind == "stake" or enemy.pos in result.enemy_cells: return
+	if enemy.kind in ["stake", "decoy"] or enemy.pos in result.enemy_cells: return
 	result.enemy_cells.append(enemy.pos)
 	result.enemy_uids.append(enemy.uid)
 
@@ -42,7 +42,7 @@ func state(index: int) -> Dictionary:
 	match result.mode:
 		"single":
 			for enemy in game.enemies:
-				if enemy.kind == "stake" or not _legal(index, enemy.pos): continue
+				if enemy.kind in ["stake", "decoy"] or not _legal(index, enemy.pos): continue
 				result.target_cells.append(enemy.pos)
 				result.actions.append({"target": enemy.pos, "enemy_uid": enemy.uid})
 				_append_enemy(result, enemy)
@@ -109,7 +109,7 @@ func _in_range(id: String, cell: Vector2i) -> bool:
 	# victims or editing the board to make card_legal accept an empty square.
 	if not R.inside(cell) or cell == game.player: return false
 	var occupied = R.occupied(cell, game.enemies)
-	if occupied >= 0 and game.enemies[occupied].kind == "stake": return false
+	if occupied >= 0 and game.enemies[occupied].kind in ["stake", "decoy"]: return false
 	var delta: Vector2i = cell - game.player
 	var distance = absi(delta.x) + absi(delta.y)
 	match id.trim_suffix("_plus"):

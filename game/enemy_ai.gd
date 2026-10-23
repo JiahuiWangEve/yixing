@@ -3,6 +3,22 @@ const R = preload("res://rules.gd")
 const GE = preload("res://general_evasion.gd")
 const CP = preload("res://cannon_planner.gd")
 const RT = preload("res://rook_tactics.gd")
+const CAVALRY = preload("res://cavalry_roles.gd")
+const DECOY = preload("res://decoy_system.gd")
+
+static func plan(enemies: Array, player: Vector2i, ready: Dictionary, context: Dictionary = {}) -> Dictionary:
+	# Reserve role-specific decisions before the ordinary joint cannon planner.
+	# The full board still contains these bodies for all screens and blockers.
+	var ordinary_ready = ready.duplicate();var reserved = []
+	var has_decoy = not DECOY.find(enemies).is_empty()
+	for e in enemies:
+		if not ready.has(e.get("uid", -1)): continue
+		if CAVALRY.is_variant(e) or (has_decoy and DECOY.is_offensive(e)):
+			ordinary_ready.erase(e.uid);reserved.append(e.uid)
+	var result = CP.plan(enemies, player, ordinary_ready, context)
+	for uid in reserved:
+		if uid not in result.order: result.order.append(uid)
+	return result
 
 static func cannon_line_score(cannon: Dictionary, board: Array, player: Vector2i) -> float:
 	if cannon.pos == player: return 0.0
@@ -55,6 +71,9 @@ static func candidate_score(piece: Dictionary, target: Vector2i, enemies: Array,
 
 static func choose(piece: Dictionary, options: Array, enemies: Array, player: Vector2i, rng: RandomNumberGenerator, context: Dictionary = {}, allow_hold: bool = true) -> Vector2i:
 	if options.is_empty(): return Vector2i(-1, -1)
+	var bait = DECOY.choose(piece, options, enemies, player, context, allow_hold)
+	if bait != Vector2i(-1, -1): return bait
+	if CAVALRY.is_variant(piece): return CAVALRY.choose(piece, options, enemies, player, context, allow_hold)
 	if piece.kind == "g": return GE.defend(piece, options, enemies, player, context, allow_hold)
 	var escape = GE.choose(piece,options,enemies,player,context)
 	if escape != Vector2i(-1,-1): return escape

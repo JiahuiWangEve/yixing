@@ -6,6 +6,7 @@ const C2 = preload("res://chapter_two.gd")
 const R = preload("res://rules.gd")
 const T = preload("res://theme.gd")
 const Palette = preload("res://palette.gd")
+const CAVALRY = preload("res://cavalry_roles.gd")
 const ATTACKS = ["sword", "sword_plus", "spear", "spear_plus", "diagonal", "cannon", "cannon_shot", "pierce", "pursuit", "shock", "advance", "retreat_strike", "knight_assault", "chain_assault", "airdrop", "sweep", "blood_edge", "blood_break", "last_stand"]
 const CREDIT_RULE = "每个敌方回合最多移动一次；移动或战术留守消耗1次加速，多余加速顺延。定身、堵路、攻击留位保留加速；镇四方延迟加速2轮。移动不额外攻击。"
 const REVIVAL_RULE = "击倒后在原位留下残影，不挡路、不作炮架。经过2个完整玩家回合，原位空闲时满血复归；复归当轮不行动。敌将阵亡后取消。"
@@ -25,7 +26,8 @@ func begin_battle():
 	cue = "";cue_left = 0.0;cue_is_log = false
 	var tags = mechanism_tags()
 	if tags.is_empty(): return
-	if E.is_chapter_two(game): cue = "增援按轮抵达；不屈击倒后会复归。" if tags.any(func(tag): return tag.key == "unyielding") else "厚血不改变走法，增援按轮抵达。"
+	if game.encounter_state.get("config", {}).get("id", "") == "training": cue = "演武特性按当前配置生效。"
+	elif E.is_chapter_two(game): cue = "增援按轮抵达；不屈击倒后会复归。" if tags.any(func(tag): return tag.key == "unyielding") else "厚血不改变走法，增援按轮抵达。"
 	else: cue = "本阵：" + E.summary(game.encounter_state.config) + "。"
 	cue += "悬停或长按标签查看。";cue_left = 6.0
 func note_log(value: String):
@@ -47,7 +49,8 @@ func bleed_status(enemy: Dictionary) -> Dictionary:
 	return {"this_end": this_end, "next_end": next_end}
 func enemy_statuses(enemy: Dictionary) -> Array:
 	var statuses: Array = []
-	if enemy.kind == "stake": return statuses
+	if enemy.kind in ["stake", "decoy"]: return statuses
+	if CAVALRY.is_variant(enemy): statuses.append({"key":"cavalry_role", "glyph":"游" if CAVALRY.role(enemy) == "outrider" else "卫", "line":CAVALRY.role_text(enemy), "color":Palette.INK_SECONDARY})
 	if enemy.get("heavy", false): statuses.append({"key": "heavy", "glyph": "重", "line": "厚血：只增加血量，不改变走法。", "color": Palette.INK_SECONDARY})
 	if enemy.get("unyielding", false): statuses.append({"key": "unyielding", "glyph": "复", "line": "不屈：击倒后经过2个完整玩家回合满血复归；原位被占则等待。", "color": Palette.INK_SECONDARY})
 	if enemy.get("reinforcement", false): statuses.append({"key": "reinforcement", "glyph": "援", "line": "增援棋子：计入场上增援数量上限。", "color": Palette.INK_SECONDARY})
@@ -83,7 +86,12 @@ func piece_rect(cell: Vector2i) -> Rect2:
 func enemy_info(enemy: Dictionary) -> Dictionary:
 	var lines: Array = []
 	var title: String = "急行卒" if enemy.kind == "q" else game.piece_name(enemy.kind)
-	if enemy.kind == "stake":
+	if CAVALRY.is_variant(enemy): title = CAVALRY.display_name(enemy)
+	if enemy.kind == "decoy":
+		title = "草人 · %d/%d血" % [int(enemy.get("hp", 2)), int(enemy.get("max_hp", 2))]
+		lines.append("持续本场战斗；挡路，可作双方炮架。")
+		lines.append("攻击型敌子优先攻击；每次受击1伤，击碎者进入原位。")
+	elif enemy.kind == "stake":
 		title = "机关炮架" if enemy.get("permanent", false) else "木桩"
 		lines.append("挡路并作炮架，不攻击。")
 		lines.append("持续本场战斗。" if enemy.get("permanent", false) else "剩余%d回合；回合末减少1，归零消失。" % int(enemy.get("ttl", 3)))
@@ -103,7 +111,18 @@ func mechanism_tags() -> Array:
 	if not E.active(game): return result
 	if E.is_chapter_two(game):
 		var config: Dictionary = game.encounter_state.config
-		var template: Dictionary = C2.TEMPLATES[config.id]
+		var template: Dictionary = C2.TEMPLATES.get(config.get("id", ""), {})
+		if template.is_empty():
+			# Training is a real chapter-two-style runtime, not an authored
+			# encounter template. Report only actual configured pieces/ghosts.
+			var configured_heavy = game.enemies.any(func(enemy): return enemy.get("heavy", false) and not R.is_object(enemy))
+			var configured_unyielding = game.enemies.any(func(enemy): return enemy.get("unyielding", false) and not R.is_object(enemy)) or not game.encounter_state.get("ghosts", []).is_empty()
+			if configured_heavy: result.append({"key":"heavy", "label":"厚血", "title":"厚血", "lines":["只增加血量，不改变走法；查看棋子可见当前/最大生命。"]})
+			if configured_unyielding:
+				var configured_lines: Array = [REVIVAL_RULE]
+				for ghost in game.encounter_state.get("ghosts", []): configured_lines.append(ghost_line(ghost))
+				result.append({"key":"unyielding", "label":"不屈", "title":"不屈复归", "lines":configured_lines})
+			return result
 		var heavy = false;var unyielding = false
 		for spec in template.pieces:
 			heavy = heavy or bool(spec[4]);unyielding = unyielding or bool(spec[5])
@@ -149,7 +168,8 @@ func tag_items() -> Array:
 	tag_cache = result
 	return tag_cache
 func ghost_line(ghost: Dictionary) -> String:
-	return "%s：原位（%d，%d），%s。" % [game.piece_name(ghost.enemy.kind), ghost.enemy.original_spawn.x + 1, ghost.enemy.original_spawn.y + 1, "原位被占，空闲后复归" if ghost.status == "blocked" else "还需%d次轮末结算" % maxi(0, int(ghost.ready_phase) - int(game.encounter_state.phases))]
+	var label = CAVALRY.display_name(ghost.enemy) if CAVALRY.is_variant(ghost.enemy) else game.piece_name(ghost.enemy.kind)
+	return "%s：原位（%d，%d），%s。" % [label, ghost.enemy.original_spawn.x + 1, ghost.enemy.original_spawn.y + 1, "原位被占，空闲后复归" if ghost.status == "blocked" else "还需%d次轮末结算" % maxi(0, int(ghost.ready_phase) - int(game.encounter_state.phases))]
 func marker_info(marker: Dictionary) -> Dictionary:
 	var lines: Array = [];var title = "增援预告"
 	if marker.kind == "revival":
@@ -219,7 +239,7 @@ func preview(index: int, target: Vector2i) -> Dictionary:
 		elif id == "airdrop": hit = absi(enemy.pos.x - target.x) <= 1 and absi(enemy.pos.y - target.y) <= 1
 		general_down = hit and amount >= int(enemy.get("hp", game.enemy_health(enemy.kind)))
 	for enemy in game.enemies:
-		if enemy.kind == "stake": continue
+		if enemy.kind in ["stake", "decoy"]: continue
 		var hit: bool = enemy.pos == target
 		if id == "sweep": hit = game.in_neighbor_square(enemy.pos)
 		elif id == "airdrop": hit = absi(enemy.pos.x - target.x) <= 1 and absi(enemy.pos.y - target.y) <= 1
@@ -249,12 +269,13 @@ func current_preview(target: Vector2i) -> Dictionary:
 
 func draw_enemy_status(enemy: Dictionary, point: Vector2):
 	var scale = minf(1.0, game.CELL / 48.0)
-	var badge = point + Vector2(0.36, -0.36) * game.CELL
-	game.draw_circle(badge, 9 * scale, T.SAFE)
-	var font_size = maxi(10, int(13 * scale))
-	var text = str(E.effective_countdown(game, enemy))
-	var width = game.FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-	game.text_at(badge + Vector2(-width * 0.5, font_size * 0.36), text, font_size, Palette.WHITE)
+	if enemy.kind != "decoy":
+		var badge = point + Vector2(0.36, -0.36) * game.CELL
+		game.draw_circle(badge, 9 * scale, T.SAFE)
+		var font_size = maxi(10, int(13 * scale))
+		var text = str(E.effective_countdown(game, enemy))
+		var width = game.FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+		game.text_at(badge + Vector2(-width * 0.5, font_size * 0.36), text, font_size, Palette.WHITE)
 	var segments = hp_segments(enemy)
 	if not segments.is_empty():
 		var total = game.CELL * 0.78;var gap = minf(1.5, total / float(segments.size() * 5));var width_per = (total - gap * (segments.size() - 1)) / segments.size()
@@ -308,7 +329,7 @@ func draw_signals():
 func cue_visible() -> bool:
 	if game.screen != "game" or game.phase not in ["play", "discard"] or cue_left <= 0 or cue.is_empty(): return false
 	if game.tutorial.active or game.phase == "discard" or game.recovery_active() or R.threatened(game.player, game.enemies): return false
-	return game.notice not in ["能量不足。", "本回合已使用移动牌。", "牌库与弃牌堆已空。"]
+	return game.notice not in ["能量不足。", "牌库与弃牌堆已空。"]
 func should_show_context() -> bool:
 	return not (game.mobile_layout and not game.compact_landscape and cue_visible())
 func draw_hud():

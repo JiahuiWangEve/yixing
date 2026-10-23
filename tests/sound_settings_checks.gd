@@ -34,7 +34,7 @@ func run():
 	DirAccess.remove_absolute(SETTINGS.SAVE)
 	start_game()
 	check(not game.audio_system.muted and not game.settings.audio_muted, "fresh preferences start with sound enabled")
-	check(game.frontend.entries() == ["开始游戏", "教程", "设置", "继续山河棋路存档", "调试模式：关"], "home replaces only index two and retains Continue/debug indices")
+	check(game.frontend.entries() == ["开始游戏", "教程", "设置", "继续山河棋路存档", "调试模式：关", "演武场 · 自由配置"], "home replaces only index two and retains Continue/debug indices")
 	var config = ConfigFile.new();config.set_value("settings", "debug_mode", true);config.save(SETTINGS.SAVE)
 	start_game()
 	check(game.settings.debug_mode and not game.audio_system.muted, "legacy debug-only preference remains enabled; sound defaults on")

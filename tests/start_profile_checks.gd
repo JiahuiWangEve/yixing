@@ -176,10 +176,9 @@ func check_movement_and_cannon():
 	check(not game.basic_legal(Vector2i(6, 4)), "horse free movement respects blocked leg")
 	set_hand(["straight", "horse"])
 	game.play_card(0, Vector2i(4, 3))
-	var after_move = game.player
 	var after_energy = game.energy
 	game.play_card(0, Vector2i(6, 2))
-	check(game.player == after_move and game.energy == after_energy and game.card_move_used, "horse still has only one paid movement quota")
+	check(game.player == Vector2i(6, 2) and game.energy == after_energy - 1 and game.card_move_used, "horse may play a second paid movement card for its own cost")
 
 func check_deployment():
 	reset("artillery")

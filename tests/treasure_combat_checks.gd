@@ -28,7 +28,7 @@ func move_event(target: Vector2i):
 	var origin: Vector2i = game.player;game.player = target;game.record_active_displacement(origin)
 func run():
 	game = load("res://main.tscn").instantiate();root.add_child(game);game.set_process(false);game.settings.set_debug_mode(true)
-	check(TS.DATA.size() == 9,"exactly nine treasures")
+	check(TS.DATA.size() == 10,"nine formal treasures plus one training-only shared treasure")
 	for role in ["king","horse","artillery"]: check(TS.ids_for(role).size() == 3,"three choices for " + role)
 	check_longevity();check_talisman();check_tiger();check_horse();check_spring();check_cannon();check_axle();check_fuse();check_scope();check_actual_movement();check_state_and_reset();check_fatal_victory()
 	print("TREASURE COMBAT RESULT ",checks-failures," passed, ",failures," failed")
@@ -145,6 +145,7 @@ func check_actual_movement():
 func check_state_and_reset():
 	check(TS.valid_battle_state({}),"legacy empty battle state accepted")
 	for id in TS.DATA:
+		if TS.DATA[id].role == "common": continue # Training-only treasure is not a formal reward.
 		fresh(id)
 		check(TS.valid_battle_state(game.treasure_battle),id + " canonical battle state valid")
 		var before = game.history.capture();var serial = game.treasure_battle.trigger_serial

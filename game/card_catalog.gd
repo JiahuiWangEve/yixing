@@ -27,6 +27,8 @@ static func entries_for(group_id: String, cards: Dictionary) -> Array:
 			if id not in PROFILES.COMMON: _append_card(result, id, cards, "角色专属")
 	elif group_id == "special":
 		_append_card(result, "fatigue", cards, "负面牌 · 非普通奖励")
+		_append_card(result, "grappling_hook", cards, "训练测试 · 非普通奖励")
+		_append_card(result, "decoy_card", cards, "宝物生成 · 跨回合保留 · 非普通奖励")
 		for identity in ["king", "horse", "artillery"]:
 			for stance in (["march", "attack"] if identity == "artillery" else ["march"]):
 				var id = "__free_" + identity + ("_" + stance if identity == "artillery" else "")

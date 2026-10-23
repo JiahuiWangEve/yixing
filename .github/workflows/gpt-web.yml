@@ -83,7 +83,7 @@ jobs:
           for suite in chapter airdrop pass board_info card_catalog map_single_tap treasure attack; do
             python3 "tests/browser_${suite}_checks.py" --validate-only
           done
-          python3 tests/browser_enemy_impact_checks.py 2>&1 | tee build/enemy-impact-smoke.log
+          python3 tests/browser_training_checks.py 2>&1 | tee build/training-smoke.log
       - name: Upload verification and exported site
         if: always()
         uses: actions/upload-artifact@v4
@@ -97,7 +97,7 @@ jobs:
             build/merchant-ui-smoke.log
             build/camp-workshop-smoke.log
             build/battle-restart-smoke.log
-            build/enemy-impact-smoke.log
+            build/training-smoke.log
             verification/v0.15.5/
             verification/v0.15.4/
             build/card-catalog-smoke.log
@@ -212,6 +212,10 @@ jobs:
           cat build/presentation-browser.log
           if ! python3 tests/browser_board_info_checks.py --full > build/board-info-browser.log 2>&1; then failed=1; fi
           cat build/board-info-browser.log
+          if ! python3 tests/browser_training_checks.py --full > build/training-browser.log 2>&1; then failed=1; fi
+          cat build/training-browser.log
+          if ! python3 tests/browser_enemy_impact_checks.py > build/enemy-impact-browser.log 2>&1; then failed=1; fi
+          cat build/enemy-impact-browser.log
           exit "$failed"
       - name: Upload background regression evidence
         if: always()

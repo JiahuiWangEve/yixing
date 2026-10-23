@@ -54,7 +54,7 @@ func assert_rejected(saved: Dictionary, battle: Dictionary, screen: String, labe
 	FileAccess.open(route.SAVE, FileAccess.WRITE).store_string(before.save)
 
 func check_role_rewards():
-	check(TS.DATA.size() == 9, "nine treasures are the complete catalog")
+	check(TS.DATA.size() == 10, "nine formal treasures plus one training-only shared treasure")
 	var all = []
 	for role in ROLES:
 		var ids = TS.ids_for(role)
@@ -188,6 +188,7 @@ func check_legacy_saves():
 
 func check_active_save_state():
 	for id in TS.DATA:
+		if TS.DATA[id].role == "common": continue # Training-only treasure is not a formal reward.
 		pending_choice(TS.DATA[id].role)
 		check(route.choose_treasure(id), "counter save fixture owns treasure: " + id)
 		route.enter(0);settle()

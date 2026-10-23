@@ -12,7 +12,8 @@ const ICONS = {
 	"spring_bit": preload("res://assets/treasures/spring_bit.png"),
 	"gate_cannon_seal": preload("res://assets/treasures/gate_cannon_seal.png"),
 	"roving_axle": preload("res://assets/treasures/roving_axle.png"),
-	"chain_fire_fuse": preload("res://assets/treasures/chain_fire_fuse.png")
+	"chain_fire_fuse": preload("res://assets/treasures/chain_fire_fuse.png"),
+	"decoy_tally": preload("res://assets/treasures/decoy_tally.png")
 }
 const MOVE_LIMIT = 12.0
 const GAP = 20.0
@@ -34,6 +35,7 @@ var feedback_label = ""
 var feedback_elapsed = 0.0
 var feedback_id = ""
 var feedback_stage = -1
+var feedback_events: Array = []
 
 func _init(owner): game = owner
 func active() -> bool: return game.screen == "treasure_choice"
@@ -142,42 +144,72 @@ func input_event(event) -> bool:
 			elif event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and area().has_point(event.position):
 				cancel_pointer();scroll_y = clampf(scroll_y + (100 if event.button_index == MOUSE_BUTTON_WHEEL_DOWN else -100), 0, scroll_limit());game.queue_redraw()
 	return true
-func icon_rect() -> Rect2:
+func icon_rect(index: int = 0) -> Rect2:
+	# Keep the original single-treasure position. Training uses only a compact
+	# icon strip/grid in existing edge space, never a permanently open sidebar.
+	var count: int = game.treasures.active_ids().size()
 	if game.screen == "map":
-		if game.compact_landscape: return Rect2(744, 14, 48, 48)
-		if game.mobile_layout: return Rect2(game.ui_size.x - 68, 62, 48, 48)
-		return Rect2(760, 12, 48, 48)
-	if game.compact_landscape: return Rect2(832, 12, 48, 48)
-	if game.mobile_layout: return Rect2(244, 12, 48, 48)
-	return Rect2(24, 78, 48, 48)
+		if game.compact_landscape: return Rect2(746, 16, 44, 44)
+		if game.mobile_layout: return Rect2(game.ui_size.x - 66, 64, 44, 44)
+		return Rect2(762, 14, 44, 44)
+	if game.compact_landscape:
+		return Rect2(834 + (index % 2) * 52, 14 + (index / 2) * 52, 44, 44)
+	if game.mobile_layout:
+		if count <= 1: return Rect2(246, 14, 44, 44)
+		return Rect2(220 + (index % 2) * 52, 12 + (index / 2) * 52, 44, 44)
+	var columns = maxi(1, floori((game.BOARD_RECT.position.x - 24) / 52))
+	return Rect2(24 + (index % columns) * 52, 78 + (index / columns) * 52, 44, 44)
+func rect_for(id: String) -> Rect2:
+	var index: int = game.treasures.active_ids().find(id)
+	return Rect2() if index < 0 else icon_rect(index)
 func hud_visible() -> bool:
 	if game.card_picker.active or game.encounter_info_open: return false
 	if game.screen == "map": return not game.route.deck_view
 	return game.screen == "game" and game.phase in ["play", "discard"]
 func inspection_context() -> Array:
-	var id: String = game.treasures.active_id()
-	if game.screen != "game": return [id]
-	return [id, game.treasure_battle.duplicate(true), game.active_displacements, game.artillery_mode, game.lives]
+	var ids: Array = game.treasures.active_ids()
+	if game.screen != "game": return [ids]
+	var decoy_status: Array = []
+	for piece in game.enemies:
+		if piece.get("kind", "") == "decoy": decoy_status.append([piece.get("uid", -1), piece.get("hp", 2)])
+	return [ids, game.treasure_battle.duplicate(true), game.active_displacements, game.artillery_mode, game.lives, "decoy_card" in game.hand, decoy_status]
 func inspect_at(pos: Vector2) -> Dictionary:
-	if not hud_visible() or game.presentation.active() or not icon_rect().has_point(pos): return {}
-	var id: String = game.treasures.active_id()
-	if id.is_empty() or not ICONS.has(id): return {}
-	var lines: Array = [TREASURES.DATA[id].description]
-	if game.screen == "game": lines = game.treasures.status().get("lines", lines).duplicate()
-	# Map never reads battle status, even if the prior battle's counters remain.
-	return {"key": "treasure:" + id, "treasure_id": id, "title": TREASURES.DATA[id].name, "lines": lines, "anchor": icon_rect()}
-func trigger(kind: String, label: String = ""):
+	if not hud_visible() or game.presentation.active(): return {}
+	var ids: Array = game.treasures.active_ids()
+	for index in ids.size():
+		var id: String = ids[index]
+		var rect = icon_rect(index)
+		if not ICONS.has(id) or not rect.has_point(pos): continue
+		var lines: Array = [TREASURES.DATA[id].description]
+		if game.screen == "game": lines = game.treasures.status(id).get("lines", lines).duplicate()
+		# Map never reads battle status, even if prior battle counters remain.
+		return {"key": "treasure:" + id, "treasure_id": id, "title": TREASURES.DATA[id].name, "lines": lines, "anchor": rect}
+	return {}
+func trigger(kind: String, label: String = "", id: String = ""):
 	# Exact gameplay events call this; inspecting, restoring and undoing do not.
+	var ids: Array = game.treasures.active_ids()
+	if id.is_empty() and ids.size() == 1: id = ids[0]
+	if id not in ids: return
 	feedback = kind;feedback_label = label;feedback_elapsed = 0
-	feedback_id = game.treasures.active_id();feedback_stage = game.stage
+	feedback_id = id;feedback_stage = game.stage
+	feedback_events.append({"kind": kind, "label": label, "id": id, "stage": game.stage, "elapsed": 0.0})
 	game.queue_redraw()
+func clear_feedback():
+	feedback = "";feedback_label = "";feedback_id = "";feedback_stage = -1;feedback_elapsed = 0
+	feedback_events.clear()
 func tick(delta: float):
 	if active(): sync()
 	elif pointer != -2 or not source_context.is_empty():
 		cancel_pointer();source_context = [];claimed = false
-	if feedback.is_empty(): return
-	feedback_elapsed += maxf(0, delta)
-	if feedback_elapsed >= 0.72 or game.screen != "game" or feedback_stage != game.stage or feedback_id != game.treasures.active_id(): feedback = ""
+	if feedback.is_empty(): feedback_events.clear()
+	if feedback_events.is_empty(): return
+	var ids: Array = game.treasures.active_ids()
+	for event in feedback_events: event.elapsed += maxf(0, delta)
+	feedback_events = feedback_events.filter(func(event): return event.elapsed < 0.72 and game.screen == "game" and event.stage == game.stage and event.id in ids)
+	if feedback_events.is_empty(): feedback = ""
+	else:
+		var latest: Dictionary = feedback_events.back()
+		feedback = latest.kind;feedback_label = latest.label;feedback_elapsed = latest.elapsed;feedback_id = latest.id;feedback_stage = latest.stage
 	game.queue_redraw()
 func wrapped(value: String, width: float, size: int) -> Array[String]:
 	var result: Array[String] = [];var line = ""
@@ -220,34 +252,39 @@ func draw_choice():
 		var height = maxf(28, area().size.y * area().size.y / (area().size.y + scroll_limit()))
 		game.draw_rect(Rect2(area().end.x + 8, area().position.y + (area().size.y - height) * scroll_y / scroll_limit(), 3, height), Palette.INK)
 func draw_feedback():
-	if feedback.is_empty() or feedback_elapsed < 0 or game.screen != "game": return
-	var t = clampf(feedback_elapsed / 0.72, 0, 1)
-	var alpha = sin(t * PI)
-	var center = icon_rect().get_center()
-	game.draw_arc(center, 27 + t * 9, 0, TAU, 32, Color(Palette.ACCENT, alpha), 2.5, true)
-	if not feedback_label.is_empty():
-		game.text_at(center + Vector2(28, 5 - t * 22), feedback_label, 20, Color(Palette.INK, 1 - t))
-	if feedback == "revive":
-		var pos: Vector2 = game.player_visual
-		game.draw_circle(pos, game.CELL * (0.65 + t * 0.55), Color(Palette.ACCENT, alpha * 0.18))
-		game.draw_arc(pos, game.CELL * (0.6 + t * 0.45), 0, TAU, 40, Color(Palette.ACCENT, alpha * 0.9), 3, true)
-		var sigil = Rect2(pos - Vector2(24, 72 + t * 12), Vector2(48, 48))
-		game.draw_texture_rect(ICONS.life_talisman, sigil, false, Color(1, 1, 1, alpha))
+	if feedback.is_empty() or game.screen != "game": return
+	for event in feedback_events:
+		var rect = rect_for(event.id)
+		if not rect.has_area(): continue
+		var t = clampf(event.elapsed / 0.72, 0, 1)
+		var alpha = sin(t * PI)
+		var center = rect.get_center()
+		game.draw_arc(center, 25 + t * 9, 0, TAU, 32, Color(Palette.ACCENT, alpha), 2.5, true)
+		if not event.label.is_empty():
+			game.text_at(center + Vector2(26, 5 - t * 22), event.label, 20, Color(Palette.INK, 1 - t))
+		if event.kind == "revive":
+			var pos: Vector2 = game.player_visual
+			game.draw_circle(pos, game.CELL * (0.65 + t * 0.55), Color(Palette.ACCENT, alpha * 0.18))
+			game.draw_arc(pos, game.CELL * (0.6 + t * 0.45), 0, TAU, 40, Color(Palette.ACCENT, alpha * 0.9), 3, true)
+			var sigil = Rect2(pos - Vector2(24, 72 + t * 12), Vector2(48, 48))
+			game.draw_texture_rect(ICONS.life_talisman, sigil, false, Color(1, 1, 1, alpha))
 func draw():
 	if active(): draw_choice();return
 	if not hud_visible(): return
-	var id: String = game.treasures.active_id()
-	if id.is_empty() or not ICONS.has(id): return # No treasure means no empty slot.
-	var rect = icon_rect()
-	if game.screen == "game": game.draw_circle(rect.get_center(), 25, Palette.SURFACE)
-	game.draw_texture_rect(ICONS[id], rect, false)
-	if game.screen == "game":
-		var status: Dictionary = game.treasures.status()
-		var badge: String = str(status.get("badge", ""))
-		if not badge.is_empty():
-			var width = maxf(18, game.FONT.get_string_size(badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 8)
-			var badge_rect = Rect2(rect.get_center().x - width * 0.5, rect.end.y - 9, width, 18)
-			var color = Palette.ACCENT if status.get("ready", false) else Palette.INK_SECONDARY
-			game.panel(badge_rect, color)
-			centered(Vector2(badge_rect.get_center().x, badge_rect.position.y + 13), badge, 12, Palette.WHITE)
-		draw_feedback()
+	var ids: Array = game.treasures.active_ids()
+	for index in ids.size():
+		var id: String = ids[index]
+		if not ICONS.has(id): continue
+		var rect = icon_rect(index)
+		if game.screen == "game": game.draw_circle(rect.get_center(), 23, Palette.SURFACE)
+		game.draw_texture_rect(ICONS[id], rect, false)
+		if game.screen == "game":
+			var status: Dictionary = game.treasures.status(id)
+			var badge: String = str(status.get("badge", ""))
+			if not badge.is_empty():
+				var width = maxf(18, game.FONT.get_string_size(badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 8)
+				var badge_rect = Rect2(rect.get_center().x - width * 0.5, rect.end.y - 9, width, 18)
+				var color = Palette.ACCENT if status.get("ready", false) else Palette.INK_SECONDARY
+				game.panel(badge_rect, color)
+				centered(Vector2(badge_rect.get_center().x, badge_rect.position.y + 13), badge, 12, Palette.WHITE)
+	if game.screen == "game": draw_feedback()

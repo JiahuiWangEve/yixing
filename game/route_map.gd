@@ -471,6 +471,7 @@ func choose_treasure(id: String) -> bool:
 	return true
 
 func save():
+	if game.training.is_playing(): return
 	if not active(): return
 	var config = ConfigFile.new()
 	config.set_value("run", "version", 6)

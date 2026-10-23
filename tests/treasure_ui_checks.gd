@@ -64,6 +64,7 @@ func run():
 		game.screen = "map";game.route.state.treasure_id = "";game.route.state.treasure_choices = []
 		check(ui.inspect_at(ui.icon_rect().get_center()).is_empty(), "unowned treasure has no inspector")
 		for id in T.DATA:
+			if T.DATA[id].role == "common": continue # Training-only treasure is not a formal reward.
 			game.player_skill = T.DATA[id].role;game.route.state.treasure_id = id;game.treasures.reset_battle()
 			game.treasure_battle.tiger_moves = 2;game.treasure_battle.spring_kills = 1;game.treasure_battle.talisman_used = true
 			game.treasure_battle.wind_used = true;game.treasure_battle.tassel_ready = true;game.treasure_battle.gate_ready = true;game.treasure_battle.axle_used = true

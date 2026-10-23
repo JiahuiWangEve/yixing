@@ -30,6 +30,14 @@ static func attacks(e: Dictionary, p: Vector2i, enemies: Array) -> bool:
 			var leg = e.pos + Vector2i(signi(d.x) if abs(d.x) == 2 else 0, signi(d.y) if abs(d.y) == 2 else 0)
 			return occupied(leg, enemies) < 0
 	return false
+static func is_object(e: Dictionary) -> bool:
+	return e.get("kind", "") in ["stake", "decoy"]
+static func captures_object(e: Dictionary, p: Vector2i, enemies: Array, player: Vector2i) -> bool:
+	var index = occupied(p, enemies)
+	if index < 0 or enemies[index].get("kind", "") != "decoy" or p == player: return false
+	var board = enemies.duplicate()
+	board.append({"pos":player})
+	return attacks(e, p, board)
 static func threatened(p: Vector2i, enemies: Array) -> bool:
 	for e in enemies:
 		if attacks(e, p, enemies): return true

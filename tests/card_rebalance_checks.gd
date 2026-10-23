@@ -228,7 +228,9 @@ func check_displacements():
 	game.basic_move(Vector2i(3, 4));check(game.active_displacements == 1, "rejected second free move does not count")
 	hand(["straight", "straight"]);game.play_card(0, Vector2i(4, 2))
 	check(game.active_displacements == 2, "two-cell paid movement counts once rather than by distance")
-	game.play_card(0, Vector2i(3, 2));check(game.active_displacements == 2, "rejected paid movement does not count")
+	game.play_card(0, Vector2i(3, 2));check(game.active_displacements == 3, "second paid movement counts once")
+	undo_after_effects(game);check(game.active_displacements == 2 and game.player == Vector2i(4, 2), "undo second paid movement restores its exact count")
+	game.play_card(0, Vector2i(0, 9));check(game.active_displacements == 2, "invalid paid movement still does not count")
 	undo_after_effects(game);check(game.active_displacements == 1 and game.player == Vector2i(4, 4), "undo paid movement restores displacement count")
 	undo_after_effects(game);check(game.active_displacements == 0 and game.player == Vector2i(4, 5), "undo free movement restores zero count")
 	for id in ["advance", "knight_assault", "retreat_strike"]:

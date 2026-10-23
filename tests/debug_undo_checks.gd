@@ -17,7 +17,7 @@ func run():
 	DirAccess.remove_absolute(game.settings.SAVE)
 	game.settings.load_settings()
 	check(not game.settings.debug_mode, "missing settings defaults OFF")
-	check(game.frontend.entries().size() == 5 and game.frontend.entries()[4] == "调试模式：关", "home toggle without old stage picker")
+	check(game.frontend.entries().size() == 6 and game.frontend.entries()[4] == "调试模式：关" and game.frontend.entries()[5] == "演武场 · 自由配置", "home toggle without old stage picker")
 	for size in [Vector2(1280,940),Vector2(390,844),Vector2(390,660),Vector2(844,390)]:
 		game.configure_layout(size)
 		check(Rect2(Vector2.ZERO,game.ui_size).encloses(game.frontend.button_rect(4)), "toggle fits " + str(size))

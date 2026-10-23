@@ -39,7 +39,7 @@ func drag(start: Vector2, finish: Vector2, canceled: bool = false):
 	touch(finish,false,canceled)
 func expected_ids(group: String) -> Array:
 	var ids = []
-	if group == "special": return ["fatigue","__free_king","__free_horse","__free_artillery_march","__free_artillery_attack"] + TREASURES.TEMPORARY
+	if group == "special": return ["fatigue","grappling_hook","decoy_card","__free_king","__free_horse","__free_artillery_march","__free_artillery_attack"] + TREASURES.TEMPORARY
 	var source: Array = PROFILES.COMMON if group == "common" else PROFILES.DATA[group].deck + PROFILES.DATA[group].rewards
 	for id in source:
 		if game.CARDS.has(id) and id not in ids and (group == "common" or id not in PROFILES.COMMON): ids.append(id)

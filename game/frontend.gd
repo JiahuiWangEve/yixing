@@ -7,7 +7,7 @@ var game
 func _init(owner): game = owner
 func entries() -> Array:
 	match game.screen:
-		"home": return ["开始游戏", "教程", "设置", "继续山河棋路存档", "调试模式：" + ("开" if game.settings.debug_mode else "关")]
+		"home": return ["开始游戏", "教程", "设置", "继续山河棋路存档", "调试模式：" + ("开" if game.settings.debug_mode else "关"), "演武场 · 自由配置"]
 		"settings":
 			var result = []
 			for option in SETTINGS_OPTIONS:
@@ -33,9 +33,11 @@ func button_rect(i: int) -> Rect2:
 		var col = i % 2; var row = i / 2
 		return Rect2(70 + col * 430, 140 + row * 72, 390, 58)
 	if game.mobile_layout:
-		var top = 142 if count > 5 else maxf(150, game.ui_size.y * 0.25)
-		var step = 56 if count > 5 else 74
-		return Rect2(24, top + i * step, 432, 52 if count > 5 else 60)
+		# Appending an independent home entry must not shift the familiar first five.
+		var compact_menu = count > 5 and game.screen != "home"
+		var top = 142 if compact_menu else maxf(150, game.ui_size.y * 0.25)
+		var step = 56 if compact_menu else 74
+		return Rect2(24, top + i * step, 432, 52 if compact_menu else 60)
 	return Rect2(420, 180 + i * 72, 440, 58)
 func click(pos: Vector2):
 	for i in entries().size():
@@ -50,6 +52,7 @@ func activate(i: int):
 				3:
 					if not game.route.resume(): game.notice = "此存档不可续用，请开始新征途。"
 				4: game.settings.set_debug_mode(not game.settings.debug_mode);game.queue_redraw()
+				5: game.training.open()
 		"settings":
 			if i == SETTINGS_OPTIONS.size(): game.show_home()
 			elif i >= 0 and i < SETTINGS_OPTIONS.size():
@@ -125,7 +128,7 @@ func draw():
 			var summaries = ["5/5命 · 凯旋：胜利回1命", "3/3命 · 马步与进退攻击 · 击杀切入", "3/3命 · 行军走 1–2 格 · 展开抽 3 张"]
 			game.text_at(rect.position + Vector2(20, 47), summaries[i], 14, Palette.INK_SECONDARY if locked else Palette.LEGAL)
 	if game.screen == "home":
-		game.text_at(button_rect(4).position + Vector2(0, button_rect(4).size.y + 24), "关闭：整局悔棋3次；开启：不限次，可跳关", 14, game.THEME.LIGHT)
+		game.text_at(button_rect(5).position + Vector2(0, button_rect(5).size.y + 24), "征途调试关闭：悔棋3次；演武始终不限次", 14, game.THEME.LIGHT)
 	if game.screen == "skill_selection":
 		var bottom = button_rect(entries().size() - 1).end.y
 		var footer = "解锁记录仅保存在当前浏览器；清除数据后会重置"
