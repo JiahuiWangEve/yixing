@@ -360,6 +360,8 @@ func _stepper(key: String, rect: Rect2, title: String, value: int):
 	_label(rect.position+Vector2(0,27),title+"  "+str(value)+suffix,17,Palette.INK)
 	_button("adjust:"+key+":-1",Rect2(rect.end.x-104,rect.position.y,48,42),"−",false,true,22)
 	_button("adjust:"+key+":1",Rect2(rect.end.x-48,rect.position.y,48,42),"+",false,true,22)
+func status_position() -> Vector2:
+	return Vector2(20,game.ui_size.y-66-(12 if game.compact_landscape else 30))
 func draw():
 	hit_regions.clear()
 	game.draw_rect(Rect2(Vector2.ZERO,game.ui_size),Palette.PAPER)
@@ -400,7 +402,7 @@ func draw():
 	_button("save",Rect2(16,foot,126,50),"保存预设")
 	_button("options",Rect2(150,foot,126,50),"试演选项")
 	_button("play",Rect2(284,foot,game.ui_size.x-300,50),"开始试演",true)
-	_wrap(Vector2(20,foot-30),message,game.ui_size.x-40,14,1)
+	_wrap(status_position(),message,game.ui_size.x-40,14,1)
 	if not modal.is_empty(): _draw_modal()
 func _draw_board():
 	var geometry = board_geometry();var origin: Vector2 = geometry.origin;var cell: float = geometry.cell

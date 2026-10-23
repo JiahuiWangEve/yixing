@@ -21,6 +21,9 @@ func run():
 	var training=game.training;training.open();training.create_new()
 	for size in [Vector2(1280,940),Vector2(390,844),Vector2(480,660),Vector2(844,390)]:
 		game.configure_layout(size)
+		if game.compact_landscape:
+			check(training.status_position().y-14 > training.board_bounds().end.y,"landscape status clears board")
+			check(training.status_position().y < game.ui_size.y-66,"landscape status clears footer buttons")
 		for tab in 4:
 			training.tab=tab;training.tab_page=0;training.modal="";training.selected_piece=-2
 			await inspect(str(size)+" tab"+str(tab))
