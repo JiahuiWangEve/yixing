@@ -379,7 +379,7 @@ func animate_enemy_impact(fx: Dictionary):
 	var age = fx.age - fx.delay
 	var origin = cell_pos(fx.origin_cell)
 	var target = cell_pos(fx.target_cell)
-	var contact = target - (target - origin).normalized() * CELL * 0.34
+	var contact = target - (target - origin).normalized() * CELL * 0.75
 	var progress = clampf(age / fx.impact_at, 0, 1) if age <= fx.impact_at else 1.0 - clampf((age - fx.impact_at) / (fx.duration - fx.impact_at), 0, 1)
 	actor.visual = origin.lerp(contact, progress * progress * (3.0 - 2.0 * progress))
 
@@ -1260,7 +1260,13 @@ func _draw():
 		draw_arc(target, 20, 0, TAU, 28, danger_color, 2.5);draw_line(start, target, danger_color, 3)
 		draw_line(target, target - dir.rotated(0.5) * 13, danger_color, 3);draw_line(target, target - dir.rotated( - 0.5) * 13, danger_color, 3)
 	if ENCOUNTERS.active(self): draw_encounter_signals()
-	for e in enemies:
+	var draw_enemies = enemies.duplicate()
+	# Keep the moving attacker above stationary screens, without reordering rules.
+	for fx in effects:
+		if fx.kind == "enemy_impact" and fx.age >= fx.delay:
+			var actor = impact_actor(fx)
+			if not actor.is_empty(): draw_enemies.erase(actor);draw_enemies.append(actor)
+	for e in draw_enemies:
 		if e.kind == "stake":
 			draw_stake(cell_pos(e.pos));text_at(cell_pos(e.pos) + Vector2(-4, 26), ("∞" if e.get("permanent", false) else str(e.get("ttl", 3))), 13, THEME.INK);continue
 		var hidden_spawn = false
@@ -1355,7 +1361,8 @@ func draw_effects():
 					var origin = cell_pos(fx.origin_cell)
 					var visual: Vector2 = actor.get("visual", origin)
 					draw_arc(origin, CELL * 0.39, 0, TAU, 28, Color(Palette.INK_SECONDARY, 0.45), 2)
-					draw_line(origin, visual, Color(Palette.INK_SECONDARY, 0.24), 3)
+					if origin.distance_to(visual) > CELL * 0.45:
+						draw_line(origin, visual - (visual - origin).normalized() * CELL * 0.45, Color(Palette.INK_SECONDARY, 0.24), 3)
 			"stake_place": draw_arc(b, 18 + t * 15, 0, TAU, 24, Color(0.85, 0.68, 0.4, fade), 3)
 			"stake_expire": draw_stake(b, fade)
 			"stance", "tuna":
@@ -1363,7 +1370,8 @@ func draw_effects():
 				text_at(b + Vector2(-24, -32 - t * 15), "转进" if fx.kind == "stance" else "蓄气", 18, Color(THEME.SAFE, fade))
 			"guard":
 				draw_arc(b, 25 + t * 12, 0, TAU, 24, Color(THEME.SAFE, fade), 4)
-				text_at(b + Vector2(-24, -32 - t * 15), "固守", 18, Color(THEME.SAFE, fade))
+				var side = (b - a).normalized()
+				text_at(b + Vector2(side.y, -side.x) * CELL * 0.9 + Vector2(-18, -t * 15), "固守", 18, Color(THEME.SAFE, fade))
 			"breath":
 				draw_arc(b, 25 + t * 12, 0, TAU, 24, Color(THEME.SAFE, fade), 3)
 				text_at(b + Vector2(-24, -32 - t * 20), "+1气", 20, Color(THEME.SAFE, fade))
@@ -1389,9 +1397,9 @@ func draw_effects():
 					var v = b + direction * (12 + t * 35) + Vector2(0, t * t * 22)
 					draw_colored_polygon(PackedVector2Array([v + direction * 7, v + direction.rotated(2) * 6, v + direction.rotated(-2) * 6]), Color(0.85, 0.77, 0.6, fade))
 			"player_hit":
-				draw_line(a, b, Color(Palette.DANGER, fade), 4)
 				draw_arc(b, 27 + t * 14, 0, TAU, 32, Color(Palette.DANGER, fade), 3)
-				text_at(b + Vector2(-15, -34 - t * 15), "−1", 24, Color(Palette.DANGER, fade))
+				var side = (b - a).normalized()
+				text_at(b + Vector2(side.y, -side.x) * CELL * 0.9 + Vector2(-12, -t * 15), "−1", 24, Color(Palette.DANGER, fade))
 			"recoil":
 				for j in 4:
 					var u = maxf(0, t - j * 0.12); var v = a.lerp(b, u * u * (3 - 2 * u))

@@ -135,7 +135,7 @@ class TokenTracker:
         self.source, target = geometry.point(replay['source']), geometry.point(replay['target'])
         distance = math.dist(self.source, target)
         self.direction = tuple((target[i] - self.source[i]) / distance for i in range(2))
-        self.travel = distance - .34 * replay['cell_size'] * geometry.scale
+        self.travel = distance - .75 * replay['cell_size'] * geometry.scale
         self.radius = max(7, round(14 * replay['token_scale'] * geometry.scale))
         self.template = baseline.crop(self.patch_box(self.source))
         pixels = list(self.template.getdata())
