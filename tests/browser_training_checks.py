@@ -167,11 +167,13 @@ def difference(before, after, box=None):
 
 
 def board_present(data, geometry, rect):
-    x, y, _, _ = rect
-    sample = Image.open(io.BytesIO(data)).convert('RGB').crop(geometry.box((x + 6, y + 6, 7, 7)))
+    # A corner can legitimately contain a cavalry piece. Sample the whole
+    # board, not a single occupied intersection; wood remains the majority.
+    sample = Image.open(io.BytesIO(data)).convert('RGB').crop(geometry.box(rect)).resize((64, 64))
     pixels = list(sample.getdata())
     return sum(max(abs(p[i] - (210, 184, 140)[i]) for i in range(3)) <= 12
-               for p in pixels) / max(1, len(pixels)) > .7
+               for p in pixels) / max(1, len(pixels)) > .45
+
 
 
 async def main(validate_only=False, full=False):
@@ -311,7 +313,7 @@ async def main(validate_only=False, full=False):
                     await page.reload()
                     await page.wait_for_function("!document.getElementById('status')", timeout=60000); await frames()
                     await restore_formal_home()
-                    await shot('reloaded-editor', await open_editor())
+                    editor_reference = await shot('reloaded-editor', await open_editor())
                     # An ordinary save after loading must retain the typed name and
                     # every fixture field, proving the loaded editor was not blank.
                     await tap(r['editor']['save'])
@@ -350,7 +352,7 @@ async def main(validate_only=False, full=False):
                         await tap(r['battle']['restart']); await save_snapshot(r['expected']['initial'], 'Restart trial')
                         await shot('restarted-trial')
                     await tap(r['battle']['return'])
-                    await wait_image(lambda data: board_present(data, geometry, r['editor']['board']), 'Return did not restore editor')
+                    await wait_image(lambda data: difference(editor_reference, data, geometry.box(r['editor']['board'])) < .35, 'Return did not restore original editor board')
                     await tap(r['editor']['save'])
                     saved = await expect_saved(lambda value: value['recent_id'] == r['preset_id'], 'Return/save original editor preset')
                     assert next(e['data'] for e in saved['presets'] if e['id'] == r['preset_id']) == expected_preset, 'Trial mutated original editor preset'
