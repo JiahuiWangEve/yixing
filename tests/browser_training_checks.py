@@ -251,6 +251,7 @@ async def main(validate_only=False, full=False):
                 async def save_snapshot(expected, label):
                     await settled(label + '-settle')
                     before = decode(await raw()); count = len(before['presets'])
+                    print('SNAPSHOT BEFORE', stem, label, count, [e['id'] for e in before['presets']], flush=True)
                     await tap(r['battle']['save'])
                     saved = await expect_saved(lambda value: len(value['presets']) == count + 1, label + '-saved')
                     actual = normalize(saved['presets'][-1]['data']['snapshot'])
@@ -289,6 +290,13 @@ async def main(validate_only=False, full=False):
                         localStorage.setItem('yixing.settings.v1','[settings]\\n\\ndebug_mode=false\\n');
                         sessionStorage.setItem('training-gate-seeded','1');
                     }''' % (json.dumps(FORMAL_KEY), json.dumps(original), json.dumps(TRAINING_KEY), json.dumps(fixture(r['presets']))))
+                    await page.add_init_script('''window.trainingStorageWrites = [];
+                        const originalSetItem = Storage.prototype.setItem;
+                        Storage.prototype.setItem = function(key, value) {
+                            const result = originalSetItem.call(this, key, value);
+                            if (key === 'yixing.training.presets.v1') window.trainingStorageWrites.push({time: performance.now(), value});
+                            return result;
+                        };''')
                     await page.goto(URL)
                     await page.wait_for_function("!document.getElementById('status')", timeout=60000); await frames()
                     await restore_formal_home()
@@ -352,6 +360,9 @@ async def main(validate_only=False, full=False):
                                     'typed_name': r['saved_name'], 'two_stage_hook': True, 'formal_save_sha256': hashlib.sha256(original.encode()).hexdigest()})
                     print('PASS training Web', stem, 'name/save/reload, four tabs, decoy, two-stage hook, return, formal isolation', flush=True)
                 except Exception as exc:
+                    print('TRAINING CONSOLE ERRORS', errors, flush=True)
+                    writes = await page.evaluate('() => window.trainingStorageWrites || []')
+                    print('TRAINING STORAGE WRITES', [{'time': item['time'], 'ids': [e['id'] for e in decode(item['value'])['presets']]} for item in writes], flush=True)
                     try: await shot('FAILED')
                     except Exception: pass
                     reports.append({'stem': stem, 'passed': False, 'screenshots': shots, 'assertions': assertions, 'error': str(exc), 'console_errors': errors})

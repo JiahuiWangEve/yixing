@@ -103,6 +103,7 @@ jobs:
             build/card-catalog-smoke.log
             build/treasure-smoke.log
             build/attack-smoke.log
+            verification/v0.16.0/
             verification/v0.15.0/
             verification/v0.15.1/
             verification/v0.14.13/
@@ -224,6 +225,7 @@ jobs:
           name: yixing-regression-${{ github.sha }}
           path: |
             build/*browser.log
+            verification/v0.16.0/
             verification/v0.15.0/
             verification/v0.15.1/
             verification/v0.14.13/
