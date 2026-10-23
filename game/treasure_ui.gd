@@ -220,7 +220,7 @@ func draw_choice():
 		var height = maxf(28, area().size.y * area().size.y / (area().size.y + scroll_limit()))
 		game.draw_rect(Rect2(area().end.x + 8, area().position.y + (area().size.y - height) * scroll_y / scroll_limit(), 3, height), Palette.INK)
 func draw_feedback():
-	if feedback.is_empty() or game.screen != "game": return
+	if feedback.is_empty() or feedback_elapsed < 0 or game.screen != "game": return
 	var t = clampf(feedback_elapsed / 0.72, 0, 1)
 	var alpha = sin(t * PI)
 	var center = icon_rect().get_center()

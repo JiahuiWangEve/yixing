@@ -30,6 +30,8 @@ run regression --script "$root/tests/recovered_checks.gd"
 run starts --script "$root/tests/start_profile_checks.gd"
 run role-health --script "$root/tests/role_health_checks.gd"
 run battle-restart --script "$root/tests/battle_restart_checks.gd"
+run enemy-impact --script "$root/tests/enemy_impact_checks.gd"
+run enemy-impact-fixtures --script "$root/tests/enemy_impact_fixtures.gd"
 
 run route-generator --script "$root/tests/route_generator_checks.gd"
 run elite-rewards --script "$root/tests/elite_reward_checks.gd"

@@ -1,5 +1,5 @@
 extends Control
-const BUILD_VERSION = "v0.15.4"
+const BUILD_VERSION = "v0.15.5"
 const PASS_CARD_COST = 3
 const ROUTE = preload("res://route_map.gd")
 var route = ROUTE.new(self)
@@ -357,6 +357,32 @@ func effect(kind: String, from: Vector2, to: Vector2, duration: float = 0.3, del
 		fx.sound_at = delay + (duration if kind in ["move", "recoil"] else (0.3 if kind == "spawn" else (0.15 if kind == "draw" else 0.0)))
 	fx.merge(extra);effects.append(fx)
 	input_lock = maxf(input_lock, delay + duration)
+# Visual attack excursion only: logical coordinates and combat/RNG settle unchanged.
+func enemy_impact(e: Dictionary, delay: float) -> Dictionary:
+	var fx = {"attacker_uid": e.uid, "origin_cell": e.pos, "target_cell": player,
+		"impact_at": 0.14, "lives_before": lives}
+	effect("enemy_impact", cell_pos(e.pos), cell_pos(player), 0.34, delay, fx)
+	return effects.back()
+func impact_actor(fx: Dictionary) -> Dictionary:
+	for enemy in enemies:
+		if enemy.get("uid", -1) == fx.attacker_uid and enemy.pos == fx.origin_cell: return enemy
+	return {}
+func displayed_lives() -> int:
+	for fx in effects:
+		if fx.kind == "enemy_impact" and fx.age < fx.delay + fx.impact_at:
+			return int(fx.lives_before)
+	return lives
+func animate_enemy_impact(fx: Dictionary):
+	if fx.age < fx.delay: return
+	var actor = impact_actor(fx)
+	if actor.is_empty(): return
+	var age = fx.age - fx.delay
+	var origin = cell_pos(fx.origin_cell)
+	var target = cell_pos(fx.target_cell)
+	var contact = target - (target - origin).normalized() * CELL * 0.34
+	var progress = clampf(age / fx.impact_at, 0, 1) if age <= fx.impact_at else 1.0 - clampf((age - fx.impact_at) / (fx.duration - fx.impact_at), 0, 1)
+	actor.visual = origin.lerp(contact, progress * progress * (3.0 - 2.0 * progress))
+
 func move_piece(e: Dictionary, from: Vector2, to: Vector2, delay: float = 0.0, arc: bool = false):
 	effect("move", from, to, 0.28, delay, {"piece": e, "arc": arc})
 func sync_hand_views():
@@ -633,6 +659,7 @@ func _process(delta):
 		if fx.has("sound") and not fx.sound_played and fx.age >= fx.sound_at:
 			fx.sound_played = true;audio_system.play_cue(fx.sound, tick)
 		var t = clampf((fx.age - fx.delay) / fx.duration, 0, 1)
+		if fx.kind == "enemy_impact": animate_enemy_impact(fx)
 		if fx.kind == "spawn":
 			var landing = clampf((t - 0.46) / 0.54, 0, 1)
 			fx.piece.visual = fx.to - Vector2(0, (1 - landing) * 24)
@@ -1031,12 +1058,18 @@ func end_turn():
 		if R.attacks(e, player, enemies):
 			if shield_charges > 0:
 				shield_charges = 0;blocked_attackers.append(e)
-				effect("guard", cell_pos(e.pos), cell_pos(player), 0.26)
+				enemy_impact(e, timeline)
+				effect("guard", cell_pos(e.pos), cell_pos(player), 0.20, timeline + 0.14)
+				timeline += 0.34
 				log_line("固守抵挡一次受击。")
 				continue
-			effect("player_hit", cell_pos(e.pos), cell_pos(player), 0.26)
-			timeline = 0.26
-			lose_lives(1);hit = true;attacker = e;log_line("被%s击中，失去一命。" % piece_name(e.kind))
+			enemy_impact(e, timeline)
+			effect("player_hit", cell_pos(e.pos), cell_pos(player), 0.20, timeline + 0.14)
+			timeline += 0.14
+			var rescue_on_impact = lives == 1 and treasures.rescue_ready()
+			lose_lives(1)
+			if rescue_on_impact: treasureui.feedback_elapsed = -timeline
+			hit = true;attacker = e;log_line("被%s击中，失去一命。" % piece_name(e.kind))
 			if lives <= 0: phase = "dead";clear_battle_card_effects();ENCOUNTERS.cancel_pending(self);notice = "命数耗尽。";return
 			var safe = R.safe_recoil(player, enemies)
 			if safe.is_empty(): phase = "dead";clear_battle_card_effects();ENCOUNTERS.cancel_pending(self);notice = "无安全位置可撤退。";return
@@ -1248,16 +1281,19 @@ func _draw():
 		board_info.draw_enemy_status(e, v)
 		draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
 	var pv = player_visual
-	if shield_charges > 0: draw_arc(pv, CELL * 0.47, 0, TAU, 32, THEME.SAFE, 3)
+	var guard_visible = shield_charges > 0
+	for fx in effects:
+		if fx.kind == "guard" and fx.age < fx.delay: guard_visible = true
+	if guard_visible: draw_arc(pv, CELL * 0.47, 0, TAU, 32, THEME.SAFE, 3)
 	if input_lock <= 0 and R.threatened(player, enemies): pv.x += sin(tick * 29) * 2;draw_arc(pv, 29, 0, TAU, 32, RED, 3)
 	var player_flash = 0.0
 	for fx in effects:
-		if fx.kind == "player_hit": player_flash = maxf(player_flash, 1 - clampf(fx.age / fx.duration, 0, 1))
+		if fx.kind == "player_hit" and fx.age >= fx.delay: player_flash = maxf(player_flash, 1 - clampf((fx.age - fx.delay) / fx.duration, 0, 1))
 	pv.x += sin(tick * 90) * 4 * player_flash
 	if mobile_layout: draw_set_transform(pv, 0, Vector2.ONE * minf(1.0, CELL / 54.0));pv = Vector2.ZERO
 	draw_circle(pv, 24, THEME.DANGER.lerp(Color.WHITE, player_flash));draw_arc(pv, 20, 0, TAU, 32, GOLD, 2);text_at(pv + Vector2(-14, 9), ("炮" if artillery_mode == "attack" else "行") if player_skill == "artillery" else ("马" if player_skill == "horse" else "帅"), 28, Palette.WHITE)
 	draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
-	text_at((Vector2(24, 500) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(397, 609), ("命 %d%s" % [lives, "/∞" if unlimited_lives() else "/%d" % life_limit()]), 20, THEME.LIGHT)
+	text_at((Vector2(24, 500) if compact_landscape else Vector2(24, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(397, 609), ("命 %d%s" % [displayed_lives(), "/∞" if unlimited_lives() else "/%d" % life_limit()]), 20, THEME.LIGHT)
 	text_at((Vector2(200, 500) if compact_landscape else Vector2(150, BOARD_RECT.end.y + 36)) if mobile_layout else Vector2(550, 609), "能量 %d" % energy, 20, THEME.LIGHT)
 	var confirm = selected >= 0 and (phase == "discard" or (phase == "play" and hand[selected] in UNTARGETED))
 	panel(END_TURN_RECT, THEME.PAPER_SELECTED, RED if phase == "discard" else Color.TRANSPARENT);text_at(END_TURN_RECT.position + Vector2(12, 32), ("确认弃牌" if selected >= 0 else "请选择弃牌") if phase == "discard" else ("使用选中牌" if confirm else (("跳过回合" if mobile_layout else "跳过回合 [空格]") if recovery_active() else ("结束回合" if mobile_layout else "结束回合 [空格]"))), 18, THEME.INK)
@@ -1313,6 +1349,13 @@ func draw_effects():
 		var a: Vector2 = fx.from
 		var b: Vector2 = fx.to
 		match fx.kind:
+			"enemy_impact":
+				var actor = impact_actor(fx)
+				if not actor.is_empty():
+					var origin = cell_pos(fx.origin_cell)
+					var visual: Vector2 = actor.get("visual", origin)
+					draw_arc(origin, CELL * 0.39, 0, TAU, 28, Color(Palette.INK_SECONDARY, 0.45), 2)
+					draw_line(origin, visual, Color(Palette.INK_SECONDARY, 0.24), 3)
 			"stake_place": draw_arc(b, 18 + t * 15, 0, TAU, 24, Color(0.85, 0.68, 0.4, fade), 3)
 			"stake_expire": draw_stake(b, fade)
 			"stance", "tuna":
