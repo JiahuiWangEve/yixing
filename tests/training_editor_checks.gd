@@ -1,5 +1,17 @@
 extends SceneTree
 const TRAINING = preload("res://training_ground.gd")
+class WebStorageProbe extends TRAINING:
+	var stored = ""
+	var reject_write = false
+	var write_result = false
+	var read_result = true
+	func write_presets() -> bool:
+		return _write_web_presets({"version":SCHEMA,"presets":presets,"recent_id":recent_id})
+	func _write_web_value(encoded: String):
+		if not reject_write: stored = encoded
+		return write_result
+	func _read_web_value():
+		return stored if read_result else null
 var game
 var training
 var checks = 0
@@ -66,6 +78,7 @@ func run():
 	check(training.save_named("副本",true) and training.presets.size()==2,"copy is a separate preset")
 	check(training.save_named("改名") and training.presets.size()==2,"rename preserves identity")
 	var current_id = training.saved_id
+	check_web_storage_commits()
 	var reloaded = TRAINING.new(game);reloaded.load_presets()
 	check(reloaded.presets.size()==2 and reloaded.recent_id==current_id,"refresh preserves named presets and recent selection")
 	check(training.delete_preset(current_id) and training.presets.size()==1,"delete only removes selected preset")
@@ -133,3 +146,25 @@ func run():
 	training.presets=[];training.recent_id="";training.write_presets()
 	print("TRAINING EDITOR: %d checks, %d failures" % [checks,failures])
 	game.free();quit(1 if failures else 0)
+func check_web_storage_commits():
+	var probe = WebStorageProbe.new(game)
+	var first = probe.new_state();first.name = "Original"
+	var first_id = probe.persist_preset(first, "")
+	check(not first_id.is_empty() and probe.presets.size() == 1,"committed web save succeeds despite false write return")
+	for result in [false, null]:
+		probe.write_result = result
+		var next = first.duplicate(true);next.name = "Snapshot "+str(probe.presets.size())
+		var previous_count = probe.presets.size()
+		var id = probe.persist_preset(next, "")
+		var stored = bytes_to_var(Marshalls.base64_to_raw(probe.stored))
+		check(not id.is_empty() and probe.presets.size() == previous_count+1,"committed web write never rolls back memory for "+str(result))
+		check(stored.presets == probe.presets and stored.recent_id == id,"consecutive web saves retain every independent preset for "+str(result))
+		check(stored.presets[0].data.name == "Original","previously committed preset stays unchanged")
+	var previous = probe.presets.duplicate(true);var previous_recent = probe.recent_id;var previous_payload = probe.stored
+	probe.reject_write = true;probe.write_result = true
+	var unsaved = first.duplicate(true);unsaved.name = "Rejected"
+	check(probe.persist_preset(unsaved, "").is_empty(),"positive bridge result cannot hide rejected web write")
+	check(probe.presets == previous and probe.recent_id == previous_recent and probe.stored == previous_payload,"actual rejected write restores memory without changing committed presets")
+	probe.read_result = false
+	check(probe.persist_preset(unsaved, "").is_empty(),"unverifiable web payload does not claim success")
+	check(probe.presets == previous and probe.recent_id == previous_recent,"unverifiable rejected write leaves preset state unchanged")

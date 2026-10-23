@@ -254,6 +254,7 @@ async def main(validate_only=False, full=False):
                     print('SNAPSHOT BEFORE', stem, label, count, [e['id'] for e in before['presets']], flush=True)
                     await tap(r['battle']['save'])
                     saved = await expect_saved(lambda value: len(value['presets']) == count + 1, label + '-saved')
+                    assert saved['presets'][:-1] == before['presets'], (stem, label, 'Saving a new snapshot changed an older preset')
                     actual = normalize(saved['presets'][-1]['data']['snapshot'])
                     assert actual == expected, (stem, label, actual, expected)
                     await isolation(label)

@@ -233,7 +233,7 @@ func load_presets():
 	presets = [];recent_id = "";load_error = false
 	var data = null
 	if OS.has_feature("web"):
-		var encoded = JavaScriptBridge.eval("(function(){try{return localStorage.getItem('"+WEB_SAVE_KEY+"')||'';}catch(e){return '';}})()")
+		var encoded = _read_web_value()
 		if encoded is String and not encoded.is_empty():
 			if encoded.length() > 5592410: load_error = true
 			else: data = bytes_to_var(Marshalls.base64_to_raw(encoded))
@@ -260,10 +260,20 @@ func write_presets() -> bool:
 		if error == OK: local_saved = DirAccess.rename_absolute(temporary,SAVE_PATH) == OK
 	var web_saved = false
 	if OS.has_feature("web"):
-		var encoded = JSON.stringify(Marshalls.raw_to_base64(var_to_bytes(data)))
-		web_saved = JavaScriptBridge.eval("(function(){try{localStorage.setItem('"+WEB_SAVE_KEY+"',"+encoded+");return true;}catch(e){return false;}})()") == true
+		web_saved = _write_web_presets(data)
 	if not local_saved and not web_saved: message = "本地保存不可用，配置仍保留在当前页面。";return false
 	return true
+func _read_web_value():
+	return JavaScriptBridge.eval("(function(){try{return localStorage.getItem('"+WEB_SAVE_KEY+"')||'';}catch(e){return '';}})()")
+func _write_web_value(encoded: String):
+	return JavaScriptBridge.eval("(function(){try{localStorage.setItem('"+WEB_SAVE_KEY+"',"+JSON.stringify(encoded)+");return true;}catch(e){return false;}})()")
+func _write_web_presets(data: Dictionary) -> bool:
+	var encoded = Marshalls.raw_to_base64(var_to_bytes(data))
+	# Confirm the committed payload, not the bridge's write return value. Rolling
+	# back memory after a committed write would let the next save lose that preset.
+	_write_web_value(encoded)
+	var committed = _read_web_value()
+	return committed is String and committed == encoded
 func persist_preset(value: Dictionary, replace_id: String) -> String:
 	var error = validate_preset(value)
 	if not error.is_empty(): message = error;return ""
